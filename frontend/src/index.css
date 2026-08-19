@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface text-ink-900 antialiased;
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+/* Print scope: only elements marked .print-area render on paper — used by
+   Emergency Card's Print button so a real emergency card comes out, not
+   the sidebar/topbar around it. Add .print-area to any future page that
+   needs the same scoped-print behavior. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

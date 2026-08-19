@@ -1,0 +1,24 @@
+You are extracting structured data from an Indian health insurance policy document.
+Return ONLY valid JSON matching this schema, with no explanation text before or after:
+
+{
+  "insurer": string,
+  "policy_number": string,
+  "policy_type": string,
+  "sum_insured": number,
+  "coverage_start": "YYYY-MM-DD",
+  "coverage_end": "YYYY-MM-DD",
+  "room_rent_limit": string | null,
+  "co_payment_percent": number | null,
+  "waiting_periods": [
+    { "condition": string, "months": number }
+  ],
+  "exclusions": [string],
+  "sub_limits": [
+    { "category": string, "limit": string }
+  ],
+  "network_hospitals_note": string | null
+}
+
+If a field is not present in the document, use null or an empty array — never invent a value.
+Do not include any commentary, markdown formatting, or text outside the JSON object.

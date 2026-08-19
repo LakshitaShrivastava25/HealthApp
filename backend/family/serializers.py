@@ -1,0 +1,27 @@
+from rest_framework import serializers
+
+from .models import AllergyRecord, Profile
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    initials = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = [
+            'id', 'full_name', 'relation', 'date_of_birth', 'gender',
+            'blood_group', 'height_cm', 'weight_kg', 'preferred_language',
+            'initials', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def get_initials(self, obj):
+        parts = obj.full_name.split()
+        return ''.join(p[0] for p in parts[:2]).upper()
+
+
+class AllergyRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AllergyRecord
+        fields = ['id', 'profile', 'kind', 'substance', 'reaction', 'recorded_at']
+        read_only_fields = ['id', 'recorded_at']

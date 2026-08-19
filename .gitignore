@@ -1,0 +1,20 @@
+﻿# Environment files
+.env
+.env.local
+*.env
+
+# Node
+node_modules/
+dist/
+build/
+
+# Python / Django
+__pycache__/
+*.pyc
+venv/
+env/
+db.sqlite3
+
+# Editor/OS
+.vscode/
+.DS_Store

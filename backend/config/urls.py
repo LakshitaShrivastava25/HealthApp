@@ -11,7 +11,7 @@ urlpatterns = [
     path('api/', include('documents.urls')),
     path('api/', include('insurance.urls')),
     path('api/', include('medicines.urls')),
-    path('api/', include('emergency.urls')),  # also exposes /public/emergency/<token>/
+    path('api/', include('emergency.urls')),  # also exposes /api/public/emergency/<token>/ (mounted under this same api/ prefix — not a bare /public/... path)
     path('api/', include('doctors.urls')),
     path('api/admin/', include('admin_portal.urls')),
 ]

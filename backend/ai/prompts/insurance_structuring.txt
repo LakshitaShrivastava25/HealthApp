@@ -6,6 +6,7 @@ Return ONLY valid JSON matching this schema, with no explanation text before or 
   "policy_number": string,
   "policy_type": string,
   "sum_insured": number,
+  "premium_amount": number | null,
   "coverage_start": "YYYY-MM-DD",
   "coverage_end": "YYYY-MM-DD",
   "room_rent_limit": string | null,

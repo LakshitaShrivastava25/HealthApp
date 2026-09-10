@@ -7,7 +7,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import ConsultationNote, Doctor, DoctorPatientAccess
-from .serializers import ConsultationNoteSerializer, DoctorPatientAccessSerializer, DoctorSerializer
+from .serializers import (
+    ConsultationNoteSerializer, DoctorAvailabilitySerializer,
+    DoctorPatientAccessSerializer, DoctorProfileUpdateSerializer, DoctorSerializer,
+)
 
 
 class DoctorViewSet(viewsets.ModelViewSet):
@@ -47,18 +50,70 @@ class DoctorViewSet(viewsets.ModelViewSet):
         self.request.user.role = self.request.user.Role.DOCTOR
         self.request.user.save(update_fields=['role'])
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get', 'patch'])
     def me(self, request):
         """
-        GET /api/doctors/me/ — lets the Doctor Portal find the logged-in
-        doctor's own record (their id, verification_status) without every
-        doctor's data being scannable by account. 404 if this account has
-        no Doctor record yet (hasn't registered).
+        GET   /api/doctors/me/ — the logged-in doctor's own record.
+        PATCH /api/doctors/me/ — that same doctor edits their own profile.
+
+        detail=False for both, which is the whole security story: the record
+        is resolved from the caller's token and there is no id in the URL to
+        aim at anyone else, so editing another doctor is impossible by
+        construction rather than by a check that could later be removed.
+
+        404 if this account has no Doctor record yet (hasn't registered).
         """
         doctor = getattr(request.user, 'doctor_profile', None)
         if not doctor:
             return Response({'detail': 'No doctor profile for this account.'}, status=404)
+
+        if request.method == 'PATCH':
+            serializer = DoctorProfileUpdateSerializer(doctor, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            doctor.refresh_from_db()
+
+        # Always answer with the full record so the client re-renders from
+        # what was actually stored, including a verification_status the
+        # serializer may have reset.
         return Response(DoctorSerializer(doctor).data)
+
+    @action(detail=False, methods=['patch'], url_path='availability')
+    def availability(self, request):
+        """
+        PATCH /api/doctors/availability/ — the logged-in doctor sets their
+        own clinic days and hours.
+
+        detail=False on purpose: the record is resolved from the caller's own
+        account, so there is no id in the URL to point at somebody else. That
+        makes editing another doctor's availability impossible by
+        construction rather than by a check that could later be dropped.
+        """
+        doctor = getattr(request.user, 'doctor_profile', None)
+        if not doctor:
+            return Response({'detail': 'No doctor profile for this account.'}, status=404)
+        serializer = DoctorAvailabilitySerializer(doctor, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(DoctorSerializer(doctor).data)
+
+    # -- ownership guards -------------------------------------------------
+    # This viewset is IsAuthenticated over Doctor.objects.all(), so without
+    # these any logged-in account — including a patient — could PATCH or
+    # DELETE any doctor's record by id. Admin approve/reject goes through
+    # admin_portal's own staff-gated viewset, so nothing legitimate needs
+    # write access here except a doctor editing themselves.
+    def _assert_own_record(self, instance):
+        if instance.account_id != self.request.user.id:
+            raise PermissionDenied("You can only edit your own doctor record.")
+
+    def perform_update(self, serializer):
+        self._assert_own_record(serializer.instance)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._assert_own_record(instance)
+        instance.delete()
 
 
 class DoctorPatientAccessViewSet(viewsets.ModelViewSet):

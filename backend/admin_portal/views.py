@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -8,13 +9,15 @@ from rest_framework.views import APIView
 from accounts.models import Account
 from doctors.models import Doctor
 from documents.models import Document
+from family.models import Profile
 from insurance.models import InsurancePolicy
 from .mixins import AuditLogMixin
 from .models import AuditLog
 from .permissions import IsClaimsOps, IsOCRReviewer, IsStaffAdmin
 from .serializers import (
     AdminAccountSerializer, AdminDoctorVerificationSerializer,
-    AdminDocumentSerializer, AdminInsurancePolicySerializer, AuditLogSerializer,
+    AdminDocumentSerializer, AdminInsurancePolicySerializer,
+    AdminPatientProfileSerializer, AuditLogSerializer,
 )
 
 
@@ -73,7 +76,9 @@ class AdminDoctorVerificationViewSet(AuditLogMixin, viewsets.ModelViewSet):
     http_method_names = ['get', 'patch', 'post']
 
     def get_queryset(self):
-        return Doctor.objects.all()
+        # select_related: the serializer now reads account.phone_number for
+        # every row, which would otherwise be one extra query per doctor.
+        return Doctor.objects.select_related('account').all()
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -112,6 +117,33 @@ class AdminAccountViewSet(AuditLogMixin, viewsets.ModelViewSet):
         account.save()
         self._log(request, 'deactivate_account', account)
         return Response(AdminAccountSerializer(account).data)
+
+
+class AdminPatientProfileViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    /api/admin/patients/ — every registered patient profile, for staff.
+
+    This is a SEPARATE endpoint rather than a relaxation of
+    family.ProfileViewSet. That viewset is correctly scoped to "your own
+    family's profiles" (plus a doctor's approved patients), and widening it
+    for an admin case would put staff logic on the patient-facing path where
+    a future mistake leaks real medical records. Gated with the same
+    IsStaffAdmin used by every other screen in this app.
+
+    ReadOnlyModelViewSet: list and retrieve only, so there is no way to edit
+    or delete a patient's profile from here.
+    """
+    serializer_class = AdminPatientProfileSerializer
+    permission_classes = [IsStaffAdmin]
+
+    def get_queryset(self):
+        qs = Profile.objects.select_related('account').all()
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(full_name__icontains=search) | Q(account__phone_number__icontains=search)
+            )
+        return qs.order_by('-created_at')
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):

@@ -35,7 +35,8 @@ class InsurancePolicySerializer(serializers.ModelSerializer):
         model = InsurancePolicy
         fields = [
             'id', 'profile', 'file', 'status', 'insurer', 'policy_number', 'plan_name',
-            'policy_type', 'sum_insured', 'coverage_start', 'coverage_end',
+            'policy_type', 'sum_insured', 'premium_amount', 'premium_due_date',
+            'coverage_start', 'coverage_end',
             'room_rent_limit', 'co_payment_percent', 'structured_data',
             'exclusions', 'waiting_periods', 'sub_limits', 'uploaded_at',
         ]

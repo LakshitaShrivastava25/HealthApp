@@ -21,6 +21,12 @@ class InsurancePolicy(models.Model):
     plan_name = models.CharField(max_length=150, blank=True)
     policy_type = models.CharField(max_length=100, blank=True)
     sum_insured = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    premium_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # Unlike premium_amount, a due date isn't reliably printed on the
+    # document itself (many policies just imply "renews on the coverage
+    # start anniversary," others have installment plans) — this is meant
+    # to be set by the person as their own reminder, not auto-extracted.
+    premium_due_date = models.DateField(null=True, blank=True)
     coverage_start = models.DateField(null=True, blank=True)
     coverage_end = models.DateField(null=True, blank=True)
     room_rent_limit = models.CharField(max_length=100, blank=True)

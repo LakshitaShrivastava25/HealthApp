@@ -1,0 +1,116 @@
+/* Carried over verbatim from the old Landing/index.html, with two changes
+   required by it now being a route inside the app rather than its own
+   document: the `:root` custom properties and the old `body` rules are
+   scoped to `.hn-landing`, so they style this page only and cannot leak
+   into the three portals. Every value is unchanged. */
+.hn-landing {
+  --teal: #0EA5A6;
+  --purple: #6D5BD0;
+  --purple-dark: #5B4BC4;
+  --surface: #F6F7FB;
+  --card: #FFFFFF;
+  --ink-900: #1F2430;
+  --ink-700: #3F4557;
+  --ink-500: #6B7280;
+  --border: #E7E9F1;
+
+  /* was `body { ... }` */
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--surface);
+  color: var(--ink-900);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.hn-landing * { box-sizing: border-box; }
+.hn-landing .page { width: 100%; max-width: 960px; position: relative; z-index: 10; }
+.hn-landing .brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.hn-landing .brand-badge {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--teal), var(--purple));
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(109,91,208,0.25);
+}
+.hn-landing .brand-badge svg { width: 22px; height: 22px; stroke: white; }
+.hn-landing .brand-name { font-weight: 800; font-size: 22px; letter-spacing: -0.01em; }
+.hn-landing .subtitle {
+  text-align: center;
+  color: var(--ink-500);
+  font-size: 15px;
+  margin-bottom: 40px;
+}
+.hn-landing .cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+@media (max-width: 760px) {
+  .hn-landing .cards { grid-template-columns: 1fr; }
+}
+.hn-landing .card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 24px;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+}
+.hn-landing .card:hover, .hn-landing .card:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(16,24,40,0.08);
+  border-color: var(--purple);
+  outline: none;
+}
+.hn-landing .icon-wrap {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px;
+}
+.hn-landing .icon-wrap svg { width: 26px; height: 26px; }
+.hn-landing .card-title { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+.hn-landing .card-desc { font-size: 13.5px; color: var(--ink-500); line-height: 1.5; margin: 0 0 18px; min-height: 40px; }
+.hn-landing .card-cta {
+  font-size: 13.5px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+}
+.hn-landing .card-cta svg { width: 14px; height: 14px; transition: transform 0.15s ease; }
+.hn-landing .card:hover .card-cta svg { transform: translateX(3px); }
+
+.hn-landing .patient .icon-wrap { background: #F1EEFC; }
+.hn-landing .patient .icon-wrap svg { stroke: #6D5BD0; }
+.hn-landing .patient .card-cta { color: #6D5BD0; }
+
+.hn-landing .doctor .icon-wrap { background: #E7F8F1; }
+.hn-landing .doctor .icon-wrap svg { stroke: #0EA5A6; }
+.hn-landing .doctor .card-cta { color: #0EA5A6; }
+
+.hn-landing .footnote {
+  text-align: center;
+  color: var(--ink-500);
+  font-size: 12.5px;
+  margin-top: 32px;
+}
+.hn-landing .footnote code {
+  background: #EDEEF5;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}

@@ -1,10 +1,11 @@
 import secrets
 
-from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework import viewsets
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import EmergencyProfile
@@ -34,16 +35,24 @@ class EmergencyProfileViewSet(viewsets.ModelViewSet):
         return Response(EmergencyProfileSerializer(emergency_profile).data)
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
 def public_emergency_view(request, token):
     """
     GET /public/emergency/{token}/ — unauthenticated. Deliberately bypasses
     login, so the allow-list here must never be widened to full history.
+
+    Renders a real, readable HTML page by default — this URL only exists
+    to be opened from a scanned QR code, so whoever scans it needs
+    something they can actually read at a glance, not raw JSON. The old
+    JSON-only response is kept available at ?format=json for any
+    programmatic caller, so nothing that depended on it breaks.
     """
     ep = get_object_or_404(EmergencyProfile, public_token=token)
+    wants_json = request.GET.get('format') == 'json'
+
     if not ep.is_active:
-        return Response({'detail': 'This emergency card has been revoked.'}, status=404)
+        if wants_json:
+            return JsonResponse({'detail': 'This emergency card has been revoked.'}, status=404)
+        return render(request, 'emergency/public_card.html', {'revoked': True}, status=404)
 
     profile = ep.profile
     data = {'name': profile.full_name}
@@ -57,4 +66,7 @@ def public_emergency_view(request, token):
         data['emergency_contact_name'] = ep.emergency_contact_name
         data['emergency_contact_phone'] = ep.emergency_contact_phone
 
-    return Response(PublicEmergencyViewSerializer(data).data)
+    if wants_json:
+        return JsonResponse(PublicEmergencyViewSerializer(data).data)
+
+    return render(request, 'emergency/public_card.html', {'revoked': False, **data})

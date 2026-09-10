@@ -5,8 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ai.claude_service import ClaudeService
-from .models import AllergyRecord, Profile
-from .serializers import AllergyRecordSerializer, ProfileSerializer
+from .models import AllergyRecord, Notification, Profile
+from .serializers import AllergyRecordSerializer, NotificationSerializer, ProfileSerializer
 
 
 class AskHealthQuestionSerializer(serializers.Serializer):
@@ -73,6 +73,36 @@ class ProfileViewSet(viewsets.ModelViewSet):
             'name': profile.full_name,
             'blood_group': profile.blood_group,
             'allergies': list(profile.allergies.values_list('substance', flat=True)),
+            'active_medications': [
+                {
+                    'name': m.name,
+                    'dosage': m.dosage,
+                    'frequency': m.frequency,
+                    'instructions': m.instructions,
+                    'reminder_times': list(
+                        m.reminders.filter(is_active=True).values_list('time_of_day', flat=True)
+                    ),
+                }
+                for m in profile.medications.filter(is_active=True)
+            ],
+            'recent_documents': [
+                {
+                    'title': d.title,
+                    'category': d.category,
+                    'document_date': d.document_date,
+                    'hospital_name': d.hospital_name,
+                }
+                for d in profile.documents.all()[:10]
+            ],
+            'recent_timeline_events': [
+                {
+                    'event_date': e.event_date,
+                    'event_type': e.event_type,
+                    'title': e.title,
+                    'summary': e.summary,
+                }
+                for e in profile.timeline_events.all()[:10]
+            ],
         }
         result = ClaudeService().answer_health_question(
             profile, serializer.validated_data['question'], context, history=[]
@@ -113,3 +143,34 @@ class AllergyRecordViewSet(viewsets.ModelViewSet):
         if hasattr(self.request.user, 'doctor_profile'):
             raise PermissionDenied("Doctors cannot delete a patient's allergy records.")
         instance.delete()
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    /api/notifications/?profile_id=<id> — generated alerts for a profile,
+    filtered by profile_id the same way documents/timeline/allergies do.
+
+    Read-only: these rows are produced by the `generate_reminders`
+    management command, never posted by a client. Unlike allergies, a
+    doctor gets nothing here even for an approved patient — a premium
+    renewal or a personal medicine-reminder schedule is the patient's own
+    business, not clinical information a doctor needs.
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = Notification.objects.filter(profile__account=self.request.user)
+        profile_id = self.request.query_params.get('profile_id')
+        if profile_id:
+            qs = qs.filter(profile_id=profile_id)
+        return qs
+
+    @action(detail=True, methods=['post'], url_path='mark_read')
+    def mark_read(self, request, pk=None):
+        """POST /api/notifications/<id>/mark_read/ — flip is_read to True."""
+        notification = self.get_object()
+        if not notification.is_read:
+            notification.is_read = True
+            notification.save(update_fields=['is_read'])
+        return Response(NotificationSerializer(notification).data)

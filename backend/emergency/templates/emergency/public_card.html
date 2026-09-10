@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{% if revoked %}Emergency Card Unavailable{% else %}{{ name }} — Emergency Info{% endif %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal: #0EA5A6;
+    --purple: #6D5BD0;
+    --danger: #EF4444;
+    --danger-bg: #FDEBEB;
+    --warning: #F59E0B;
+    --warning-bg: #FEF3E2;
+    --ink-900: #1F2430;
+    --ink-500: #6B7280;
+    --border: #E7E9F1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #F6F7FB;
+    color: var(--ink-900);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: white;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(16,24,40,0.08);
+  }
+  .header {
+    background: linear-gradient(135deg, var(--teal), var(--purple));
+    color: white;
+    padding: 24px;
+    text-align: center;
+  }
+  .header .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.18);
+    padding: 4px 12px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+  }
+  .header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 800;
+  }
+  .header p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    opacity: 0.85;
+  }
+  .body { padding: 24px; }
+  .row {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; }
+  .row-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-500);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 6px;
+  }
+  .row-value {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .blood-group .row-value {
+    display: inline-block;
+    color: var(--danger);
+    background: var(--danger-bg);
+    padding: 4px 14px;
+    border-radius: 10px;
+  }
+  .allergies .row-value { color: var(--warning); font-size: 16px; }
+  .contact .row-value { font-size: 16px; }
+  .contact a {
+    color: var(--purple);
+    text-decoration: none;
+  }
+  .empty { color: var(--ink-500); font-size: 14px; font-style: italic; }
+  .footer {
+    text-align: center;
+    padding: 16px 24px 24px;
+    font-size: 11px;
+    color: var(--ink-500);
+  }
+  .revoked-box {
+    padding: 48px 24px;
+    text-align: center;
+  }
+  .revoked-box h2 { margin: 16px 0 8px; font-size: 18px; }
+  .revoked-box p { color: var(--ink-500); font-size: 14px; margin: 0; }
+</style>
+</head>
+<body>
+  <div class="card">
+    {% if revoked %}
+      <div class="header">
+        <span class="badge">HealthNow Emergency Card</span>
+      </div>
+      <div class="revoked-box">
+        <h2>This card is no longer active</h2>
+        <p>The person who shared this QR code has revoked it. It can no longer be used to view emergency information.</p>
+      </div>
+    {% else %}
+      <div class="header">
+        <span class="badge">⚕ HealthNow Emergency Card</span>
+        <h1>{{ name }}</h1>
+        <p>Scanned in an emergency — shown without any login</p>
+      </div>
+      <div class="body">
+        {% if blood_group %}
+        <div class="row blood-group">
+          <p class="row-label">Blood Group</p>
+          <p class="row-value">{{ blood_group }}</p>
+        </div>
+        {% endif %}
+
+        {% if allergies %}
+        <div class="row allergies">
+          <p class="row-label">⚠ Allergies</p>
+          <p class="row-value">{{ allergies|join:", " }}</p>
+        </div>
+        {% endif %}
+
+        {% if medications %}
+        <div class="row">
+          <p class="row-label">Current Medications</p>
+          <p class="row-value">{{ medications|join:", " }}</p>
+        </div>
+        {% endif %}
+
+        {% if emergency_contact_name %}
+        <div class="row contact">
+          <p class="row-label">Emergency Contact</p>
+          <p class="row-value">
+            {{ emergency_contact_name }} —
+            <a href="tel:{{ emergency_contact_phone }}">{{ emergency_contact_phone }}</a>
+          </p>
+        </div>
+        {% endif %}
+
+        {% if not blood_group and not allergies and not medications and not emergency_contact_name %}
+        <p class="empty">No emergency information has been shared on this card.</p>
+        {% endif %}
+      </div>
+      <div class="footer">
+        This information was shared voluntarily by {{ name }} for emergency use only.
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>

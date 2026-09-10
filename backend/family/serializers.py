@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import AllergyRecord, Profile
+from .models import AllergyRecord, Notification, Profile
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -25,3 +25,13 @@ class AllergyRecordSerializer(serializers.ModelSerializer):
         model = AllergyRecord
         fields = ['id', 'profile', 'kind', 'substance', 'reaction', 'recorded_at']
         read_only_fields = ['id', 'recorded_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'profile', 'notification_type', 'title', 'message',
+            'related_id', 'is_read', 'created_at',
+        ]
+        read_only_fields = fields

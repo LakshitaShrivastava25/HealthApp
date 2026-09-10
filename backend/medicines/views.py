@@ -1,20 +1,71 @@
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 
 from .models import DoseLog, Medication, ReminderSchedule
-from .serializers import DoseLogSerializer, MedicationSerializer, ReminderScheduleSerializer
+from .serializers import (
+    DoctorMedicationSerializer,
+    DoseLogSerializer,
+    MedicationSerializer,
+    ReminderScheduleSerializer,
+)
 
 
 class MedicationViewSet(viewsets.ModelViewSet):
+    """
+    /api/medications/ — a profile's medicines.
+
+    A doctor with an APPROVED DoctorPatientAccess grant can also READ an
+    approved patient's ACTIVE medications here, mirroring how
+    AllergyRecordViewSet already grants doctors read access. Without this
+    a doctor could see allergies, documents and timeline but never what
+    the patient is currently taking — a real safety gap when reasoning
+    about a new prescription. Doctors get the narrower
+    DoctorMedicationSerializer (no personal reminder schedule) and can
+    never create/update/delete a patient's medication.
+    """
     serializer_class = MedicationSerializer
     permission_classes = [IsAuthenticated]
 
+    def _is_doctor(self):
+        return hasattr(self.request.user, 'doctor_profile')
+
+    def get_serializer_class(self):
+        if self._is_doctor():
+            return DoctorMedicationSerializer
+        return MedicationSerializer
+
     def get_queryset(self):
-        qs = Medication.objects.filter(profile__account=self.request.user)
+        user = self.request.user
+        if self._is_doctor():
+            from doctors.models import DoctorPatientAccess
+            approved_profile_ids = DoctorPatientAccess.objects.filter(
+                doctor=user.doctor_profile, status=DoctorPatientAccess.Status.APPROVED
+            ).values_list('profile_id', flat=True)
+            # Only what the patient is currently taking — a discontinued
+            # medicine shown as current would be actively misleading.
+            qs = Medication.objects.filter(profile_id__in=approved_profile_ids, is_active=True)
+        else:
+            qs = Medication.objects.filter(profile__account=user)
         profile_id = self.request.query_params.get('profile_id')
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
         return qs
+
+    def perform_create(self, serializer):
+        if self._is_doctor():
+            raise PermissionDenied("Doctors cannot add medications on behalf of a patient.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        if self._is_doctor():
+            raise PermissionDenied("Doctors cannot edit a patient's medications.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if self._is_doctor():
+            raise PermissionDenied("Doctors cannot delete a patient's medications.")
+        instance.delete()
 
 
 class ReminderScheduleViewSet(viewsets.ModelViewSet):

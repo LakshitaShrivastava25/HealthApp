@@ -15,6 +15,7 @@ import json
 from datetime import date, timedelta
 
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 
 try:
     import anthropic
@@ -32,14 +33,14 @@ class ClaudeService:
             self.client = anthropic.Anthropic(api_key=self.api_key)
 
     # -- internal -----------------------------------------------------
-    def _call(self, system_prompt: str, user_content: str) -> str:
+    def _call(self, system_prompt: str, user_content: str, max_tokens: int = 1500) -> str:
         if not self.enabled:
             raise RuntimeError(
                 "ANTHROPIC_API_KEY is not configured. Set it in .env to enable real Claude calls."
             )
         response = self.client.messages.create(
             model=self.MODEL,
-            max_tokens=1500,
+            max_tokens=max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}],
         )
@@ -106,8 +107,29 @@ class ClaudeService:
         system_prompt = open(
             __file__.replace('claude_service.py', 'prompts/insurance_structuring.txt')
         ).read()
-        result = self._parse_json(self._call(system_prompt, raw_text))
-        return result
+        # 4000 tokens, not the default 1500 — a real, comprehensive policy
+        # (a 60-page document with 30+ standard exclusions, several
+        # waiting periods, and multiple sub-limits) can genuinely produce
+        # a JSON response that size. The old default was sized for a
+        # short response and would risk truncating mid-JSON for a real
+        # large policy, which is exactly the "why doesn't it read a
+        # 60-page PDF" question this was built to answer.
+        raw_response = self._call(system_prompt, raw_text, max_tokens=4000)
+        try:
+            return self._parse_json(raw_response)
+        except (json.JSONDecodeError, ValueError):
+            # A genuinely truncated or malformed response should never
+            # crash the whole upload with an unhandled 500 — report it
+            # the same honest way as every other extraction problem, so
+            # the person sees a clear reason instead of a broken page.
+            return {
+                '_extraction_failed': True,
+                'note': (
+                    "Claude's response could not be parsed as valid data — this can happen with an "
+                    "unusually long or complex policy document. The extracted text was still saved; "
+                    "try again, or add the policy details yourself."
+                ),
+            }
 
     def _mock_policy_structuring(self) -> dict:
         return {
@@ -116,6 +138,7 @@ class ClaudeService:
             "policy_number": None,
             "policy_type": None,
             "sum_insured": None,
+            "premium_amount": None,
             "coverage_start": None,
             "coverage_end": None,
             "room_rent_limit": None,
@@ -149,7 +172,11 @@ class ClaudeService:
         system_prompt = (
             "You are an insurance assistant. Answer ONLY using the policy content supplied. "
             "If the answer isn't in the document, say so explicitly and recommend contacting "
-            "the insurer. Cite the relevant clause/section where possible. Never invent coverage."
+            "the insurer. Cite the relevant clause/section where possible. Never invent coverage. "
+            "Keep answers short — a few sentences, or a brief bulleted list for multiple points. "
+            "Use markdown bullet points (lines starting with '-') for lists, and bold only the single "
+            "most important fact (like the coverage decision itself), not entire sentences. "
+            "No lengthy preamble — lead with the answer."
         )
         known_facts = {
             "insurer": policy.insurer,
@@ -168,9 +195,9 @@ class ClaudeService:
             "sub_limits": [{"category": sl.category, "limit": sl.limit_text} for sl in policy.sub_limits.all()],
         }
         context = (
-            f"KNOWN POLICY FIELDS:\n{json.dumps(known_facts, indent=2)}\n\n"
-            f"AI-EXTRACTED STRUCTURED DATA:\n{json.dumps(policy.structured_data)}\n\n"
-            f"RAW POLICY TEXT:\n{policy.raw_text[:8000] if policy.raw_text else '(none available)'}"
+            f"KNOWN POLICY FIELDS:\n{json.dumps(known_facts, indent=2, cls=DjangoJSONEncoder)}\n\n"
+            f"AI-EXTRACTED STRUCTURED DATA:\n{json.dumps(policy.structured_data, cls=DjangoJSONEncoder)}\n\n"
+            f"RAW POLICY TEXT:\n{policy.raw_text[:40000] if policy.raw_text else '(none available)'}"
         )
         user_content = f"{context}\n\nCONVERSATION SO FAR:\n{history}\n\nQUESTION: {question}"
         answer = self._call(system_prompt, user_content)
@@ -199,9 +226,11 @@ class ClaudeService:
         system_prompt = (
             "Explain this already-computed insurance claim estimate in plain, reassuring "
             "language for a layperson. Do not change or re-derive any numbers — only explain them. "
+            "Keep it short — a few sentences, or a brief bulleted breakdown of the numbers. "
+            "Bold only the key figures, not full sentences. No lengthy preamble. "
             "End by stating this is an estimate, not a guarantee of insurer approval."
         )
-        return self._call(system_prompt, json.dumps(computed_result))
+        return self._call(system_prompt, json.dumps(computed_result, cls=DjangoJSONEncoder))
 
     # -- health chat ------------------------------------------------------
     def answer_health_question(self, profile, question: str, context: dict, history: list):
@@ -219,11 +248,19 @@ class ClaudeService:
                 "_mock": True,
             }
         system_prompt = (
-            "You are a health information assistant. You may explain, summarize, and provide "
-            "general information, but you must NEVER provide a definitive medical diagnosis or "
-            "tell the user to change medication. Recommend professional consultation for anything "
-            "diagnostic, urgent, or when in doubt. Ground every answer in the supplied context only."
+            "You are a health information assistant. The PATIENT CONTEXT below includes this "
+            "person's real blood group, allergies, active medications (with their actual reminder "
+            "times), recent documents, and recent timeline events — use it directly to answer "
+            "questions about their own medicines, schedule, or records. You may explain, summarize, "
+            "and provide general information, but you must NEVER provide a definitive medical "
+            "diagnosis or tell the user to change medication. Recommend professional consultation "
+            "for anything diagnostic, urgent, or when in doubt. Ground every answer in the supplied "
+            "context only — if something genuinely isn't in the context, say so plainly rather than "
+            "guessing. "
+            "Keep answers short — a few sentences, or a brief bulleted list for multiple points. "
+            "Use markdown bullet points (lines starting with '-') for lists, and bold only the single "
+            "most important word or phrase, not entire sentences. No lengthy preamble — lead with the answer."
         )
-        user_content = f"PATIENT CONTEXT:\n{json.dumps(context)}\n\nHISTORY:\n{history}\n\nQUESTION: {question}"
+        user_content = f"PATIENT CONTEXT:\n{json.dumps(context, cls=DjangoJSONEncoder)}\n\nHISTORY:\n{history}\n\nQUESTION: {question}"
         answer = self._call(system_prompt, user_content)
         return {"answer": answer}

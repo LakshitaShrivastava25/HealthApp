@@ -20,6 +20,21 @@ class MedicationSerializer(serializers.ModelSerializer):
         ]
 
 
+class DoctorMedicationSerializer(serializers.ModelSerializer):
+    """
+    What an APPROVED doctor sees for a patient's medication — deliberately
+    narrower than MedicationSerializer. Reminder schedules are excluded on
+    purpose: time_of_day is the patient's own personal reminder routine,
+    not clinically relevant to what a doctor needs to know about, which is
+    the drug, the dose, how often, and how it's taken.
+    """
+
+    class Meta:
+        model = Medication
+        fields = ['id', 'profile', 'name', 'dosage', 'frequency', 'instructions']
+        read_only_fields = fields
+
+
 class DoseLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoseLog

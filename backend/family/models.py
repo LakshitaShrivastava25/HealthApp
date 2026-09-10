@@ -25,13 +25,14 @@ class Profile(models.Model):
         MALE = 'male', 'Male'
         FEMALE = 'female', 'Female'
         OTHER = 'other', 'Other'
+        PREFER_NOT_TO_SAY = 'prefer_not_to_say', 'Prefer not to say'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     account = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profiles')
     full_name = models.CharField(max_length=150)
     relation = models.CharField(max_length=20, choices=Relation.choices, default=Relation.SELF)
     date_of_birth = models.DateField(null=True, blank=True)
-    gender = models.CharField(max_length=10, choices=Gender.choices, blank=True)
+    gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
     blood_group = models.CharField(max_length=5, blank=True)
     height_cm = models.PositiveSmallIntegerField(null=True, blank=True)
     weight_kg = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -67,3 +68,40 @@ class AllergyRecord(models.Model):
 
     def __str__(self):
         return f"{self.substance} — {self.profile.full_name}"
+
+
+class Notification(models.Model):
+    """
+    A generated, user-facing alert — currently premium renewals and
+    medicine reminders, produced by the `generate_reminders` management
+    command rather than written by hand anywhere in the app.
+
+    related_id holds the id of the InsurancePolicy or Medication the
+    notification is about. It is deliberately a plain UUID rather than a
+    real FK: the two sources live in different apps, and a generic
+    relation would buy nothing here beyond the idempotency lookup it
+    exists to serve (see the command's dedupe logic).
+    """
+
+    class Type(models.TextChoices):
+        PREMIUM_DUE = 'premium_due', 'Premium Due'
+        MEDICINE_REMINDER = 'medicine_reminder', 'Medicine Reminder'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=30, choices=Type.choices)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    related_id = models.UUIDField(null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            # The exact lookup the idempotency check runs on every pass.
+            models.Index(fields=['profile', 'notification_type', 'related_id', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_notification_type_display()} — {self.profile.full_name}"

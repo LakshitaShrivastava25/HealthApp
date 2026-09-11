@@ -11,9 +11,11 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'full_name', 'relation', 'date_of_birth', 'gender',
             'blood_group', 'height_cm', 'weight_kg', 'preferred_language',
-            'initials', 'created_at',
+            'reference_code', 'initials', 'created_at',
         ]
-        read_only_fields = ['id', 'created_at']
+        # reference_code is generated server-side and is the identifier a
+        # patient shares — never something a client gets to choose.
+        read_only_fields = ['id', 'created_at', 'reference_code']
 
     def get_initials(self, obj):
         parts = obj.full_name.split()

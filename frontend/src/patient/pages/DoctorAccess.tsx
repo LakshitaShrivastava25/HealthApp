@@ -31,7 +31,7 @@ export default function DoctorAccess() {
 
   function handleCopy() {
     if (!activeProfile) return;
-    navigator.clipboard.writeText(activeProfile.id);
+    navigator.clipboard.writeText(activeProfile.reference_code ?? '');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -63,7 +63,9 @@ export default function DoctorAccess() {
             until you approve their request below.
           </p>
           <div className="flex items-center gap-2 bg-surface rounded-lg px-3.5 py-2.5 border border-border">
-            <code className="text-sm text-ink-900 flex-1 break-all">{activeProfile?.id}</code>
+            <code className="text-base font-semibold tracking-[0.12em] text-ink-900 flex-1">
+            {activeProfile?.reference_code ?? '—'}
+          </code>
             <button
               onClick={handleCopy}
               className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-brand-purple hover:text-brand-purple/80"

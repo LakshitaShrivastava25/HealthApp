@@ -6,6 +6,8 @@ export type Profile = {
   full_name: string;
   relation: string;
   blood_group?: string;
+  /** Short shareable patient code, e.g. "AB1234". Server-generated. */
+  reference_code?: string;
   date_of_birth?: string | null;
   gender?: string;
   height_cm?: number | null;

@@ -107,7 +107,7 @@ export default function MyPatients() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {approved.map((g) => (
-                <button key={g.id} onClick={() => navigate(`/patients/${g.profile}`)} className="text-left">
+                <button key={g.id} onClick={() => navigate(`/doctor/patients/${g.profile}`)} className="text-left">
                   <Card className="p-4 hover:border-brand-purple transition-colors flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-ink-900">{profileNames[g.profile] || 'Patient'}</p>

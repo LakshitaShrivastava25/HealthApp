@@ -1,7 +1,43 @@
+import secrets
+import string
 import uuid
 
 from django.conf import settings
 from django.db import models
+
+REFERENCE_CODE_LETTERS = 2
+REFERENCE_CODE_DIGITS = 4
+REFERENCE_CODE_ATTEMPTS = 20
+
+
+def generate_reference_code():
+    """
+    A short, sayable patient reference: two uppercase letters then four
+    digits, e.g. "AB1234". 26^2 * 10^4 = 6,760,000 combinations.
+
+    Retries on collision rather than trusting the odds. The loop is bounded:
+    an unbounded one would spin forever if the space ever filled up, and a
+    loud failure is better than a hung request. `secrets` rather than
+    `random` to match generate_public_token() in emergency/models.py — this
+    is a shared identifier, so guessable sequences are worth avoiding even
+    though the code alone grants nothing without the patient's approval.
+
+    NOTE: this check is not a substitute for the DB unique constraint. Two
+    concurrent creates could both pass it; the constraint is what actually
+    guarantees uniqueness, and this loop is what stops that being a
+    routine occurrence.
+    """
+    for _ in range(REFERENCE_CODE_ATTEMPTS):
+        code = (
+            ''.join(secrets.choice(string.ascii_uppercase) for _ in range(REFERENCE_CODE_LETTERS))
+            + ''.join(secrets.choice(string.digits) for _ in range(REFERENCE_CODE_DIGITS))
+        )
+        if not Profile.objects.filter(reference_code=code).exists():
+            return code
+    raise RuntimeError(
+        'Could not generate a unique patient reference code after '
+        f'{REFERENCE_CODE_ATTEMPTS} attempts.'
+    )
 
 
 class Profile(models.Model):
@@ -37,10 +73,26 @@ class Profile(models.Model):
     height_cm = models.PositiveSmallIntegerField(null=True, blank=True)
     weight_kg = models.PositiveSmallIntegerField(null=True, blank=True)
     preferred_language = models.CharField(max_length=30, default='English')
+    # The short code a patient reads out so a doctor can request access.
+    # Additional to `id`, never a replacement: every internal relationship in
+    # the app still points at the UUID primary key above.
+    reference_code = models.CharField(
+        max_length=6, unique=True, blank=True, default=generate_reference_code
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-relation']
+
+    def save(self, *args, **kwargs):
+        # The callable default covers normal creation, but a caller that
+        # explicitly passes reference_code='' would slip past it — and with
+        # unique=True the SECOND such row would then crash on a blank
+        # collision. This makes an empty value impossible either way.
+        if not self.reference_code:
+            self.reference_code = generate_reference_code()
+        self.reference_code = self.reference_code.strip().upper()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.full_name} ({self.relation})"

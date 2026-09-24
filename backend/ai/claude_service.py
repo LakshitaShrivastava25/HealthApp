@@ -3,24 +3,69 @@ Centralized Claude service layer. Per the TDD, ALL Claude API calls go
 through here — never scattered directly into views. Every method returns
 already-validated data or raises; callers never touch raw Claude output.
 
-STATUS: ANTHROPIC_API_KEY is not yet set (see config/settings.py — reads
-from .env). Until it's supplied, every method below returns a clearly
-marked mock response with the correct shape, so the rest of the app
-(documents, insurance) can be built and tested against a stable contract
-today. Flip to real calls by setting ANTHROPIC_API_KEY — no other code
-changes needed.
+Three states, all of them normal, none of them fatal:
+
+  * No ANTHROPIC_API_KEY — every method returns a clearly marked mock with
+    the correct shape, so the rest of the app works against a stable
+    contract without a key.
+  * A working key — real extraction and real answers.
+  * A key that is present but does not work (revoked, mistyped, rate
+    limited, or the service is down) — `enabled` only checks that the key
+    is non-empty, so this is indistinguishable from a good key until the
+    request comes back. Every such failure is caught in `_call` and raised
+    as ClaudeUnavailable, which callers turn into a saved record flagged
+    'needs review' with a readable reason. It must never reach the user as
+    a 500 on an upload they had every reason to expect to succeed.
+
+Text extraction itself (pypdf for PDFs) is real and runs regardless of
+whether a key is configured — see text_extraction.py.
 """
 
 import json
 from datetime import date, timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
+from django.utils import timezone
+
+from .text_extraction import extract_text
 
 try:
     import anthropic
 except ImportError:
     anthropic = None
+
+
+def _parse_iso_date(value):
+    """
+    A YYYY-MM-DD string from an AI response, or None.
+
+    Never raises: the model is instructed to return this shape but is not
+    bound to, and one malformed date must not fail an entire upload.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        return None
+
+
+class ClaudeUnavailable(Exception):
+    """
+    A Claude call could not complete.
+
+    Carries a reason written for the person who uploaded the file, not a
+    stack trace. Every caller in this module turns one of these into a
+    "needs review" record with the reason attached, so a bad key, an
+    outage or a rate limit degrades the feature instead of returning a
+    500 from an upload the user has every reason to expect to succeed.
+    """
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
 
 
 class ClaudeService:
@@ -34,17 +79,77 @@ class ClaudeService:
 
     # -- internal -----------------------------------------------------
     def _call(self, system_prompt: str, user_content: str, max_tokens: int = 1500) -> str:
+        """
+        The single place a Claude request is made, and therefore the single
+        place its failures are translated.
+
+        `enabled` is only a check that a key is non-empty — it cannot tell
+        whether that key actually works. An invalid or revoked key looks
+        exactly like a valid one until the request comes back 401, which is
+        why every one of these errors is caught here rather than trusted to
+        never happen: before this, a wrong key in .env turned every
+        document and policy upload into a 500.
+        """
         if not self.enabled:
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY is not configured. Set it in .env to enable real Claude calls."
+            raise ClaudeUnavailable(
+                "AI processing is not configured — ANTHROPIC_API_KEY is unset."
             )
-        response = self.client.messages.create(
-            model=self.MODEL,
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_content}],
-        )
+        try:
+            response = self.client.messages.create(
+                model=self.MODEL,
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_content}],
+            )
+        except anthropic.AuthenticationError:
+            raise ClaudeUnavailable(
+                "The AI service rejected the configured API key. An administrator needs "
+                "to check ANTHROPIC_API_KEY."
+            )
+        except anthropic.RateLimitError:
+            raise ClaudeUnavailable(
+                "The AI service is temporarily rate-limited. Please try again in a few minutes."
+            )
+        except anthropic.APIConnectionError:
+            raise ClaudeUnavailable(
+                "The AI service could not be reached right now."
+            )
+        except anthropic.APIStatusError as exc:
+            raise ClaudeUnavailable(
+                f"The AI service returned an error (HTTP {exc.status_code})."
+            )
         return "".join(block.text for block in response.content if block.type == "text")
+
+    def _structure(self, prompt_filename: str, raw_text: str, max_tokens: int = 3000) -> dict:
+        """
+        Runs one extraction prompt and returns parsed JSON, or a dict
+        flagged `_extraction_failed` with a readable reason. Callers store
+        that dict as-is and mark the record 'needs review'.
+        """
+        system_prompt = (Path(__file__).parent / 'prompts' / prompt_filename).read_text(encoding='utf-8')
+        try:
+            raw = self._call(system_prompt, raw_text, max_tokens=max_tokens)
+        except ClaudeUnavailable as exc:
+            # The reason is deliberately context-free (the same exception
+            # serves chat), so the file-specific half is added here.
+            return {
+                '_extraction_failed': True,
+                'note': (
+                    f'{exc.reason} Your file was saved, but its details could not be read '
+                    f'automatically — add them yourself, or try again once this is resolved.'
+                ),
+            }
+        try:
+            return self._parse_json(raw)
+        except (json.JSONDecodeError, ValueError):
+            return {
+                '_extraction_failed': True,
+                'note': (
+                    "The AI response could not be read as valid data — this can happen with an "
+                    "unusually long or unusual document. The extracted text was still saved; "
+                    "try again, or add the details yourself."
+                ),
+            }
 
     def _parse_json(self, raw: str) -> dict:
         cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -53,29 +158,69 @@ class ClaudeService:
     # -- documents ------------------------------------------------------
     def process_document(self, document):
         """
-        Stage 1 (OCR) → Stage 2 (Claude structuring) → validated JSON →
-        Document.structured_data. OCR itself (Google Vision/AWS Textract)
-        is not wired up yet — same reasoning as above, mocked until a
-        provider key is supplied (OCR_PROVIDER_API_KEY in .env).
+        Text extraction → Claude structuring → Document.structured_data,
+        then the Timeline and Medication rows derived from it.
+
+        Mirrors the insurance path, which already worked this way. Every
+        outcome — no readable text, no API key, a rejected key, unparseable
+        output — lands the document in 'needs review' with a readable note
+        rather than raising. A failed upload used to mean a 500; now it
+        means a saved document the person can complete by hand.
+
+        Status is deliberately NEEDS_REVIEW even on full success: extracted
+        medical details are not treated as verified until a human confirms
+        them, the same rule the insurance flow follows.
         """
         from documents.models import Document
+        from documents.derived import rebuild_derived_records
 
-        if not self.enabled:
-            document.structured_data = self._mock_document_structuring(document.category)
+        extraction = extract_text(document.file)
+        document.raw_ocr_text = extraction.text or ''
+
+        if not extraction.succeeded:
+            document.structured_data = {
+                '_extraction_failed': True,
+                'note': extraction.note or 'Could not extract any text from this file.',
+            }
             document.status = Document.Status.NEEDS_REVIEW
+            document.processed_at = timezone.now()
             document.save()
+            # Still worth a timeline entry — the document itself is a real
+            # health event even when nothing could be read out of it.
+            rebuild_derived_records(document)
             return document.structured_data
 
-        # Real pipeline once keys are set:
-        # raw_text = ocr_extract(document.file)
-        # system_prompt = PRESCRIPTION_STRUCTURING_PROMPT if document.category == 'prescription' else REPORT_STRUCTURING_PROMPT
-        # result = self._parse_json(self._call(system_prompt, raw_text))
-        # document.raw_ocr_text = raw_text
-        # document.structured_data = result
-        # document.status = Document.Status.PROCESSED
-        # document.save()
-        # return result
-        raise NotImplementedError("Wire up OCR + real Claude call once API keys are set.")
+        if not self.enabled:
+            result = self._mock_document_structuring(document.category)
+        else:
+            prompt = (
+                'prescription_structuring.txt'
+                if document.category == Document.Category.PRESCRIPTION
+                else 'report_structuring.txt'
+            )
+            result = self._structure(prompt, extraction.text)
+
+        if extraction.note:
+            # Extraction partly succeeded — some pages had no readable text.
+            # Explains why fields can be missing from an otherwise fine file.
+            result['_extraction_warning'] = extraction.note
+
+        if not (result.get('_mock') or result.get('_extraction_failed')):
+            # Copy what was read into the columns the app actually displays.
+            # Without this the structured data sits unused while the document
+            # header stays blank — the same bug the insurance flow already hit.
+            document.doctor_name = (result.get('doctor_name') or document.doctor_name or '')[:150]
+            document.hospital_name = (result.get('hospital_name') or document.hospital_name or '')[:150]
+            parsed_date = _parse_iso_date(result.get('date'))
+            if parsed_date:
+                document.document_date = parsed_date
+
+        document.structured_data = result
+        document.status = Document.Status.NEEDS_REVIEW
+        document.processed_at = timezone.now()
+        document.save()
+        rebuild_derived_records(document)
+        return result
 
     def _mock_document_structuring(self, category: str) -> dict:
         if category == 'prescription':
@@ -103,10 +248,6 @@ class ClaudeService:
         if not self.enabled:
             return self._mock_policy_structuring()
 
-        raw_text = policy.raw_text
-        system_prompt = open(
-            __file__.replace('claude_service.py', 'prompts/insurance_structuring.txt')
-        ).read()
         # 4000 tokens, not the default 1500 — a real, comprehensive policy
         # (a 60-page document with 30+ standard exclusions, several
         # waiting periods, and multiple sub-limits) can genuinely produce
@@ -114,22 +255,12 @@ class ClaudeService:
         # short response and would risk truncating mid-JSON for a real
         # large policy, which is exactly the "why doesn't it read a
         # 60-page PDF" question this was built to answer.
-        raw_response = self._call(system_prompt, raw_text, max_tokens=4000)
-        try:
-            return self._parse_json(raw_response)
-        except (json.JSONDecodeError, ValueError):
-            # A genuinely truncated or malformed response should never
-            # crash the whole upload with an unhandled 500 — report it
-            # the same honest way as every other extraction problem, so
-            # the person sees a clear reason instead of a broken page.
-            return {
-                '_extraction_failed': True,
-                'note': (
-                    "Claude's response could not be parsed as valid data — this can happen with an "
-                    "unusually long or complex policy document. The extracted text was still saved; "
-                    "try again, or add the policy details yourself."
-                ),
-            }
+        #
+        # _structure handles both failure modes — an unusable API key and
+        # an unparseable response — as a flagged dict rather than an
+        # exception. A rejected key used to surface here as a 500 on
+        # upload; the policy is saved either way and simply needs review.
+        return self._structure('insurance_structuring.txt', policy.raw_text, max_tokens=4000)
 
     def _mock_policy_structuring(self) -> dict:
         return {
@@ -200,7 +331,14 @@ class ClaudeService:
             f"RAW POLICY TEXT:\n{policy.raw_text[:40000] if policy.raw_text else '(none available)'}"
         )
         user_content = f"{context}\n\nCONVERSATION SO FAR:\n{history}\n\nQUESTION: {question}"
-        answer = self._call(system_prompt, user_content)
+        try:
+            answer = self._call(system_prompt, user_content)
+        except ClaudeUnavailable as exc:
+            # The caller has already persisted the question as a chat
+            # message, so an outage has to answer in the thread. Raising
+            # would leave the person looking at their own question with no
+            # reply and nothing explaining why.
+            return {"answer": exc.reason, "_unavailable": True}
         return {"answer": answer}
 
     # -- claim estimator ------------------------------------------------
@@ -230,7 +368,14 @@ class ClaudeService:
             "Bold only the key figures, not full sentences. No lengthy preamble. "
             "End by stating this is an estimate, not a guarantee of insurer approval."
         )
-        return self._call(system_prompt, json.dumps(computed_result, cls=DjangoJSONEncoder))
+        try:
+            return self._call(system_prompt, json.dumps(computed_result, cls=DjangoJSONEncoder))
+        except ClaudeUnavailable:
+            # Eligibility and every number come from claim_estimator.py, not
+            # from Claude — only the friendlier phrasing is missing. Return
+            # the deterministic reasoning rather than failing an estimate
+            # that was already fully and correctly computed.
+            return deterministic_reasoning
 
     # -- health chat ------------------------------------------------------
     def answer_health_question(self, profile, question: str, context: dict, history: list):
@@ -262,5 +407,8 @@ class ClaudeService:
             "most important word or phrase, not entire sentences. No lengthy preamble — lead with the answer."
         )
         user_content = f"PATIENT CONTEXT:\n{json.dumps(context, cls=DjangoJSONEncoder)}\n\nHISTORY:\n{history}\n\nQUESTION: {question}"
-        answer = self._call(system_prompt, user_content)
+        try:
+            answer = self._call(system_prompt, user_content)
+        except ClaudeUnavailable as exc:
+            return {"answer": exc.reason, "_unavailable": True}
         return {"answer": answer}

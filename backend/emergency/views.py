@@ -1,5 +1,6 @@
 import secrets
 
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -8,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from family.permissions import assert_owns_profile
 from .models import EmergencyProfile
 from .serializers import EmergencyProfileSerializer, PublicEmergencyViewSerializer
 
@@ -18,6 +20,51 @@ class EmergencyProfileViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return EmergencyProfile.objects.filter(profile__account=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """
+        Ownership is checked BEFORE serializer validation here, unlike every
+        other viewset, which checks it in perform_create.
+
+        EmergencyProfile.profile is a OneToOneField, so DRF attaches a
+        uniqueness validator that runs during is_valid() — before
+        perform_create is ever reached. A cross-tenant attempt aimed at a
+        profile that already had a card therefore came back as
+        400 "emergency profile with this profile already exists" instead of
+        403. The write was still refused, but the answer told a stranger
+        that the profile id they tried is real AND already has a card,
+        which is exactly the enumeration signal this endpoint must not give
+        out. Checking first makes the response 403 either way.
+        """
+        self._assert_submitted_profile_is_owned(request)
+        return super().create(request, *args, **kwargs)
+
+    def _assert_submitted_profile_is_owned(self, request):
+        from family.models import Profile
+
+        profile_id = request.data.get('profile')
+        if not profile_id:
+            # Nothing to check — the serializer reports the missing field.
+            return
+        try:
+            profile = Profile.objects.filter(pk=profile_id).first()
+        except (ValueError, ValidationError):
+            # Not a valid UUID; let the serializer produce the field error.
+            return
+        assert_owns_profile(request.user, profile)
+
+    def perform_create(self, serializer):
+        # Kept as the durable guard even though create() checks first: this
+        # record mints a PUBLIC, unauthenticated card (see
+        # public_emergency_view), so it should not depend on one call path
+        # staying in place.
+        assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
+        serializer.save()
+
+    def perform_update(self, serializer):
+        if 'profile' in serializer.validated_data:
+            assert_owns_profile(self.request.user, serializer.validated_data['profile'])
+        serializer.save()
 
     @action(detail=True, methods=['post'])
     def regenerate(self, request, pk=None):

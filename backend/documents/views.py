@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ai.claude_service import ClaudeService
+from family.permissions import assert_owns_profile
+from .derived import rebuild_derived_records
 from .models import Document, TimelineEvent
 from .serializers import DocumentCorrectionSerializer, DocumentSerializer, TimelineEventSerializer
 
@@ -50,6 +52,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if hasattr(self.request.user, 'doctor_profile'):
             raise PermissionDenied("Doctors cannot upload documents on behalf of a patient.")
+        assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
         document = serializer.save(status=Document.Status.PROCESSING)
         # TODO: move to a Celery task (documents/tasks.py) once Celery+Redis
         # are provisioned, so upload doesn't block on OCR+Claude latency.
@@ -58,6 +61,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         if hasattr(self.request.user, 'doctor_profile'):
             raise PermissionDenied("Doctors cannot edit a patient's documents.")
+        if 'profile' in serializer.validated_data:
+            assert_owns_profile(self.request.user, serializer.validated_data['profile'])
         serializer.save()
 
     def perform_destroy(self, instance):
@@ -77,6 +82,12 @@ class DocumentViewSet(viewsets.ModelViewSet):
         document.status = Document.Status.PROCESSED
         document.processed_at = timezone.now()
         document.save()
+        # A correction changes what this document says, so what it implies
+        # has to follow. Without this, fixing a misread medicine name would
+        # leave the old name standing in the timeline and the medicines
+        # list — the corrected record and the derived one disagreeing is
+        # worse than never having derived anything.
+        rebuild_derived_records(document)
         return Response(DocumentSerializer(document).data)
 
 

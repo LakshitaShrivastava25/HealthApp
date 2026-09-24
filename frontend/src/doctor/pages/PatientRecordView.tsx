@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { FileText, AlertTriangle, History, Plus, X } from 'lucide-react';
+import { FileText, AlertTriangle, History, Plus, X, Pill, ExternalLink } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import { patientDataApi, notesApi, api } from '../lib/api';
 
 type TimelineEvent = { id: string; event_date: string; title: string; summary: string; event_type: string };
-type Doc = { id: string; title: string; category: string; document_date: string | null };
+// `file` is the uploaded document's URL. The serializer already returned it;
+// this view simply never asked for it, so a doctor could see titles but not
+// open anything.
+type Doc = { id: string; title: string; category: string; document_date: string | null; file: string | null };
+type Medication = { id: string; name: string; dosage: string; frequency: string; instructions: string };
 type Allergy = { id: string; substance: string; reaction: string };
 
 export default function PatientRecordView() {
@@ -15,6 +19,7 @@ export default function PatientRecordView() {
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [allergies, setAllergies] = useState<Allergy[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
 
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [diagnosis, setDiagnosis] = useState('');
@@ -30,6 +35,7 @@ export default function PatientRecordView() {
     patientDataApi.timeline(profileId).then((r) => setTimeline(r.data.results ?? r.data));
     patientDataApi.documents(profileId).then((r) => setDocuments(r.data.results ?? r.data));
     patientDataApi.allergies(profileId).then((r) => setAllergies(r.data.results ?? r.data));
+    patientDataApi.medications(profileId).then((r) => setMedications(r.data.results ?? r.data));
   }, [profileId]);
 
   async function handleAddNote() {
@@ -122,8 +128,28 @@ export default function PatientRecordView() {
             ) : (
               <div className="space-y-2">
                 {documents.map((d) => (
-                  <div key={d.id} className="flex items-center justify-between">
-                    <p className="text-xs text-ink-700">{d.title}</p>
+                  <div key={d.id} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      {/* Opens the real uploaded file, the same way the
+                          patient's own Medical Locker does. Access is still
+                          gated server-side by the approved grant that let
+                          this page load at all. */}
+                      {d.file ? (
+                        <a
+                          href={d.file}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-medium text-brand-purple hover:underline inline-flex items-center gap-1"
+                        >
+                          {d.title}
+                          <ExternalLink size={11} className="shrink-0" />
+                        </a>
+                      ) : (
+                        <p className="text-xs text-ink-700">{d.title}</p>
+                      )}
+                      {d.document_date && <p className="text-[11px] text-ink-300">{d.document_date}</p>}
+                      {!d.file && <p className="text-[11px] text-ink-300">No file attached</p>}
+                    </div>
                     <Badge tone="neutral">{d.category}</Badge>
                   </div>
                 ))}
@@ -131,6 +157,29 @@ export default function PatientRecordView() {
             )}
           </Card>
         </div>
+
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-ink-900 flex items-center gap-2 mb-3">
+            <Pill size={15} className="text-success" /> Active Medications
+          </p>
+          {medications.length === 0 ? (
+            <p className="text-xs text-ink-500">No active medications on file.</p>
+          ) : (
+            <div className="space-y-2">
+              {medications.map((m) => (
+                <div key={m.id} className="flex items-start justify-between gap-4 border-b border-border last:border-0 pb-2 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink-900">{m.name}</p>
+                    <p className="text-xs text-ink-500 mt-0.5">
+                      {[m.dosage, m.frequency].filter(Boolean).join(' · ') || '—'}
+                    </p>
+                  </div>
+                  {m.instructions && <p className="text-xs text-ink-300 shrink-0">{m.instructions}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         <Card className="p-5">
           <p className="text-sm font-semibold text-ink-900 flex items-center gap-2 mb-3">

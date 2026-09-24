@@ -1,6 +1,9 @@
 import re
+import uuid
 
 from rest_framework import serializers
+
+from family.models import Profile
 
 from .models import ConsultationNote, Doctor, DoctorPatientAccess
 
@@ -233,8 +236,53 @@ class DoctorProfileUpdateSerializer(AvailabilityValidationMixin, serializers.Mod
         return super().update(instance, validated_data)
 
 
+class ProfileReferenceCodeField(serializers.PrimaryKeyRelatedField):
+    """
+    Accepts the patient's short reference code (e.g. "AB1234") on write and
+    still emits the real UUID on read.
+
+    Write side takes the code because that is what a patient can actually
+    read aloud. Read side deliberately keeps the UUID: the User Portal's
+    Doctor Access page matches grants against profile ids, so switching the
+    output would silently break it.
+
+    A raw UUID is still accepted on input too. Nothing in the app sends one
+    any more, but any older client or script that does keeps working rather
+    than failing with a confusing "no patient found".
+    """
+
+    default_error_messages = {
+        'no_match': 'No patient found with that reference ID.',
+        'invalid': 'Enter a patient reference ID, e.g. AB1234.',
+    }
+
+    def to_internal_value(self, data):
+        raw = str(data or '').strip()
+        if not raw:
+            self.fail('invalid')
+
+        # Case-insensitive on purpose: a doctor typing "ab1234" means the
+        # same patient as "AB1234", and codes are stored uppercase.
+        code = raw.upper()
+        profile = Profile.objects.filter(reference_code=code).first()
+        if profile is not None:
+            return profile
+
+        # UUID fallback for older callers.
+        try:
+            uuid.UUID(raw)
+        except (ValueError, AttributeError, TypeError):
+            self.fail('no_match')
+        profile = Profile.objects.filter(pk=raw).first()
+        if profile is None:
+            self.fail('no_match')
+        return profile
+
+
 class DoctorPatientAccessSerializer(serializers.ModelSerializer):
     doctor_detail = serializers.SerializerMethodField()
+    # Write: short code (or a legacy UUID). Read: the real UUID, unchanged.
+    profile = ProfileReferenceCodeField(queryset=Profile.objects.all())
 
     class Meta:
         model = DoctorPatientAccess

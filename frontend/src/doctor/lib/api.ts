@@ -150,4 +150,8 @@ export const patientDataApi = {
   timeline: (profileId: string) => api.get('/timeline/', { params: { profile_id: profileId } }),
   documents: (profileId: string) => api.get('/documents/', { params: { profile_id: profileId } }),
   allergies: (profileId: string) => api.get('/allergies/', { params: { profile_id: profileId } }),
+  // Same endpoint the patient uses; the backend swaps in a narrower
+  // serializer for doctors (active meds only, no personal reminder times)
+  // and scopes it to profiles with an APPROVED access grant.
+  medications: (profileId: string) => api.get('/medications/', { params: { profile_id: profileId } }),
 };

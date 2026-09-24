@@ -24,7 +24,7 @@ export default function RequestAccess() {
       setTimeout(() => navigate('/doctor'), 1500);
     } catch {
       setError(
-        "Could not send the request. Double-check the patient's reference ID — it must be a valid profile ID."
+        "Could not send the request. Double-check the patient's reference ID — it's 6 characters, like AB1234."
       );
     } finally {
       setLoading(false);
@@ -40,13 +40,17 @@ export default function RequestAccess() {
             <UserPlus size={20} />
           </div>
           <p className="text-sm text-ink-500 mb-4">
-            Enter the patient's reference ID (they can find this in their app's profile). They'll need to
+            Enter the patient's 6-character reference ID, e.g. AB1234 (they can find it on their
+            Doctor Access page). They'll need to
             approve your request before you can see anything — you won't have access until they do.
           </p>
           <input
             value={profileId}
             onChange={(e) => setProfileId(e.target.value)}
-            placeholder="Patient reference ID"
+            placeholder="AB1234"
+            maxLength={6}
+            autoCapitalize="characters"
+            spellCheck={false}
             className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30 mb-3"
           />
           {error && <p className="text-xs text-danger mb-3">{error}</p>}

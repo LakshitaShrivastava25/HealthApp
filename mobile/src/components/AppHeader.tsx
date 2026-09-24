@@ -7,7 +7,7 @@ import ProfileSwitcher from './ProfileSwitcher';
 
 /**
  * Header for the patient tabs: beating brand mark, the screen's name under
- * a small "HealthNow" kicker, and the family-profile switcher as a pill.
+ * a small "CurePath" kicker, and the family-profile switcher as a pill.
  * Replaces the stock navigator header, which had no room for the brand.
  */
 export default function AppHeader({ title }: { title: string }) {
@@ -19,7 +19,7 @@ export default function AppHeader({ title }: { title: string }) {
         <View style={styles.left}>
           <BeatingHeart size={38} />
           <View style={{ flexShrink: 1 }}>
-            <Text style={styles.kicker}>HealthNow</Text>
+            <Text style={styles.kicker}>CurePath</Text>
             <Text style={styles.title} numberOfLines={1}>
               {title}
             </Text>

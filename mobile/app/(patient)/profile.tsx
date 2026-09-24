@@ -153,7 +153,7 @@ export default function ProfileScreen() {
         <Feather name="log-out" size={17} color={colors.danger} />
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
-      <Text style={styles.version}>HealthNow · Your records stay private</Text>
+      <Text style={styles.version}>CurePath · Your records stay private</Text>
     </Screen>
   );
 }

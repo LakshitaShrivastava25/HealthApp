@@ -142,7 +142,7 @@ export default function Login() {
               </View>
             )}
             <BeatingHeart size={56} halo />
-            <Text style={styles.brandName}>HealthNow</Text>
+            <Text style={styles.brandName}>CurePath</Text>
             <Text style={styles.brandTag}>
               Your family's health records, insurance and medicines in one place.
             </Text>

@@ -42,7 +42,7 @@ export function useConfirmExit(canGoBackInScreen?: () => boolean) {
     if (open.current) return true;
     open.current = true;
     Alert.alert(
-      'Exit HealthNow?',
+      'Exit CurePath?',
       'Are you sure you want to close the app?',
       [
         { text: 'Stay', style: 'cancel', onPress: () => (open.current = false) },

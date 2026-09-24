@@ -80,7 +80,7 @@ export default function AnimatedSplash({ children }: { children: ReactNode }) {
             </View>
 
             <Animated.View style={{ opacity: textOpacity, transform: [{ translateY: textOffset }], alignItems: 'center' }}>
-              <Text style={styles.name}>HealthNow</Text>
+              <Text style={styles.name}>CurePath</Text>
               <Text style={styles.tag}>Your family's health, in one place</Text>
             </Animated.View>
 

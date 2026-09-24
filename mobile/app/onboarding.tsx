@@ -83,7 +83,7 @@ export default function Onboarding() {
       <View style={styles.topBar}>
         <View style={styles.brandRow}>
           <BeatingHeart size={30} />
-          <Text style={styles.brand}>HealthNow</Text>
+          <Text style={styles.brand}>CurePath</Text>
         </View>
         {!isLast && (
           <Pressable onPress={finish} hitSlop={10}>

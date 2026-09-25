@@ -8,7 +8,7 @@ from rest_framework.response import Response
 
 from .models import ConsultationNote, Doctor, DoctorPatientAccess
 from .serializers import (
-    ConsultationNoteSerializer, DoctorAvailabilitySerializer,
+    ConsultationNoteSerializer, DoctorAvailabilitySerializer, PublicDoctorSerializer,
     DoctorPatientAccessSerializer, DoctorProfileUpdateSerializer, DoctorSerializer,
 )
 
@@ -22,8 +22,27 @@ class DoctorViewSet(viewsets.ModelViewSet):
     serializer_class = DoctorSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_class(self):
+        # Browsing the directory returns the patient-facing shape, which
+        # omits registration_number and license_document. Registration and
+        # the self-service /me/ endpoints keep the full serializer, since a
+        # doctor does submit and read their own credentials.
+        if self.action in ('list', 'retrieve'):
+            return PublicDoctorSerializer
+        return DoctorSerializer
+
     def get_queryset(self):
-        return Doctor.objects.all()
+        # An unverified registration is not something to advertise, and
+        # Find Care already discards anything that isn't verified — doing it
+        # here means the data never leaves the server in the first place.
+        # A doctor's own record stays visible to them whatever its status,
+        # so a pending or rejected account can still load itself.
+        verified = Doctor.objects.filter(verification_status=Doctor.VerificationStatus.VERIFIED)
+        own = Doctor.objects.filter(account=self.request.user)
+        # Ordered explicitly: PageNumberPagination over an unordered
+        # queryset may repeat a row on one page and drop another, since
+        # the database is free to order each query differently.
+        return (verified | own).distinct().order_by('full_name')
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -98,9 +117,9 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return Response(DoctorSerializer(doctor).data)
 
     # -- ownership guards -------------------------------------------------
-    # This viewset is IsAuthenticated over Doctor.objects.all(), so without
+    # This viewset is IsAuthenticated over every verified doctor, so without
     # these any logged-in account — including a patient — could PATCH or
-    # DELETE any doctor's record by id. Admin approve/reject goes through
+    # DELETE another doctor's record by id. Admin approve/reject goes through
     # admin_portal's own staff-gated viewset, so nothing legitimate needs
     # write access here except a doctor editing themselves.
     def _assert_own_record(self, instance):

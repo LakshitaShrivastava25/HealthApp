@@ -6,6 +6,7 @@ import { Card, Button, Badge } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { emergencyApi, allergiesApi, medicinesApi } from '../lib/api';
 import PhoneInput, { usePhoneInput } from '@shared/components/PhoneInput';
+import { API_BASE_URL } from '@shared/apiConfig';
 
 type EmergencyProfile = {
   id: string;
@@ -60,7 +61,7 @@ export default function EmergencyCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfile]);
 
-  const publicUrl = ep ? `${import.meta.env.VITE_API_BASE_URL}/public/emergency/${ep.public_token}/` : '';
+  const publicUrl = ep ? `${API_BASE_URL}/public/emergency/${ep.public_token}/` : '';
 
   useEffect(() => {
     if (!ep || !ep.is_active || !canvasRef.current) return;

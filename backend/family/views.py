@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from ai.claude_service import ClaudeService
 from .models import AllergyRecord, Notification, Profile
+from .permissions import assert_owns_profile
 from .serializers import AllergyRecordSerializer, NotificationSerializer, ProfileSerializer
 
 
@@ -127,16 +128,22 @@ class AllergyRecordViewSet(viewsets.ModelViewSet):
         profile_id = self.request.query_params.get('profile_id')
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
-        return qs
+        # Stable order so pagination cannot repeat or skip an allergy.
+        return qs.order_by('-recorded_at')
 
     def perform_create(self, serializer):
         if hasattr(self.request.user, 'doctor_profile'):
             raise PermissionDenied("Doctors cannot add allergy records on behalf of a patient.")
+        assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
         serializer.save()
 
     def perform_update(self, serializer):
         if hasattr(self.request.user, 'doctor_profile'):
             raise PermissionDenied("Doctors cannot edit a patient's allergy records.")
+        # Also checked on update: without it a record could be moved onto
+        # someone else's profile by PATCHing the foreign key.
+        if 'profile' in serializer.validated_data:
+            assert_owns_profile(self.request.user, serializer.validated_data['profile'])
         serializer.save()
 
     def perform_destroy(self, instance):

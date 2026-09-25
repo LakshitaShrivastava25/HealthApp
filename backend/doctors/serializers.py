@@ -112,6 +112,32 @@ class DoctorSerializer(serializers.ModelSerializer):
         return stripped
 
 
+class PublicDoctorSerializer(serializers.ModelSerializer):
+    """
+    What a patient is allowed to see about a doctor in Find Care.
+
+    DoctorSerializer was being used for the /api/doctors/ list, which meant
+    any authenticated account could read every doctor's
+    `registration_number` and a URL to their uploaded `license_document` —
+    an identity document, handed over for admin verification, not for
+    publication. Those two fields are absent here by construction rather
+    than filtered out later.
+
+    Everything that remains is deliberately patient-facing: the clinic
+    address and booking number exist precisely so a patient can find and
+    call the practice.
+    """
+
+    class Meta:
+        model = Doctor
+        fields = [
+            'id', 'full_name', 'specialization', 'qualification', 'experience_years',
+            'verification_status', 'clinic_name', 'clinic_address', 'consultation_fee',
+            'booking_phone_number', 'available_days', 'clinic_open_time', 'clinic_close_time',
+        ]
+        read_only_fields = fields
+
+
 DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 

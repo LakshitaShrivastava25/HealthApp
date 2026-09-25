@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from ai.claude_service import ClaudeService
 from ai.text_extraction import extract_text
+from family.permissions import assert_owns_profile
 from .claim_estimator import estimate_claim
 from .models import ClaimEstimate, InsuranceChatMessage, InsurancePolicy, PolicyExclusion, PolicySubLimit, PolicyWaitingPeriod
 from .serializers import (
@@ -25,6 +26,7 @@ class InsurancePolicyViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
+        assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
         policy = serializer.save(status=InsurancePolicy.Status.PROCESSING)
 
         # Real text extraction — PDFs are genuinely read (pypdf, no

@@ -73,6 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     clearTokens();
+    // Every piece of session state, not just the flag. Leaving profiles or
+    // activeProfile behind means a component that renders before the
+    // provider unmounts can still paint the previous person's name and
+    // records for a frame.
     setIsAuthenticated(false);
     setProfiles([]);
     setActiveProfileState(null);

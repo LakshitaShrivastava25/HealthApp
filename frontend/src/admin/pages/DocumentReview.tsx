@@ -49,7 +49,7 @@ export default function DocumentReview() {
   return (
     <>
       <Topbar title="Document Review" subtitle="Documents flagged for manual review before they reach the patient" />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         {docs.length === 0 ? (
           <Card>
             <EmptyState icon={<FileText size={22} />} title="Queue is clear" note="No documents currently need review." />
@@ -59,8 +59,8 @@ export default function DocumentReview() {
             <div className="space-y-3">
               {docs.map((d) => (
                 <button key={d.id} onClick={() => openDoc(d)} className="w-full text-left">
-                  <Card
-                    className={`p-4 hover:border-brand-purple transition-colors ${openId === d.id ? 'border-brand-purple' : ''}`}
+                  <Card interactive
+                    className={`p-4 hover:border-accent transition-colors ${openId === d.id ? 'border-accent' : ''}`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -82,7 +82,7 @@ export default function DocumentReview() {
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
                   rows={12}
-                  className="w-full text-xs font-mono bg-surface rounded-lg p-3 outline-none border border-border focus:ring-2 focus:ring-brand-purple/30"
+                  className="w-full text-xs font-mono bg-surface rounded-lg p-3 outline-none border border-border focus:ring-2 focus:ring-accent/30"
                 />
                 <Button className="w-full mt-3" onClick={handleApprove} disabled={saving}>
                   <Check size={15} /> {saving ? 'Approving...' : 'Approve & Mark Processed'}

@@ -1,3 +1,5 @@
+import logging
+
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -8,6 +10,10 @@ from rest_framework.response import Response
 from ai.claude_service import ClaudeService
 from .models import Document, TimelineEvent
 from .serializers import DocumentCorrectionSerializer, DocumentSerializer, TimelineEventSerializer
+from .timeline import remove_timeline_event, sync_timeline_event
+
+
+logger = logging.getLogger(__name__)
 
 
 def _approved_profile_ids(user):
@@ -53,17 +59,100 @@ class DocumentViewSet(viewsets.ModelViewSet):
         document = serializer.save(status=Document.Status.PROCESSING)
         # TODO: move to a Celery task (documents/tasks.py) once Celery+Redis
         # are provisioned, so upload doesn't block on OCR+Claude latency.
-        ClaudeService().process_document(document)
+        self._process_safely(document)
+
+    @staticmethod
+    def _process_safely(document):
+        """
+        Run the AI pipeline so a failure can never leave a half-made record.
+
+        Before this, a processing error propagated out of perform_create as
+        an unhandled 500 AFTER the row and the file were already committed —
+        the person saw "upload failed" while a broken, permanently
+        unprocessed document sat in their locker. Confirmed live.
+
+        The record is deliberately KEPT and marked FAILED rather than rolled
+        back. Document.Status.FAILED already exists in the model for exactly
+        this, and insurance/views.py already handles its own AI failures the
+        same way (record kept, reason recorded). A DB transaction would also
+        be wrong here specifically: the uploaded file is written to storage
+        outside the transaction, so a rollback removes the row but leaves the
+        file orphaned on disk, and throws away a file that arrived perfectly
+        intact — forcing the person to upload it again to fix a problem on
+        our side.
+        """
+        try:
+            ClaudeService().process_document(document)
+        except Exception as exc:  # noqa: BLE001 — any failure must be recorded, not raised
+            logger.exception('Document processing failed for %s', document.pk)
+            document.status = Document.Status.FAILED
+            document.structured_data = {
+                '_processing_failed': True,
+                # The class name only — an exception's text can carry request
+                # ids or key fragments, which must not reach a patient's screen.
+                'note': (
+                    'The file uploaded fine, but automatic reading of it failed '
+                    '(%s). You can retry processing, or fill the details in yourself.'
+                    % type(exc).__name__
+                ),
+            }
+            document.save()
 
     def perform_update(self, serializer):
         if hasattr(self.request.user, 'doctor_profile'):
             raise PermissionDenied("Doctors cannot edit a patient's documents.")
-        serializer.save()
+        document = serializer.save()
+        # Editing an already-confirmed document must correct its timeline entry
+        # too — a no-op while the document is still awaiting review.
+        sync_timeline_event(document)
 
     def perform_destroy(self, instance):
         if hasattr(self.request.user, 'doctor_profile'):
             raise PermissionDenied("Doctors cannot delete a patient's documents.")
+        remove_timeline_event(instance)
         instance.delete()
+
+    @action(detail=True, methods=['post'], url_path='retry-processing')
+    def retry_processing(self, request, pk=None):
+        """
+        POST /api/documents/<id>/retry-processing/ — re-run the AI pipeline
+        on a document that failed.
+
+        The file is already stored, so a retry costs nothing but the call —
+        which matters when the original failure was a transient API outage.
+        """
+        if hasattr(request.user, 'doctor_profile'):
+            raise PermissionDenied("Doctors cannot process a patient's documents.")
+        document = self.get_object()
+        document.status = Document.Status.PROCESSING
+        document.save(update_fields=['status'])
+        self._process_safely(document)
+        document.refresh_from_db()
+        return Response(DocumentSerializer(document).data)
+
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        """
+        POST /api/documents/<id>/confirm/ — the person has reviewed the
+        AI-extracted details and confirms they are correct.
+
+        Mirrors insurance's confirm: this is the ONLY thing that moves a
+        document to PROCESSED. Edits themselves go through the ordinary
+        PATCH on this viewset first, exactly as the insurance flow does
+        (update, then confirm), so this endpoint stays a single, auditable
+        "a human agreed" step rather than a second write path.
+        """
+        if hasattr(request.user, 'doctor_profile'):
+            raise PermissionDenied("Doctors cannot confirm a patient's documents.")
+        document = self.get_object()
+        document.status = Document.Status.PROCESSED
+        document.processed_at = timezone.now()
+        document.save(update_fields=['status', 'processed_at'])
+        # Confirming is what puts a document into the person's history, so it
+        # is what creates the Timeline entry — the same pairing seed_demo.py
+        # has always written by hand.
+        sync_timeline_event(document)
+        return Response(DocumentSerializer(document).data)
 
     @action(detail=True, methods=['patch'])
     def correct(self, request, pk=None):
@@ -77,6 +166,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         document.status = Document.Status.PROCESSED
         document.processed_at = timezone.now()
         document.save()
+        sync_timeline_event(document)
         return Response(DocumentSerializer(document).data)
 
 

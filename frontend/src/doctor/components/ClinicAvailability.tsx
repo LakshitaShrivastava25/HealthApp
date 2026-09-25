@@ -74,7 +74,7 @@ export default function ClinicAvailability({
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm font-semibold text-ink-900 flex items-center gap-1.5">
-            <CalendarClock size={15} className="text-brand-purple" /> Clinic availability
+            <CalendarClock size={15} className="text-accent-ink" /> Clinic availability
           </p>
           <p className="text-xs text-ink-500 mt-0.5">Shown to patients in Find Care alongside your booking number.</p>
         </div>
@@ -95,8 +95,8 @@ export default function ClinicAvailability({
               aria-pressed={on}
               className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
                 on
-                  ? 'bg-brand-purple text-white border-brand-purple'
-                  : 'bg-card text-ink-500 border-border hover:border-brand-purple'
+                  ? 'bg-accent text-white border-accent'
+                  : 'bg-card text-ink-500 border-border hover:border-accent'
               }`}
             >
               {d.slice(0, 3)}
@@ -113,7 +113,7 @@ export default function ClinicAvailability({
             type="time"
             value={open}
             onChange={(e) => setOpen(e.target.value)}
-            className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+            className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
           />
         </div>
         <div>
@@ -123,7 +123,7 @@ export default function ClinicAvailability({
             type="time"
             value={close}
             onChange={(e) => setClose(e.target.value)}
-            className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+            className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
           />
         </div>
       </div>

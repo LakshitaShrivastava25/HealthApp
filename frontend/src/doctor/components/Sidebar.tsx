@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, UserPlus, LogOut, Stethoscope } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -9,11 +9,20 @@ const navItems = [
 
 export default function Sidebar() {
   const { logout, doctor } = useAuth();
-  const navigate = useNavigate();
 
   function handleLogout() {
     logout();
-    navigate('/doctor/login');
+    // A hard navigation, not react-router's navigate(): clearing the tokens
+    // flips isAuthenticated, and the RequireAuth/Gate wrapper this button
+    // lives inside re-renders immediately and redirects to the portal's own
+    // login — winning the race against a client-side navigate and stranding
+    // the person there instead of on the landing selector.
+    //
+    // It is also the stronger choice for a logout on a shared machine: a
+    // full document load discards all in-memory auth state, any request
+    // still in flight, and the module-level refresh queue, so nothing can
+    // survive into the next person's session.
+    window.location.assign('/');
   }
 
   return (
@@ -24,7 +33,7 @@ export default function Sidebar() {
         </div>
         <div>
           <p className="font-bold text-ink-900 leading-tight">HealthNow Doctor</p>
-          <p className="text-[11px] text-brand-purple font-medium leading-tight truncate max-w-[150px]">
+          <p className="text-[11px] text-accent-ink font-medium leading-tight truncate max-w-[150px]">
             Dr. {doctor?.full_name}
           </p>
         </div>
@@ -39,7 +48,7 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all border-l-[3px] ${
                 isActive
-                  ? 'bg-brand-lavender text-brand-purple border-brand-purple'
+                  ? 'bg-accent-soft text-accent-ink border-accent'
                   : 'text-ink-700 hover:bg-surface border-transparent'
               }`
             }

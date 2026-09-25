@@ -4,6 +4,10 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 
 export const api = axios.create({ baseURL: BASE_URL });
 
+// Shared by clearTokens() and the 401 interceptor below.
+let isRefreshing = false;
+let pendingQueue: (() => void)[] = [];
+
 // -- token storage -----------------------------------------------------
 const ACCESS_KEY = 'healthnow_access_token';
 const REFRESH_KEY = 'healthnow_refresh_token';
@@ -18,9 +22,30 @@ export function setTokens(access: string, refresh: string) {
   localStorage.setItem(ACCESS_KEY, access);
   localStorage.setItem(REFRESH_KEY, refresh);
 }
+/**
+ * Bumped by clearTokens(). The 401 interceptor captures it before awaiting
+ * the refresh call and re-checks it afterwards, so a refresh that was
+ * already in flight when someone logged out can no longer write its result
+ * back into storage. Without this, logout during an in-flight refresh
+ * silently restored the whole session — the intermittent "still logged in
+ * after logging out" report.
+ */
+let sessionGeneration = 0;
+
+export function currentSessionGeneration() {
+  return sessionGeneration;
+}
+
 export function clearTokens() {
+  // Invalidate first, so anything awaiting mid-flight is already stale by
+  // the time it resolves, even if removal itself were to throw.
+  sessionGeneration += 1;
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  // Drop queued replays and release the refresh lock — a queued request
+  // resuming after logout would re-authenticate as the previous person.
+  pendingQueue = [];
+  isRefreshing = false;
 }
 
 // -- attach JWT to every request ----------------------------------------
@@ -33,9 +58,6 @@ api.interceptors.request.use((config) => {
 });
 
 // -- refresh once on 401, then give up and force logout -----------------
-let isRefreshing = false;
-let pendingQueue: (() => void)[] = [];
-
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -56,8 +78,16 @@ api.interceptors.response.use(
       }
 
       isRefreshing = true;
+      // Captured BEFORE the await: if a logout happens while this request is
+      // in flight, the generation moves on and the result below is discarded.
+      const generationAtRefresh = sessionGeneration;
       try {
         const { data } = await axios.post(`${BASE_URL}/auth/refresh/`, { refresh });
+        if (generationAtRefresh !== sessionGeneration) {
+          // Logged out mid-refresh. Writing these tokens would resurrect the
+          // previous person's session on a shared machine.
+          return Promise.reject(error);
+        }
         setTokens(data.access, refresh);
         pendingQueue.forEach((cb) => cb());
         pendingQueue = [];
@@ -118,6 +148,16 @@ export const documentsApi = {
     form.append('title', file.name);
     return api.post('/documents/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  // Re-runs the AI pipeline on a document whose processing failed. The
+  // file is already stored, so a retry costs only the call.
+  retryProcessing: (id: string) => api.post(`/documents/${id}/retry-processing/`),
+  // Review-screen edits. Mirrors insuranceApi.update + insuranceApi.confirm:
+  // the edits are an ordinary PATCH, and confirm is a separate explicit step.
+  update: (id: string, data: Partial<{
+    title: string; category: string; document_date: string | null;
+    hospital_name: string; doctor_name: string;
+  }>) => api.patch(`/documents/${id}/`, data),
+  confirm: (id: string) => api.post(`/documents/${id}/confirm/`),
   correct: (id: string, structuredData: Record<string, unknown>) =>
     api.patch(`/documents/${id}/correct/`, { structured_data: structuredData }),
   delete: (id: string) => api.delete(`/documents/${id}/`),

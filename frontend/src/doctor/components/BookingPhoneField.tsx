@@ -39,8 +39,8 @@ export default function BookingPhoneField({
         Booking phone number (shown to patients to book appointments)
       </label>
 
-      <div className="group relative flex items-center gap-2 rounded-xl border border-border bg-white/70 transition-all duration-200 focus-within:border-brand-purple focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(109,91,208,0.12)]">
-        <span className="pl-3.5 text-ink-300 transition-colors duration-200 group-focus-within:text-brand-purple">
+      <div className="group relative flex items-center gap-2 rounded-xl border border-border bg-white/70 transition-all duration-200 focus-within:border-accent focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(109,91,208,0.12)]">
+        <span className="pl-3.5 text-ink-300 transition-colors duration-200 group-focus-within:text-accent-ink">
           <Phone size={15} />
         </span>
         <select

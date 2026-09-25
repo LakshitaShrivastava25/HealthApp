@@ -22,7 +22,7 @@ export default function AuditLog() {
   return (
     <>
       <Topbar title="Audit Log" subtitle="Every staff action, in order — who did what, and when" />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         {logs.length === 0 ? (
           <Card>
             <EmptyState icon={<ScrollText size={22} />} title="No actions yet" note="Staff actions will appear here as they happen." />

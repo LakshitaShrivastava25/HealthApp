@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Activity, FileBarChart, Pill, ScanLine, ShieldAlert, Stethoscope } from 'lucide-react';
 import Topbar from '../components/Topbar';
-import { Card, Badge } from '../components/ui';
+import { Card, Badge, EmptyState } from '../components/ui';
 import DocumentDetailModal from '../components/DocumentDetailModal';
 import { useAuth } from '../context/AuthContext';
 import { timelineApi } from '../lib/api';
@@ -13,6 +14,17 @@ const docBadgeTone: Record<string, 'info' | 'success' | 'warning' | 'neutral' | 
   diagnosis: 'danger',
   allergy: 'warning',
 };
+
+/** Dot colour, halo tint and icon per category — the visual key for the rail. */
+const eventStyle: Record<string, { dot: string; ring: string; icon: typeof Activity; label: string }> = {
+  report: { dot: 'bg-info', ring: 'ring-info-bg', icon: FileBarChart, label: 'Report' },
+  prescription: { dot: 'bg-success', ring: 'ring-success-bg', icon: Pill, label: 'Prescription' },
+  scan: { dot: 'bg-warning', ring: 'ring-warning-bg', icon: ScanLine, label: 'Scan' },
+  discharge: { dot: 'bg-ink-300', ring: 'ring-surface', icon: Stethoscope, label: 'Discharge' },
+  diagnosis: { dot: 'bg-danger', ring: 'ring-danger-bg', icon: Activity, label: 'Diagnosis' },
+  allergy: { dot: 'bg-warning', ring: 'ring-warning-bg', icon: ShieldAlert, label: 'Allergy' },
+};
+const fallbackStyle = { dot: 'bg-accent', ring: 'ring-accent-soft', icon: Activity, label: 'Event' };
 
 type TimelineEvent = {
   id: string;
@@ -50,21 +62,33 @@ export default function HealthTimeline() {
     <>
       <Topbar title="Health Timeline" subtitle="Your health journey in chronological order" />
 
-      <main className="p-8 max-w-3xl">
+      <main className="p-4 sm:p-6 lg:p-8 max-w-3xl">
         {years.length === 0 && (
-          <Card className="p-10 text-center text-sm text-ink-500">
-            No timeline events yet — they're built automatically from documents you upload.
+          <Card>
+            <EmptyState
+              icon={<Activity size={22} />}
+              title="No timeline events yet"
+              note="Your timeline builds itself from the documents you upload — add one in Medical Locker to get started."
+            />
           </Card>
         )}
         {years.map((year) => (
           <div key={year} className="mb-8">
-            <p className="text-sm font-bold text-ink-900 mb-3">{year}</p>
-            <div className="relative pl-6 border-l-2 border-border space-y-4">
+            <p className="mb-4 flex items-center gap-2 text-base font-bold tracking-tight text-ink-900">
+              {year}
+              <span className="h-px flex-1 bg-border" />
+            </p>
+            {/* Thicker, softly tinted rail — the spine of the timeline rather
+                than an incidental divider. */}
+            <div className="relative space-y-4 border-l-[3px] border-accent-soft pl-7">
               {grouped[year].map((e) => {
                 const clickable = !!e.source_document;
+                const style = eventStyle[e.event_type] || fallbackStyle;
+                const StyleIcon = style.icon;
                 const CardEl = (
                   <Card
-                    className={`p-4 flex items-center justify-between ${clickable ? 'hover:border-brand-purple transition-colors' : ''}`}
+                    interactive={clickable}
+                    className={`p-4 flex items-center justify-between ${clickable ? 'hover:border-accent transition-colors' : ''}`}
                   >
                     <div className="flex gap-4">
                       <p className="text-xs font-semibold text-ink-500 w-16 shrink-0 pt-0.5">
@@ -81,7 +105,13 @@ export default function HealthTimeline() {
 
                 return (
                   <div key={e.id} className="relative">
-                    <span className="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-brand-purple ring-4 ring-brand-lavender" />
+                    {/* Colour-coded node sitting on the rail, with the
+                        category's own icon inside it. */}
+                    <span
+                      className={`absolute -left-[34px] top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full text-white ring-4 ${style.dot} ${style.ring}`}
+                    >
+                      <StyleIcon size={12} strokeWidth={2.5} />
+                    </span>
                     {clickable ? (
                       <button onClick={() => setOpenDocId(e.source_document)} className="w-full text-left">
                         {CardEl}

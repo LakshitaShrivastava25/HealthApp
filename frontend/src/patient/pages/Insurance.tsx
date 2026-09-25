@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, ShieldCheck, Sparkles, Send, Calculator, UploadCloud, XCircle, Clock, Layers, Trash2, Pencil, FileText, Check, X } from 'lucide-react';
 import Topbar from '../components/Topbar';
-import { Card, CardHeader, Badge, Button } from '../components/ui';
+import { Card, CardHeader, Badge, Button, EmptyState } from '../components/ui';
 import AIMarkdown from '../components/AIMarkdown';
 import { useAuth } from '../context/AuthContext';
 import { insuranceApi } from '../lib/api';
+import { describeExtraction } from '@shared/components/extractionState';
 
 type Exclusion = { id: string; description: string };
 type WaitingPeriod = { id: string; condition: string; months: number; waiting_until: string | null };
@@ -184,10 +185,14 @@ export default function Insurance() {
         }
       />
 
-      <main className="p-8 space-y-6">
+      <main className="p-4 sm:p-6 lg:p-8 space-y-6">
         {policies.length === 0 && (
-          <Card className="p-10 text-center text-sm text-ink-500">
-            No insurance policy uploaded yet — click "Add Policy" to get started.
+          <Card>
+            <EmptyState
+              icon={<ShieldCheck size={22} />}
+              title="No insurance policy yet"
+              note={'Add a policy to check cover, exclusions and claim estimates.'}
+            />
           </Card>
         )}
 
@@ -198,7 +203,7 @@ export default function Insurance() {
                 key={p.id}
                 onClick={() => setActivePolicyId(p.id)}
                 className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  p.id === activePolicyId ? 'bg-brand-purple text-white' : 'bg-card border border-border text-ink-700'
+                  p.id === activePolicyId ? 'bg-accent text-white' : 'bg-card border border-border text-ink-700'
                 }`}
               >
                 {p.insurer || p.policy_number || 'Untitled policy'}
@@ -213,7 +218,7 @@ export default function Insurance() {
               <Card className="lg:col-span-2 p-5">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-lg bg-brand-lavender text-brand-purple flex items-center justify-center">
+                    <div className="w-11 h-11 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center">
                       <ShieldCheck size={20} />
                     </div>
                     <div>
@@ -223,13 +228,13 @@ export default function Insurance() {
                             value={editForm.insurer}
                             onChange={(e) => setEditForm({ ...editForm, insurer: e.target.value })}
                             placeholder="Insurer name"
-                            className="text-sm font-semibold text-ink-900 border-b border-border outline-none focus:border-brand-purple w-full"
+                            className="text-sm font-semibold text-ink-900 border-b border-border outline-none focus:border-accent w-full"
                           />
                           <input
                             value={editForm.plan_name}
                             onChange={(e) => setEditForm({ ...editForm, plan_name: e.target.value })}
                             placeholder="Plan name"
-                            className="text-xs text-ink-500 border-b border-border outline-none focus:border-brand-purple w-full mt-1"
+                            className="text-xs text-ink-500 border-b border-border outline-none focus:border-accent w-full mt-1"
                           />
                         </>
                       ) : (
@@ -245,7 +250,7 @@ export default function Insurance() {
                       <button
                         onClick={startEditingFields}
                         title="Correct a field"
-                        className="text-ink-300 hover:text-brand-purple transition-colors"
+                        className="text-ink-300 hover:text-accent-ink transition-colors"
                       >
                         <Pencil size={15} />
                       </button>
@@ -259,20 +264,20 @@ export default function Insurance() {
                     href={activePolicy.file}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-purple mt-2 hover:underline"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink mt-2 hover:underline"
                   >
                     <FileText size={13} /> View original document
                   </a>
                 )}
 
                 {isEditingFields ? (
-                  <div className="grid grid-cols-2 gap-4 mt-5 pt-5 border-t border-border">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5 pt-5 border-t border-border">
                     <div>
                       <p className="text-xs text-ink-500 mb-1">Policy Number</p>
                       <input
                         value={editForm.policy_number}
                         onChange={(e) => setEditForm({ ...editForm, policy_number: e.target.value })}
-                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
                       />
                     </div>
                     <div>
@@ -281,7 +286,7 @@ export default function Insurance() {
                         value={editForm.sum_insured}
                         onChange={(e) => setEditForm({ ...editForm, sum_insured: e.target.value })}
                         inputMode="numeric"
-                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
                       />
                     </div>
                     <div>
@@ -290,7 +295,7 @@ export default function Insurance() {
                         type="date"
                         value={editForm.coverage_start}
                         onChange={(e) => setEditForm({ ...editForm, coverage_start: e.target.value })}
-                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
                       />
                     </div>
                     <div>
@@ -299,7 +304,7 @@ export default function Insurance() {
                         type="date"
                         value={editForm.coverage_end}
                         onChange={(e) => setEditForm({ ...editForm, coverage_end: e.target.value })}
-                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
                       />
                     </div>
                     <div>
@@ -309,7 +314,7 @@ export default function Insurance() {
                         onChange={(e) => setEditForm({ ...editForm, premium_amount: e.target.value })}
                         inputMode="numeric"
                         placeholder="e.g. 12500"
-                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
                       />
                     </div>
                     <div>
@@ -318,7 +323,7 @@ export default function Insurance() {
                         type="date"
                         value={editForm.premium_due_date}
                         onChange={(e) => setEditForm({ ...editForm, premium_due_date: e.target.value })}
-                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+                        className="text-sm w-full px-2 py-1.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
                       />
                     </div>
                     <div className="col-span-2 flex gap-2 mt-1">
@@ -331,7 +336,7 @@ export default function Insurance() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4 mt-5 pt-5 border-t border-border">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5 pt-5 border-t border-border">
                     <div>
                       <p className="text-xs text-ink-500">Policy Number</p>
                       <p className="text-sm font-semibold text-ink-900 mt-0.5">{activePolicy.policy_number || '—'}</p>
@@ -405,18 +410,16 @@ export default function Insurance() {
                   }
 
                   // Nothing real to confirm yet — just show the reason.
-                  if (sd?._extraction_failed) {
+                  // Same leak the document modal had: the backend's own note
+                  // names environment variables and internal functions. It is
+                  // the right detail for a log, never for a patient — so the
+                  // shared translator writes patient-facing copy instead.
+                  if (sd?._extraction_failed || sd?._mock) {
                     return (
-                      <p className="text-xs text-ink-500 mt-4 bg-warning-bg text-warning rounded-lg px-3 py-2">
-                        {sd.note}
-                      </p>
-                    );
-                  }
-                  if (sd?._mock) {
-                    return (
-                      <p className="text-xs text-ink-500 mt-4 bg-warning-bg text-warning rounded-lg px-3 py-2">
-                        This policy is awaiting review. Fields will populate once processing completes
-                        (or once ANTHROPIC_API_KEY is configured on the backend for real extraction).
+                      <p className="text-xs mt-4 bg-warning-bg text-warning rounded-lg px-3 py-2">
+                        {describeExtraction(sd).kind === 'pending'
+                          ? 'Automatic reading is still being set up, so nothing was filled in for this policy. Add the details yourself.'
+                          : "We couldn't read this file automatically. It's saved safely — just add the details yourself."}
                       </p>
                     );
                   }
@@ -428,13 +431,13 @@ export default function Insurance() {
                     <div className="mt-4 bg-warning-bg text-warning rounded-lg px-3 py-2.5">
                       <p className="text-xs">
                         {sd?._extraction_warning
-                          ? `Some details may be missing: ${sd._extraction_warning}`
+                          ? 'Some of this file was hard to read, so a few details may be missing. Please check them before confirming.'
                           : "These details were extracted automatically. Please review them above, then confirm they're correct."}
                       </p>
                       <button
                         onClick={handleConfirm}
                         disabled={confirmingDetails}
-                        className="text-xs font-semibold text-brand-purple mt-2 hover:underline disabled:opacity-50"
+                        className="text-xs font-semibold text-accent-ink mt-2 hover:underline disabled:opacity-50"
                       >
                         {confirmingDetails ? 'Confirming...' : 'Confirm these details are correct →'}
                       </button>
@@ -470,7 +473,7 @@ export default function Insurance() {
 
               <Card className="p-5 lg:col-span-1 bg-gradient-to-br from-brand-lavender to-white">
                 <p className="text-sm font-semibold text-ink-900 flex items-center gap-2">
-                  <Sparkles size={15} className="text-brand-purple" /> AI Policy Insights
+                  <Sparkles size={15} className="text-accent-ink" /> AI Policy Insights
                 </p>
                 <p className="text-xs text-ink-500 mt-2">
                   Room eligibility: {activePolicy.room_rent_limit || 'not extracted yet'}
@@ -545,7 +548,7 @@ export default function Insurance() {
                   {chat.map((m) =>
                     m.role === 'user' ? (
                       <div key={m.id} className="flex justify-end">
-                        <div className="bg-brand-purple text-white text-sm rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[80%]">
+                        <div className="bg-accent text-white text-sm rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[80%]">
                           {m.content}
                         </div>
                       </div>
@@ -565,12 +568,12 @@ export default function Insurance() {
                     onChange={(e) => setQuestion(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
                     placeholder="Ask anything about your policy..."
-                    className="flex-1 text-sm px-3.5 py-2.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30"
+                    className="flex-1 text-sm px-3.5 py-2.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30"
                   />
                   <button
                     onClick={handleAsk}
                     disabled={chatLoading || !question.trim()}
-                    className="w-10 h-10 rounded-lg bg-brand-purple text-white flex items-center justify-center shrink-0 disabled:opacity-50"
+                    className="w-10 h-10 rounded-lg bg-accent text-white flex items-center justify-center shrink-0 disabled:opacity-50"
                   >
                     <Send size={16} />
                   </button>
@@ -579,7 +582,7 @@ export default function Insurance() {
 
               <Card className="p-5">
                 <p className="text-sm font-semibold text-ink-900 flex items-center gap-2 mb-4">
-                  <Calculator size={15} className="text-brand-purple" /> Claim Estimator
+                  <Calculator size={15} className="text-accent-ink" /> Claim Estimator
                 </p>
                 <input
                   value={claimCategory}

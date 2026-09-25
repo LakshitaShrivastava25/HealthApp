@@ -63,6 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     clearTokens();
+    // Clear the doctor record too — not just the flag — so nothing can
+    // render the previous doctor's name or verification state afterwards.
     setIsAuthenticated(false);
     setDoctor(null);
     setHasRegistered(false);

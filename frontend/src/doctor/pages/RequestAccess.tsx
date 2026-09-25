@@ -34,9 +34,9 @@ export default function RequestAccess() {
   return (
     <>
       <Topbar title="Request Patient Access" subtitle="Ask a patient for consent to view their records" />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <Card className="p-6 max-w-md">
-          <div className="w-11 h-11 rounded-lg bg-brand-lavender text-brand-purple flex items-center justify-center mb-4">
+          <div className="w-11 h-11 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center mb-4">
             <UserPlus size={20} />
           </div>
           <p className="text-sm text-ink-500 mb-4">
@@ -51,7 +51,7 @@ export default function RequestAccess() {
             maxLength={6}
             autoCapitalize="characters"
             spellCheck={false}
-            className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30 mb-3"
+            className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30 mb-3"
           />
           {error && <p className="text-xs text-danger mb-3">{error}</p>}
           {success && <p className="text-xs text-success mb-3">Request sent — waiting on the patient now.</p>}

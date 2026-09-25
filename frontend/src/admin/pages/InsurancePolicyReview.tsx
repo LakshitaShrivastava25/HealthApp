@@ -48,7 +48,7 @@ export default function InsurancePolicyReview() {
   return (
     <>
       <Topbar title="Insurance Policy Review" subtitle="Policies flagged for manual review before validation" />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         {policies.length === 0 ? (
           <Card>
             <EmptyState icon={<ShieldCheck size={22} />} title="Queue is clear" note="No policies currently need review." />
@@ -58,7 +58,7 @@ export default function InsurancePolicyReview() {
             <div className="space-y-3">
               {policies.map((p) => (
                 <button key={p.id} onClick={() => openPolicy(p)} className="w-full text-left">
-                  <Card className={`p-4 hover:border-brand-purple transition-colors ${openId === p.id ? 'border-brand-purple' : ''}`}>
+                  <Card interactive className={`p-4 hover:border-accent transition-colors ${openId === p.id ? 'border-accent' : ''}`}>
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-ink-900">{p.insurer || 'Unnamed insurer'}</p>

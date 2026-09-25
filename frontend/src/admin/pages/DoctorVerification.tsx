@@ -96,7 +96,7 @@ export default function DoctorVerification() {
   return (
     <>
       <Topbar title="Doctors" subtitle="Every registered doctor — review, approve or reject" />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <div className="mb-5 flex flex-wrap items-center gap-3">
           <div className="flex gap-1.5">
             {STATUSES.map((s) => {
@@ -107,8 +107,8 @@ export default function DoctorVerification() {
                   onClick={() => setStatus(s)}
                   className={`capitalize text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
                     status === s
-                      ? 'bg-brand-purple text-white border-brand-purple'
-                      : 'bg-card text-ink-500 border-border hover:border-brand-purple'
+                      ? 'bg-accent text-white border-accent'
+                      : 'bg-card text-ink-500 border-border hover:border-accent'
                   }`}
                 >
                   {s} ({n})
@@ -116,13 +116,13 @@ export default function DoctorVerification() {
               );
             })}
           </div>
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[200px] sm:max-w-xs">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search name, specialization, registration no..."
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-card outline-none focus:ring-2 focus:ring-brand-purple/30"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-card outline-none focus:ring-2 focus:ring-accent/30"
             />
           </div>
         </div>
@@ -151,7 +151,7 @@ export default function DoctorVerification() {
                   </div>
                   <Badge tone={STATUS_TONE[d.verification_status] || 'neutral'}>{d.verification_status}</Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-3">
                   <Detail label="Registration / license no." value={d.registration_number} />
                   <Detail label="Experience" value={`${d.experience_years} yrs`} />
                   <Detail label="Clinic or hospital" value={d.clinic_name} />
@@ -169,7 +169,7 @@ export default function DoctorVerification() {
                     private login credential, the other is published to
                     patients — so an admin must never have to guess which
                     is which. */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border mt-3 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border mt-3 pt-3">
                   <div>
                     <p className="flex items-center gap-1 text-[10.5px] uppercase tracking-wide text-ink-300">
                       <Smartphone size={11} /> Login number
@@ -188,7 +188,7 @@ export default function DoctorVerification() {
 
                 <div className="border-t border-border mt-3 pt-3">
                   {d.license_document ? (
-                    <a href={d.license_document} target="_blank" rel="noreferrer" className="text-xs text-brand-purple">
+                    <a href={d.license_document} target="_blank" rel="noreferrer" className="text-xs text-accent-ink">
                       View license document →
                     </a>
                   ) : (

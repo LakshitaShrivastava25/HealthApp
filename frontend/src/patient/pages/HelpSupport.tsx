@@ -42,10 +42,10 @@ export default function HelpSupport() {
   return (
     <>
       <Topbar title="Help & Support" subtitle="Get help or reach the HealthNow team" />
-      <main className="p-8 max-w-3xl space-y-6">
+      <main className="p-4 sm:p-6 lg:p-8 max-w-3xl space-y-6">
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-brand-lavender text-brand-purple flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center">
               <Mail size={18} />
             </div>
             <div>
@@ -55,7 +55,7 @@ export default function HelpSupport() {
           </div>
           <a
             href={`mailto:${SUPPORT_EMAIL}?subject=HealthNow Support Request`}
-            className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-brand-purple hover:underline"
+            className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-accent-ink hover:underline"
           >
             <Mail size={15} /> {SUPPORT_EMAIL}
           </a>
@@ -63,7 +63,7 @@ export default function HelpSupport() {
 
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <LifeBuoy size={17} className="text-brand-purple" />
+            <LifeBuoy size={16} className="text-accent-ink" />
             <p className="text-sm font-semibold text-ink-900">Frequently Asked Questions</p>
           </div>
           <div className="divide-y divide-border">

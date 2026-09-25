@@ -70,7 +70,7 @@ export default function MyPatients() {
           </div>
         }
       />
-      <main className="p-8 space-y-6">
+      <main className="p-4 sm:p-6 lg:p-8 space-y-6">
         {editingAvailability && availability && (
           <ClinicAvailability
             current={availability}
@@ -108,7 +108,7 @@ export default function MyPatients() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {approved.map((g) => (
                 <button key={g.id} onClick={() => navigate(`/doctor/patients/${g.profile}`)} className="text-left">
-                  <Card className="p-4 hover:border-brand-purple transition-colors flex items-center justify-between">
+                  <Card interactive className="p-4 hover:border-accent transition-colors flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-ink-900">{profileNames[g.profile] || 'Patient'}</p>
                       <Badge tone="success">approved</Badge>

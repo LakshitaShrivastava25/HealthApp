@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pill, Clock3, Check, Plus, X, Trash2 } from 'lucide-react';
 import Topbar from '../components/Topbar';
-import { Card, Button } from '../components/ui';
+import { Card, Button, EmptyState } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { medicinesApi } from '../lib/api';
 
@@ -107,7 +107,7 @@ export default function Medicines() {
         }
       />
 
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         {showAddForm && (
           <Card className="p-5 mb-5">
             <p className="text-sm font-semibold text-ink-900 mb-3">Add a medicine manually</p>
@@ -153,9 +153,12 @@ export default function Medicines() {
         )}
 
         {medications.length === 0 && !showAddForm && (
-          <Card className="p-10 text-center text-sm text-ink-500">
-            No medicines on file yet — they're created automatically when a prescription is processed,
-            or click "Add Medicine" to add one yourself.
+          <Card>
+            <EmptyState
+              icon={<Pill size={22} />}
+              title="No medicines yet"
+              note="Medicines are added automatically when a prescription is processed."
+            />
           </Card>
         )}
 
@@ -163,7 +166,7 @@ export default function Medicines() {
           {medications.map((m) => (
             <Card key={m.id} className="p-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="w-11 h-11 rounded-lg bg-brand-lavender text-brand-purple flex items-center justify-center shrink-0">
+                <div className="w-11 h-11 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
                   <Pill size={20} />
                 </div>
                 <div className="flex-1 min-w-0">

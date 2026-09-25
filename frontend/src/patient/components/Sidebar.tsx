@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   History,
@@ -34,17 +34,26 @@ const navItems = [
 
 export default function Sidebar() {
   const { logout } = useAuth();
-  const navigate = useNavigate();
 
   function handleLogout() {
     logout();
-    navigate('/patient/login');
+    // A hard navigation, not react-router's navigate(): clearing the tokens
+    // flips isAuthenticated, and the RequireAuth/Gate wrapper this button
+    // lives inside re-renders immediately and redirects to the portal's own
+    // login — winning the race against a client-side navigate and stranding
+    // the person there instead of on the landing selector.
+    //
+    // It is also the stronger choice for a logout on a shared machine: a
+    // full document load discards all in-memory auth state, any request
+    // still in flight, and the module-level refresh queue, so nothing can
+    // survive into the next person's session.
+    window.location.assign('/');
   }
 
   return (
     <aside className="w-64 shrink-0 h-screen sticky top-0 bg-card border-r border-border flex flex-col">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="w-9 h-9 rounded-lg bg-brand-teal flex items-center justify-center text-white">
+        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-teal to-brand-purple flex items-center justify-center text-white shadow-sm">
           <HeartPulse size={18} strokeWidth={2.5} />
         </div>
         <div>
@@ -62,7 +71,7 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-brand-lavender text-brand-purple'
+                  ? 'bg-accent-soft text-accent-ink'
                   : 'text-ink-700 hover:bg-surface'
               }`
             }

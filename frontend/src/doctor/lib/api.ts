@@ -7,6 +7,10 @@ export const api = axios.create({ baseURL: BASE_URL });
 const ACCESS_KEY = 'healthnow_doctor_access_token';
 const REFRESH_KEY = 'healthnow_doctor_refresh_token';
 
+// Shared by clearTokens() and the 401 interceptor below.
+let isRefreshing = false;
+let pendingQueue: (() => void)[] = [];
+
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY);
 }
@@ -17,9 +21,30 @@ export function setTokens(access: string, refresh: string) {
   localStorage.setItem(ACCESS_KEY, access);
   localStorage.setItem(REFRESH_KEY, refresh);
 }
+/**
+ * Bumped by clearTokens(). The 401 interceptor captures it before awaiting
+ * the refresh call and re-checks it afterwards, so a refresh that was
+ * already in flight when someone logged out can no longer write its result
+ * back into storage. Without this, logout during an in-flight refresh
+ * silently restored the whole session — the intermittent "still logged in
+ * after logging out" report.
+ */
+let sessionGeneration = 0;
+
+export function currentSessionGeneration() {
+  return sessionGeneration;
+}
+
 export function clearTokens() {
+  // Invalidate first, so anything awaiting mid-flight is already stale by
+  // the time it resolves, even if removal itself were to throw.
+  sessionGeneration += 1;
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  // Drop queued replays and release the refresh lock — a queued request
+  // resuming after logout would re-authenticate as the previous person.
+  pendingQueue = [];
+  isRefreshing = false;
 }
 
 api.interceptors.request.use((config) => {
@@ -27,9 +52,6 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
-
-let isRefreshing = false;
-let pendingQueue: (() => void)[] = [];
 
 api.interceptors.response.use(
   (response) => response,
@@ -49,8 +71,16 @@ api.interceptors.response.use(
         });
       }
       isRefreshing = true;
+      // Captured BEFORE the await: if a logout happens while this request is
+      // in flight, the generation moves on and the result below is discarded.
+      const generationAtRefresh = sessionGeneration;
       try {
         const { data } = await axios.post(`${BASE_URL}/auth/refresh/`, { refresh });
+        if (generationAtRefresh !== sessionGeneration) {
+          // Logged out mid-refresh. Writing these tokens would resurrect the
+          // previous person's session on a shared machine.
+          return Promise.reject(error);
+        }
         setTokens(data.access, refresh);
         pendingQueue.forEach((cb) => cb());
         pendingQueue = [];

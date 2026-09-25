@@ -47,14 +47,14 @@ export default function Patients() {
   return (
     <>
       <Topbar title="Patients" subtitle="Every registered patient profile across all accounts" />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <div className="relative mb-5 max-w-md">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name or phone number..."
-            className="w-full pl-9 pr-3 py-2.5 text-sm rounded-lg border border-border bg-card outline-none focus:ring-2 focus:ring-brand-purple/30"
+            className="w-full pl-9 pr-3 py-2.5 text-sm rounded-lg border border-border bg-card outline-none focus:ring-2 focus:ring-accent/30"
           />
         </div>
 

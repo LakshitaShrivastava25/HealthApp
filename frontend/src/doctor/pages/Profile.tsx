@@ -57,7 +57,7 @@ function splitPhone(stored: string): { country: Country; digits: string } {
 }
 
 const inputClass =
-  'w-full text-sm px-3 py-2 rounded-lg border border-border outline-none focus:ring-2 focus:ring-brand-purple/30';
+  'w-full text-sm px-3 py-2 rounded-lg border border-border outline-none focus:ring-2 focus:ring-accent/30';
 
 function Row({ label, icon, children }: { label: string; icon?: ReactNode; children: ReactNode }) {
   return (
@@ -175,7 +175,7 @@ export default function Profile() {
     return (
       <>
         <Topbar title="My Profile" />
-        <main className="p-8 text-sm text-ink-500">Loading...</main>
+        <main className="p-4 sm:p-6 lg:p-8 text-sm text-ink-500">Loading...</main>
       </>
     );
   }
@@ -190,7 +190,7 @@ export default function Profile() {
   return (
     <>
       <Topbar title="My Profile" subtitle="Your details as patients and admins see them" />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <form onSubmit={handleSubmit} className="max-w-3xl space-y-4">
           {saved && (
             <Card className="p-4">
@@ -344,8 +344,8 @@ export default function Profile() {
                       }
                       className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
                         on
-                          ? 'bg-brand-purple text-white border-brand-purple'
-                          : 'bg-card text-ink-500 border-border hover:border-brand-purple'
+                          ? 'bg-accent text-white border-accent'
+                          : 'bg-card text-ink-500 border-border hover:border-accent'
                       }`}
                     >
                       {d.slice(0, 3)}
@@ -385,7 +385,7 @@ export default function Profile() {
                 href={doctor.license_document}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-brand-purple hover:underline"
+                className="text-xs text-accent-ink hover:underline"
               >
                 View current document →
               </a>

@@ -16,6 +16,10 @@ from datetime import date, timedelta
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+
+from .text_extraction import extract_text
 
 try:
     import anthropic
@@ -53,10 +57,14 @@ class ClaudeService:
     # -- documents ------------------------------------------------------
     def process_document(self, document):
         """
-        Stage 1 (OCR) → Stage 2 (Claude structuring) → validated JSON →
-        Document.structured_data. OCR itself (Google Vision/AWS Textract)
-        is not wired up yet — same reasoning as above, mocked until a
-        provider key is supplied (OCR_PROVIDER_API_KEY in .env).
+        Text extraction → Claude structuring → Document.structured_data,
+        mirroring analyze_insurance_policy + insurance's perform_create,
+        which is the pattern in this codebase that already works.
+
+        Returns the structured dict. Raises only for a genuine API/network
+        failure — every *expected* problem (unreadable file, unparseable
+        response) comes back as a marked result so the caller can record an
+        honest state instead of a crash.
         """
         from documents.models import Document
 
@@ -66,16 +74,102 @@ class ClaudeService:
             document.save()
             return document.structured_data
 
-        # Real pipeline once keys are set:
-        # raw_text = ocr_extract(document.file)
-        # system_prompt = PRESCRIPTION_STRUCTURING_PROMPT if document.category == 'prescription' else REPORT_STRUCTURING_PROMPT
-        # result = self._parse_json(self._call(system_prompt, raw_text))
-        # document.raw_ocr_text = raw_text
-        # document.structured_data = result
-        # document.status = Document.Status.PROCESSED
-        # document.save()
-        # return result
-        raise NotImplementedError("Wire up OCR + real Claude call once API keys are set.")
+        # Same extractor the insurance upload uses: real pypdf text for PDFs,
+        # and an honest "OCR isn't configured" result for images rather than
+        # silently returning nothing.
+        extraction = extract_text(document.file)
+        document.raw_ocr_text = extraction.text or ''
+
+        if not extraction.succeeded:
+            # Nothing to structure. Sending an empty string to Claude and
+            # presenting the reply as a real reading would be worse than
+            # saying plainly that the file could not be read.
+            document.structured_data = {
+                '_extraction_failed': True,
+                'note': extraction.note or 'Could not extract any text from this file.',
+            }
+            document.status = Document.Status.NEEDS_REVIEW
+            document.save()
+            return document.structured_data
+
+        system_prompt = open(
+            __file__.replace('claude_service.py', 'prompts/document_structuring.txt'),
+            encoding='utf-8',
+        ).read()
+        # 2000 rather than the 1500 default: a discharge summary can carry a
+        # long medicines list plus diagnoses, and a response truncated
+        # mid-JSON parses as nothing at all.
+        raw_response = self._call(system_prompt, extraction.text, max_tokens=2000)
+
+        try:
+            result = self._parse_json(raw_response)
+        except (json.JSONDecodeError, ValueError):
+            # Identical handling to analyze_insurance_policy — a malformed
+            # reply is a bad result, not a server error.
+            document.structured_data = {
+                '_extraction_failed': True,
+                'note': (
+                    "Claude's response could not be read as valid data. The document's text was "
+                    "still saved — try processing it again, or fill the details in yourself."
+                ),
+            }
+            document.status = Document.Status.NEEDS_REVIEW
+            document.save()
+            return document.structured_data
+
+        if extraction.note:
+            # Some pages had no readable text (a scanned page inside an
+            # otherwise digital PDF), which is why fields can come back
+            # empty even though the rest parsed fine.
+            result['_extraction_warning'] = extraction.note
+
+        document.structured_data = result
+        self._apply_document_fields(document, result)
+        # NEEDS_REVIEW, not PROCESSED — the same stance insurance takes: AI
+        # extraction that clearly worked can still hold a subtle error, so a
+        # person confirms it before it counts as final. Only the explicit
+        # /confirm/ action moves a document to PROCESSED.
+        document.status = Document.Status.NEEDS_REVIEW
+        # processed_at records when the AI finished, which is still now.
+        document.processed_at = timezone.now()
+        document.save()
+        return result
+
+    @staticmethod
+    def _apply_document_fields(document, result: dict):
+        """
+        Copy the extracted values onto the Document's own columns.
+
+        structured_data alone is not enough: the Medical Locker list, the
+        detail modal and the doctor's patient view all read title,
+        category, doctor_name, hospital_name and document_date as real
+        model fields. Without this the AI result would be invisible
+        everywhere except the raw JSON panel.
+
+        Only ever fills a blank field — a value the patient typed, or
+        corrected via /correct/, is never overwritten by a later run.
+        """
+        from documents.models import Document
+
+        if not isinstance(result, dict):
+            return
+
+        for field in ('title', 'doctor_name', 'hospital_name'):
+            value = result.get(field)
+            if value and not getattr(document, field):
+                setattr(document, field, str(value)[:150 if field != 'title' else 255])
+
+        category = result.get('category')
+        valid = {c for c, _ in Document.Category.choices}
+        # Only overwrite the category when the uploader left it at the
+        # default; an explicit choice by the patient wins.
+        if category in valid and document.category == Document.Category.OTHER:
+            document.category = category
+
+        if not document.document_date:
+            parsed = parse_date(str(result.get('document_date') or ''))
+            if parsed:
+                document.document_date = parsed
 
     def _mock_document_structuring(self, category: str) -> dict:
         if category == 'prescription':

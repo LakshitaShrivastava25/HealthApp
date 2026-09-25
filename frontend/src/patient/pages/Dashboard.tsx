@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Plus, Sparkles, FileText, Pill as PillIcon, Stethoscope, ArrowRight, Bell } from 'lucide-react';
 import Topbar from '../components/Topbar';
-import { Card, CardHeader, Button, ProgressRing, Badge } from '../components/ui';
+import { Card, CardHeader, Button, ProgressRing, Badge, EmptyState } from '../components/ui';
 import AIBotMascot from '../components/AIBotMascot';
 import DocumentDetailModal from '../components/DocumentDetailModal';
 import AIMarkdown from '../components/AIMarkdown';
+import CountUp from '@shared/motion/CountUp';
+import AmbientBackground from '@shared/components/AmbientBackground';
 import { useAuth } from '../context/AuthContext';
 import { documentsApi, doctorAccessApi, medicinesApi, profilesApi, timelineApi } from '../lib/api';
 
@@ -116,7 +118,7 @@ export default function Dashboard() {
                 onClick={() => setNotifOpen((v) => !v)}
                 className="relative w-10 h-10 rounded-full flex items-center justify-center text-ink-700 hover:bg-surface transition-colors"
               >
-                <Bell size={19} />
+                <Bell size={18} />
                 {notifications.length > 0 && (
                   <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-danger" />
                 )}
@@ -144,10 +146,14 @@ export default function Dashboard() {
         }
       />
 
-      <main className="p-8 space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 !bg-gradient-to-br from-brand-teal to-brand-purple !border-0 text-white p-6 flex flex-col justify-between">
-            <div className="flex items-start justify-between">
+      <main className="p-4 sm:p-6 lg:p-8 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <Card className="lg:col-span-2 !bg-gradient-to-br from-brand-teal to-brand-purple !border-0 text-white p-6 flex flex-col justify-between relative overflow-hidden">
+            {/* Sits behind the gradient's content but in front of the
+                gradient itself, as white silhouettes so it reads as texture
+                rather than competing with the mascot or the input. */}
+            <AmbientBackground tone="light" />
+            <div className="relative flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 text-sm font-medium opacity-90">
                   <Sparkles size={16} /> AI Health Assistant
@@ -184,7 +190,7 @@ export default function Dashboard() {
               <button
                 onClick={handleAsk}
                 disabled={askLoading || !question.trim()}
-                className="w-8 h-8 rounded-full bg-white text-brand-purple flex items-center justify-center disabled:opacity-50"
+                className="w-8 h-8 rounded-full bg-white text-accent-ink flex items-center justify-center disabled:opacity-50"
               >
                 <ArrowRight size={16} />
               </button>
@@ -213,7 +219,7 @@ export default function Dashboard() {
 
         <div>
           <h2 className="text-sm font-semibold text-ink-700 mb-3">Health at a Glance</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {[
               { label: 'Active Medicines', value: medications.length, icon: PillIcon, href: '/medicines' },
               { label: 'Documents on file', value: documents.length, icon: FileText, href: '/locker' },
@@ -222,14 +228,16 @@ export default function Dashboard() {
             ].map((s) => (
               <Card
                 key={s.label}
-                className="p-4 flex items-start gap-3 cursor-pointer hover:border-brand-purple transition-colors"
+                className="p-4 flex items-start gap-3 cursor-pointer hover:border-accent transition-colors"
                 onClick={() => window.location.assign(s.href)}
               >
-                <div className="w-10 h-10 rounded-lg bg-brand-lavender text-brand-purple flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
                   <s.icon size={18} />
                 </div>
                 <div>
-                  <p className="text-xl font-bold text-ink-900 leading-tight">{s.value}</p>
+                  <p className="text-2xl font-bold tracking-tight text-ink-900 leading-tight">
+                    <CountUp value={s.value} />
+                  </p>
                   <p className="text-xs text-ink-500 mt-0.5">{s.label}</p>
                 </div>
               </Card>
@@ -237,12 +245,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           <Card>
             <CardHeader title="Recent Records" />
             <div className="px-5 pb-5 pt-3 space-y-1">
               {documents.length === 0 && (
-                <p className="text-sm text-ink-500 py-4">No documents uploaded yet — try Medical Locker.</p>
+                <EmptyState compact icon={<FileText size={20} />} title="No documents yet" note="Upload a prescription, report or scan in Medical Locker." />
               )}
               {documents.map((d) => (
                 <button
@@ -264,7 +272,7 @@ export default function Dashboard() {
             <CardHeader title="Active Medicines" />
             <div className="px-5 pb-5 pt-3 space-y-1">
               {medications.length === 0 && (
-                <p className="text-sm text-ink-500 py-4">No medicines on file yet.</p>
+                <EmptyState compact icon={<PillIcon size={20} />} title="No medicines yet" note="Medicines appear here once a prescription is processed." />
               )}
               {medications.map((m) => (
                 <button

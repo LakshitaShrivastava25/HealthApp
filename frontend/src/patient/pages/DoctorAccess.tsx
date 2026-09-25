@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Copy, Check, UserCheck, UserX, ShieldOff, Stethoscope } from 'lucide-react';
+import { Copy, Check, UserCheck, UserX, ShieldOff, Stethoscope, Clock } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, CardHeader, Badge, Button, EmptyState } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -55,7 +55,7 @@ export default function DoctorAccess() {
   return (
     <>
       <Topbar title="Doctor Access" subtitle="Share your reference ID and manage who can see your records" />
-      <main className="p-8 space-y-6 max-w-3xl">
+      <main className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-3xl">
         <Card className="p-5">
           <p className="text-sm font-semibold text-ink-900 mb-1">Your Patient Reference ID</p>
           <p className="text-xs text-ink-500 mb-3">
@@ -68,7 +68,7 @@ export default function DoctorAccess() {
           </code>
             <button
               onClick={handleCopy}
-              className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-brand-purple hover:text-brand-purple/80"
+              className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:text-accent-ink/80"
             >
               {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
             </button>
@@ -78,13 +78,13 @@ export default function DoctorAccess() {
         <Card className="p-5">
           <CardHeader title="Pending Requests" subtitle="Review and respond — nothing happens without your approval" />
           {pending.length === 0 ? (
-            <p className="text-sm text-ink-500 mt-3">No pending requests right now.</p>
+            <EmptyState compact icon={<Clock size={20} />} title="No pending requests" note="Requests from doctors will appear here for you to approve or deny." />
           ) : (
             <div className="mt-3 space-y-3">
               {pending.map((g) => (
                 <div key={g.id} className="flex items-center justify-between border border-border rounded-lg px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-brand-lavender text-brand-purple flex items-center justify-center shrink-0">
+                    <div className="w-9 h-9 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
                       <Stethoscope size={16} />
                     </div>
                     <div>

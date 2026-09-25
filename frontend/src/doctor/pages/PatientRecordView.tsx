@@ -68,7 +68,7 @@ export default function PatientRecordView() {
           </Button>
         }
       />
-      <main className="p-8 space-y-6">
+      <main className="p-4 sm:p-6 lg:p-8 space-y-6">
         {saved && <p className="text-sm text-success">Consultation note saved.</p>}
 
         {showNoteForm && (
@@ -124,7 +124,7 @@ export default function PatientRecordView() {
               <FileText size={15} className="text-info" /> Documents
             </p>
             {documents.length === 0 ? (
-              <p className="text-xs text-ink-500">No documents on file.</p>
+              <EmptyState compact icon={<FileText size={20} />} title="No documents" note="This patient has not uploaded any documents yet." />
             ) : (
               <div className="space-y-2">
                 {documents.map((d) => (
@@ -139,7 +139,7 @@ export default function PatientRecordView() {
                           href={d.file}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs font-medium text-brand-purple hover:underline inline-flex items-center gap-1"
+                          className="text-xs font-medium text-accent-ink hover:underline inline-flex items-center gap-1"
                         >
                           {d.title}
                           <ExternalLink size={11} className="shrink-0" />
@@ -163,7 +163,7 @@ export default function PatientRecordView() {
             <Pill size={15} className="text-success" /> Active Medications
           </p>
           {medications.length === 0 ? (
-            <p className="text-xs text-ink-500">No active medications on file.</p>
+            <EmptyState compact icon={<Pill size={20} />} title="No active medications" note="Nothing is currently recorded for this patient." />
           ) : (
             <div className="space-y-2">
               {medications.map((m) => (
@@ -183,7 +183,7 @@ export default function PatientRecordView() {
 
         <Card className="p-5">
           <p className="text-sm font-semibold text-ink-900 flex items-center gap-2 mb-3">
-            <History size={15} className="text-brand-purple" /> Timeline
+            <History size={15} className="text-accent-ink" /> Timeline
           </p>
           {timeline.length === 0 ? (
             <EmptyState icon={<History size={20} />} title="No timeline events" note="Nothing recorded yet." />

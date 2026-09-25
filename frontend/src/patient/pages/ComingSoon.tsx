@@ -16,7 +16,7 @@ export default function ComingSoon({
   return (
     <>
       <Topbar title={title} subtitle={subtitle} />
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <Card>
           <EmptyState icon={<Icon size={24} />} title={`${title} is on the way`} note={note} />
         </Card>

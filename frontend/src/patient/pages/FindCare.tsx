@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Search, Star, CalendarDays, Clock3, Phone } from 'lucide-react';
+import { Search, Star, CalendarDays, Clock3, Phone, Stethoscope } from 'lucide-react';
 import Topbar from '../components/Topbar';
-import { Card } from '../components/ui';
+import { Card, EmptyState } from '../components/ui';
 import { doctorsApi } from '../lib/api';
 import { formatDays, formatHours } from '@shared/availability';
 
@@ -39,28 +39,31 @@ export default function FindCare() {
     <>
       <Topbar title="Find Care" subtitle="Find the right doctor near you" />
 
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <div className="relative mb-6 max-w-lg">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search doctors, specialties..."
-            className="w-full pl-9 pr-3 py-2.5 text-sm rounded-lg border border-border bg-card outline-none focus:ring-2 focus:ring-brand-purple/30"
+            className="w-full pl-9 pr-3 py-2.5 text-sm rounded-lg border border-border bg-card outline-none focus:ring-2 focus:ring-accent/30"
           />
         </div>
 
         {filtered.length === 0 && (
-          <Card className="p-10 text-center text-sm text-ink-500">
-            No verified doctors on the platform yet — this list populates once doctors register and
-            an admin approves them in the Admin Portal.
+          <Card>
+            <EmptyState
+              icon={<Stethoscope size={22} />}
+              title="No verified doctors yet"
+              note="This list fills in once doctors register and an admin approves them."
+            />
           </Card>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {filtered.map((d) => (
             <Card key={d.id} className="p-4">
-              <div className="w-12 h-12 rounded-full bg-brand-lavender text-brand-purple flex items-center justify-center font-semibold mb-3">
+              <div className="w-12 h-12 rounded-full bg-accent-soft text-accent-ink flex items-center justify-center font-semibold mb-3">
                 {d.full_name.split(' ').slice(-1)[0][0]}
               </div>
               <p className="text-sm font-semibold text-ink-900">{d.full_name}</p>
@@ -93,7 +96,7 @@ export default function FindCare() {
                 {d.booking_phone_number ? (
                   <a
                     href={`tel:${d.booking_phone_number.replace(/[^+0-9]/g, '')}`}
-                    className="flex items-center gap-1.5 text-xs font-medium text-brand-purple hover:underline"
+                    className="flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:underline"
                   >
                     <Phone size={13} className="shrink-0" />
                     {d.booking_phone_number}

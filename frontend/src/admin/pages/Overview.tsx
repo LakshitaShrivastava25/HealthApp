@@ -14,7 +14,7 @@ type Summary = {
 };
 
 const tones = {
-  purple: { bg: 'bg-brand-lavender', text: 'text-brand-purple', ring: 'hover:ring-brand-purple/30' },
+  purple: { bg: 'bg-accent-soft', text: 'text-accent-ink', ring: 'hover:ring-accent/30' },
   teal: { bg: 'bg-teal-50', text: 'text-brand-teal', ring: 'hover:ring-brand-teal/30' },
   warning: { bg: 'bg-warning-bg', text: 'text-warning', ring: 'hover:ring-warning/30' },
   danger: { bg: 'bg-danger-bg', text: 'text-danger', ring: 'hover:ring-danger/30' },
@@ -49,7 +49,7 @@ export default function Overview() {
   return (
     <>
       <Topbar title="Overview" subtitle="Platform status at a glance" />
-      <main className="p-8 space-y-6">
+      <main className="p-4 sm:p-6 lg:p-8 space-y-6">
         <Card className="!bg-gradient-to-br from-brand-teal to-brand-purple !border-0 text-white p-6 flex items-center justify-between overflow-hidden relative">
           <div className="relative z-10">
             <div className="flex items-center gap-2 text-sm font-medium opacity-90 mb-2">

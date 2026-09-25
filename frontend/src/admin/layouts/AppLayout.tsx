@@ -1,13 +1,8 @@
-import { Outlet } from 'react-router-dom';
+import ResponsiveShell from '@shared/layout/ResponsiveShell';
 import Sidebar from '../components/Sidebar';
 
+/** Shell mechanics (drawer below lg, persistent at lg+) are shared; the
+ *  sidebar itself stays this portal's own. */
 export default function AppLayout() {
-  return (
-    <div className="flex min-h-screen bg-surface">
-      <Sidebar />
-      <div className="flex-1 min-w-0">
-        <Outlet />
-      </div>
-    </div>
-  );
+  return <ResponsiveShell portal="admin" sidebar={<Sidebar />} />;
 }

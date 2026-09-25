@@ -1,6 +1,8 @@
 import { type ReactNode, useState } from 'react';
 import { Bell, ChevronDown, Plus } from 'lucide-react';
 import { Avatar } from './ui';
+import { MobileMenuButton } from '@shared/layout/ResponsiveShell';
+import AmbientBackground from '@shared/components/AmbientBackground';
 import { useAuth } from '../context/AuthContext';
 import { profilesApi } from '../lib/api';
 
@@ -29,13 +31,19 @@ export default function Topbar({
   }
 
   return (
-    <header className="sticky top-0 z-10 bg-card border-b border-border px-8 py-4 flex items-center justify-between">
-      <div>
-        <h1 className="text-xl font-bold text-ink-900">{title}</h1>
-        {subtitle && <p className="text-sm text-ink-500 mt-0.5">{subtitle}</p>}
+    <header className="relative overflow-hidden sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between gap-2">
+      {/* Header-variant ambient art: 3 small icons, far right, so it
+          never sits under the page title itself. */}
+      <AmbientBackground variant="header" />
+      <div className="relative flex min-w-0 items-center gap-2">
+        <MobileMenuButton />
+        <div className="min-w-0">
+          <h1 className="truncate text-base sm:text-lg lg:text-xl font-bold text-ink-900">{title}</h1>
+          {subtitle && <p className="hidden sm:block truncate text-sm text-ink-500 mt-0.5">{subtitle}</p>}
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         {action}
 
         <button
@@ -43,7 +51,7 @@ export default function Topbar({
           title="Not yet built — notifications aren't wired up yet"
           className="relative w-10 h-10 rounded-full flex items-center justify-center text-ink-300 cursor-not-allowed"
         >
-          <Bell size={19} />
+          <Bell size={18} />
         </button>
 
         <div className="relative">
@@ -83,7 +91,7 @@ export default function Topbar({
                 {!addingMember ? (
                   <button
                     onClick={() => setAddingMember(true)}
-                    className="w-full flex items-center gap-2 text-left px-3 py-2 text-sm font-medium text-brand-purple hover:bg-surface"
+                    className="w-full flex items-center gap-2 text-left px-3 py-2 text-sm font-medium text-accent-ink hover:bg-surface"
                   >
                     <Plus size={15} /> Add family member
                   </button>
@@ -109,7 +117,7 @@ export default function Topbar({
                     </select>
                     <button
                       onClick={handleAddMember}
-                      className="w-full text-sm font-medium text-white bg-brand-purple rounded-lg py-1.5"
+                      className="w-full text-sm font-medium text-white bg-accent rounded-lg py-1.5"
                     >
                       Save
                     </button>

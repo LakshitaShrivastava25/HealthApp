@@ -148,7 +148,7 @@ export default function EmergencyCard() {
     <>
       <Topbar title="Emergency Health Card" subtitle="Show this QR in any medical emergency" />
 
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         {!ep ? (
           <Card className="p-6 max-w-lg">
             <p className="text-sm font-semibold text-ink-900 mb-1">Set up your Emergency Card</p>
@@ -330,14 +330,14 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
   return (
     <button
       onClick={onChange}
-      className={`w-10 h-6 rounded-full relative transition-colors shrink-0 ${checked ? 'bg-brand-purple' : 'bg-border'}`}
+      className={`w-10 h-6 rounded-full relative transition-colors shrink-0 ${checked ? 'bg-accent' : 'bg-border'}`}
     >
       <span
         className={`absolute top-0.5 w-5 h-5 rounded-full bg-white flex items-center justify-center transition-transform ${
           checked ? 'translate-x-4' : 'translate-x-0.5'
         }`}
       >
-        {checked && <Check size={11} className="text-brand-purple" />}
+        {checked && <Check size={11} className="text-accent-ink" />}
       </span>
     </button>
   );

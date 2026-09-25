@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     clearTokens();
+    // Clear the staff record too, so no stale phone number or role survives.
     setIsAuthenticated(false);
     setStaff(null);
   };

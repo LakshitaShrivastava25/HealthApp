@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   User,
   ShieldCheck,
@@ -32,7 +31,6 @@ const supportItems = [
 
 export default function Settings() {
   const { logout, activeProfile, refreshProfiles } = useAuth();
-  const navigate = useNavigate();
 
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(activeProfile?.full_name || '');
@@ -83,7 +81,7 @@ export default function Settings() {
 
   function handleLogout() {
     logout();
-    navigate('/patient/login');
+    window.location.assign('/');
   }
 
   async function handleDeleteAccount() {
@@ -91,7 +89,7 @@ export default function Settings() {
     try {
       await authApi.deleteAccount();
       logout();
-      navigate('/patient/login');
+      window.location.assign('/');
     } finally {
       setDeleting(false);
     }
@@ -101,14 +99,14 @@ export default function Settings() {
     <>
       <Topbar title="Settings" subtitle="Manage your account and preferences" />
 
-      <main className="p-8 max-w-3xl">
+      <main className="p-4 sm:p-6 lg:p-8 max-w-3xl">
         <Card className="p-5 mb-6">
           <div className="flex items-center justify-between mb-1">
             <p className="text-sm font-semibold text-ink-900 flex items-center gap-2">
-              <User size={16} className="text-brand-purple" /> Profile Information
+              <User size={16} className="text-accent-ink" /> Profile Information
             </p>
             {!editing && (
-              <button onClick={startEditing} className="text-xs font-medium text-brand-purple">
+              <button onClick={startEditing} className="text-xs font-medium text-accent-ink">
                 Edit
               </button>
             )}
@@ -214,7 +212,7 @@ export default function Settings() {
                   className="w-full flex items-center justify-between px-2 py-3 rounded-lg opacity-60 cursor-not-allowed"
                 >
                   <span className="flex items-center gap-3 text-sm font-medium text-ink-700">
-                    <Icon size={17} className="text-ink-500" /> {label}
+                    <Icon size={16} className="text-ink-500" /> {label}
                   </span>
                   <ChevronRight size={15} className="text-ink-500" />
                 </button>
@@ -259,7 +257,7 @@ export default function Settings() {
                   className="w-full flex items-center justify-between px-2 py-3 rounded-lg opacity-60 cursor-not-allowed"
                 >
                   <span className="flex items-center gap-3 text-sm font-medium text-ink-700">
-                    <Icon size={17} className="text-ink-500" /> {label}
+                    <Icon size={16} className="text-ink-500" /> {label}
                   </span>
                   <ChevronRight size={15} className="text-ink-500" />
                 </button>

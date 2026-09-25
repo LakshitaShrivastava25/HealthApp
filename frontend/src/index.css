@@ -4,6 +4,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Portal accent palettes.
+   Distinct but related: all three sit at a similar lightness and saturation
+   so the app still reads as one product, while each portal is instantly
+   identifiable. Written as "R G B" channels for Tailwind's rgb(var(--x) / a).
+
+   Patient stays the existing brand purple so nothing about the patient-facing
+   product shifts; doctor leans to the brand teal already in the palette;
+   admin takes a neutral slate that reads as tooling rather than product. */
+:root,
+[data-portal='patient'] {
+  --accent: 109 91 208;       /* #6D5BD0 brand purple      */
+  --accent-dark: 91 75 196;   /* #5B4BC4 brand purpleDark  */
+  --accent-soft: 241 238 252; /* #F1EEFC brand lavender    */
+  --accent-ink: 91 75 196;
+}
+[data-portal='doctor'] {
+  --accent: 14 165 166;       /* #0EA5A6 brand teal        */
+  --accent-dark: 11 132 133;  /* #0B8485                   */
+  --accent-soft: 224 247 247; /* #E0F7F7                   */
+  --accent-ink: 11 132 133;
+}
+[data-portal='admin'] {
+  --accent: 51 65 85;         /* #334155 slate             */
+  --accent-dark: 30 41 59;    /* #1E293B                   */
+  --accent-soft: 241 245 249; /* #F1F5F9                   */
+  --accent-ink: 30 41 59;
+}
+
+/* Ambient in-app background motion.
+   Deliberately separate from the auth screens' hn-float-* set, which is
+   injected by <AuthKeyframes> only on auth routes and is not available
+   inside the app. These are also markedly slower — 18-26s against the auth
+   set's 7.5-10.5s — because this sits behind real content and headers a
+   person is trying to read, where visible movement would be a distraction
+   rather than a welcome. Transform and opacity only, so it composites on
+   the GPU and costs nothing per frame. */
+@keyframes hn-ambient-a {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50%      { transform: translate3d(6px, -12px, 0) rotate(1.5deg); }
+}
+@keyframes hn-ambient-b {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50%      { transform: translate3d(-8px, -9px, 0) rotate(-1.8deg); }
+}
+@keyframes hn-ambient-c {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-1deg); }
+  50%      { transform: translate3d(5px, -15px, 0) rotate(1deg); }
+}
+.hn-ambient-a { animation: hn-ambient-a 22s ease-in-out infinite; }
+.hn-ambient-b { animation: hn-ambient-b 18s ease-in-out infinite; }
+.hn-ambient-c { animation: hn-ambient-c 26s ease-in-out infinite; }
+
+/* Same accessibility stance as the auth keyframes: stop the loops outright
+   rather than shortening them. */
+@media (prefers-reduced-motion: reduce) {
+  .hn-ambient-a, .hn-ambient-b, .hn-ambient-c {
+    animation: none !important;
+  }
+}
+
 html, body, #root {
   height: 100%;
 }

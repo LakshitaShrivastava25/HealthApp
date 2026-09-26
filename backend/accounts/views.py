@@ -17,7 +17,10 @@ class SendOTPView(APIView):
         serializer.is_valid(raise_exception=True)
         result = request_otp(serializer.validated_data['phone_number'])
         if not result.get('ok'):
-            return Response({'detail': result['error']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            return Response(
+                {'detail': result['error']},
+                status=result.get('status', status.HTTP_429_TOO_MANY_REQUESTS),
+            )
         return Response(result, status=status.HTTP_200_OK)
 
 

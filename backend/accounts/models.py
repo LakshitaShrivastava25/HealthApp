@@ -58,8 +58,8 @@ class Account(AbstractBaseUser, PermissionsMixin):
 class OTPRequest(models.Model):
     """
     Hashed, short-TTL OTP per phone number. Never store OTPs in plain text.
-    Real SMS delivery (MSG91/Twilio) plugs into `send_otp` in accounts/services.py —
-    until those provider credentials are supplied, OTPs are logged server-side only.
+    SMS delivery goes through 2Factor.in (`request_otp` in accounts/services.py) —
+    until TWOFACTOR_API_KEY is set, OTPs are logged server-side only.
     """
 
     phone_number = models.CharField(max_length=15, db_index=True)

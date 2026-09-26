@@ -136,3 +136,10 @@ CORS_ALLOWED_ORIGINS = os.getenv(
 # React frontend. See ai/claude_service.py for how it's used.
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 OCR_PROVIDER_API_KEY = os.getenv('OCR_PROVIDER_API_KEY', '')
+
+# 2Factor.in SMS OTP (see accounts/services.py). Until the API key is set,
+# OTPs are only printed to the server log (and returned when DEBUG=True).
+# TWOFACTOR_OTP_TEMPLATE is the optional DLT-approved template name from
+# the 2Factor dashboard; leave blank to use the account's default template.
+TWOFACTOR_API_KEY = os.getenv('TWOFACTOR_API_KEY', '')
+TWOFACTOR_OTP_TEMPLATE = os.getenv('TWOFACTOR_OTP_TEMPLATE', '')

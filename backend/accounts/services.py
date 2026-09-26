@@ -24,18 +24,42 @@ def _hash_otp(otp: str, phone_number: str) -> str:
     return hashlib.sha256(f"{otp}:{phone_number}:{settings.SECRET_KEY}".encode()).hexdigest()
 
 
+def _mask_phone(phone: str) -> str:
+    return f"{'*' * max(len(phone) - 4, 0)}{phone[-4:]}"
+
+
 def _send_via_2factor(phone_number: str, otp: str) -> bool:
     """
-    Sends our own generated OTP through 2Factor.in's "custom OTP" SMS API:
-      GET https://2factor.in/API/V1/{api_key}/SMS/{phone}/{otp}[/{template}]
+    Sends our own generated OTP through 2Factor.in's SMS OTP API
+    ("Send OTP (Manual Generation)" in the current 2Factor API docs):
+      GET https://2factor.in/API/V1/{api_key}/SMS/{phone}/{otp}/{template}
+    The Sender ID (CURAPT) is not a request parameter — 2Factor attaches it
+    from the approved template configured in the dashboard.
+    This is the only 2Factor call in the OTP flow — there is no voice/OBD
+    call and no voice fallback here. The template name is required: 2Factor
+    documents it as part of the SMS URL, and requests sent without it can be
+    delivered by an automated voice call instead of SMS, so we refuse to
+    send rather than let that happen.
+
     Verification stays local (hashed OTPRequest rows), so 2Factor's
     session id is not needed. Returns True only on a "Success" response.
+    Never logs the API key, the request URL (it contains the key) or the OTP.
     """
-    phone = re.sub(r'\D', '', phone_number)  # "+91 98765 43210" -> "919876543210"
-    parts = [settings.TWOFACTOR_API_KEY, 'SMS', phone, otp]
-    if settings.TWOFACTOR_OTP_TEMPLATE:
-        parts.append(settings.TWOFACTOR_OTP_TEMPLATE)
-    url = 'https://2factor.in/API/V1/' + '/'.join(urllib.parse.quote(p, safe='') for p in parts)
+    # 2Factor documents the international format with the plus sign:
+    # "+91 98765 43210" -> "+919876543210"
+    phone = '+' + re.sub(r'\D', '', phone_number)
+    template = settings.TWOFACTOR_OTP_TEMPLATE
+    if not template:
+        logger.error(
+            'Not sending OTP to %s: TWOFACTOR_OTP_TEMPLATE is not set. 2Factor needs an '
+            'approved SMS OTP template name, otherwise it may deliver the OTP by voice call.',
+            _mask_phone(phone),
+        )
+        return False
+
+    parts = [settings.TWOFACTOR_API_KEY, 'SMS', phone, otp, template]
+    url = 'https://2factor.in/API/V1/' + '/'.join(urllib.parse.quote(p, safe='+') for p in parts)
+    logger.info('Sending OTP via 2Factor SMS to %s (template: %s)', _mask_phone(phone), template)
     try:
         with urllib.request.urlopen(url, timeout=TWOFACTOR_TIMEOUT_SECONDS) as resp:
             body = json.loads(resp.read().decode())
@@ -44,15 +68,16 @@ def _send_via_2factor(phone_number: str, otp: str) -> bool:
         try:
             body = json.loads(exc.read().decode())
         except ValueError:
-            body = {'Details': str(exc)}
-        logger.error('2Factor OTP send failed for %s: %s', phone, body.get('Details'))
+            body = {'Details': f'HTTP {exc.code}'}
+        logger.error('2Factor SMS OTP send failed for %s: %s', _mask_phone(phone), body.get('Details'))
         return False
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        logger.error('2Factor OTP send failed for %s: %s', phone, exc)
+        logger.error('2Factor SMS OTP send failed for %s: %s', _mask_phone(phone), type(exc).__name__)
         return False
     if body.get('Status') != 'Success':
-        logger.error('2Factor OTP send failed for %s: %s', phone, body.get('Details'))
+        logger.error('2Factor SMS OTP send failed for %s: %s', _mask_phone(phone), body.get('Details'))
         return False
+    logger.info('2Factor SMS OTP accepted for %s', _mask_phone(phone))
     return True
 
 

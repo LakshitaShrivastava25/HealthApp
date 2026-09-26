@@ -143,7 +143,16 @@ OCR_PROVIDER_API_KEY = os.getenv('OCR_PROVIDER_API_KEY', '')
 
 # 2Factor.in SMS OTP (see accounts/services.py). Until the API key is set,
 # OTPs are only printed to the server log (and returned when DEBUG=True).
-# TWOFACTOR_OTP_TEMPLATE is the optional DLT-approved template name from
-# the 2Factor dashboard; leave blank to use the account's default template.
+# TWOFACTOR_OTP_TEMPLATE is the REQUIRED approved SMS OTP template name from
+# the 2Factor dashboard; without it no OTP is sent (see accounts/services.py).
 TWOFACTOR_API_KEY = os.getenv('TWOFACTOR_API_KEY', '')
 TWOFACTOR_OTP_TEMPLATE = os.getenv('TWOFACTOR_OTP_TEMPLATE', '')
+
+# Show the OTP flow's INFO logs ("Sending OTP via 2Factor SMS ...") in the
+# server console; Python's default root level (WARNING) would hide them.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'loggers': {'accounts': {'handlers': ['console'], 'level': 'INFO'}},
+}

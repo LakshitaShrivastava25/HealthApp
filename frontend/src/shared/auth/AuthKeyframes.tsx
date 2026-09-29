@@ -116,6 +116,18 @@ export default function AuthKeyframes() {
 
       @keyframes hn-spin { to { transform: rotate(360deg); } }
 
+      /* A gentle "breathing" scale, layered on top of a float animation
+         (via a comma-separated animation list) so badges and pills read
+         as alive even in the instant their float pass is near zero. */
+      @keyframes hn-pulse-soft {
+        0%, 100% { scale: 1; }
+        50%      { scale: 1.06; }
+      }
+      @keyframes hn-pulse-slow {
+        0%, 100% { scale: 1; }
+        50%      { scale: 1.025; }
+      }
+
       .hn-float-a { animation: hn-float-a 9s   ease-in-out infinite; }
       .hn-float-b { animation: hn-float-b 7.5s ease-in-out infinite; }
       .hn-float-c { animation: hn-float-c 10.5s ease-in-out infinite; }
@@ -123,7 +135,7 @@ export default function AuthKeyframes() {
       .hn-drift-fade { animation: hn-drift-fade 11s ease-in-out infinite; }
       .hn-glow-pulse { animation: hn-glow-pulse 4.5s ease-in-out infinite; transform-origin: center; }
       .hn-ecg-run    { animation: hn-ecg-run 4s linear infinite; }
-      .hn-flow-run   { animation: hn-flow-run 14s linear infinite; }
+      .hn-flow-run   { animation: hn-flow-run 8s linear infinite; }
       .hn-flow-dot   { animation: hn-flow-dot 2.6s ease-in-out infinite; transform-origin: center; }
       .hn-orbit      { animation: hn-orbit 46s linear infinite; }
       .hn-orbit-rev  { animation: hn-orbit-rev 62s linear infinite; }
@@ -135,6 +147,11 @@ export default function AuthKeyframes() {
       .hn-shake      { animation: hn-shake 0.4s ease-in-out 1; }
       .hn-dot-bounce { animation: hn-dot-bounce 1.1s ease-in-out infinite; }
       .hn-spin       { animation: hn-spin 0.7s linear infinite; }
+      /* Separate CSS properties (not the transform shorthand), so these
+         combine cleanly with any .hn-float-* class on the same element
+         instead of one animation clobbering the other. */
+      .hn-pulse-soft { animation: hn-pulse-soft 3.2s ease-in-out infinite; }
+      .hn-pulse-slow { animation: hn-pulse-slow 6s ease-in-out infinite; }
 
       @media (prefers-reduced-motion: reduce) {
         .hn-float-a, .hn-float-b, .hn-float-c, .hn-float-d,
@@ -142,7 +159,7 @@ export default function AuthKeyframes() {
         .hn-orbit, .hn-orbit-rev,
         .hn-blob-a, .hn-blob-b, .hn-blob-c,
         .hn-particle, .hn-card-float, .hn-shake, .hn-dot-bounce,
-        .hn-flow-run, .hn-flow-dot {
+        .hn-flow-run, .hn-flow-dot, .hn-pulse-soft, .hn-pulse-slow {
           animation: none !important;
         }
         /* Particles animate in from opacity 0, so with the animation off

@@ -271,7 +271,9 @@ export default function AnimatedMedicalBackground() {
           <div className="relative">
             <CharacterArt src={doctorImg} alt="" size={220} float="hn-float-c" />
             <div className="absolute" style={{ left: 88, top: -26 }}>
-              <PlusBadge size={58} />
+              <FloatingObject float="hn-float-d" opacity={0.95}>
+                <PlusBadge size={58} />
+              </FloatingObject>
             </div>
           </div>
         </StoryCluster>
@@ -291,12 +293,18 @@ export default function AnimatedMedicalBackground() {
                 />
               </FloatingObject>
             </div>
-            <Prescription size={130} />
+            <FloatingObject float="hn-float-c" opacity={1}>
+              <Prescription size={130} />
+            </FloatingObject>
             <div className="absolute" style={{ left: 52, top: 92 }}>
-              <BlisterPack width={96} />
+              <FloatingObject float="hn-float-a" opacity={1}>
+                <BlisterPack width={96} />
+              </FloatingObject>
             </div>
             <div className="absolute" style={{ left: 98, top: 16 }}>
-              <MedicalShield size={62} animated={!reduced} />
+              <FloatingObject float="hn-float-d" opacity={1}>
+                <MedicalShield size={62} animated={!reduced} />
+              </FloatingObject>
             </div>
           </div>
         </StoryCluster>
@@ -465,7 +473,7 @@ function StoryLabel({ tone, children }: { tone: 'purple' | 'teal' | 'blue'; chil
   const dot = tone === 'teal' ? C.teal : tone === 'blue' ? C.blue : C.purple;
   return (
     <div
-      className="mt-3 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white/80 px-3 py-1 text-[11px] font-medium shadow-sm backdrop-blur-sm"
+      className="hn-float-d hn-pulse-soft mt-3 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white/80 px-3 py-1 text-[11px] font-medium shadow-sm backdrop-blur-sm"
       style={{ color: C.ink700 }}
     >
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
@@ -493,7 +501,10 @@ function CharacterArt({
   float: string;
 }) {
   return (
-    <div className={`relative ${float}`} style={{ willChange: 'transform', width: size, height: size }}>
+    <div
+      className={`relative ${float} hn-pulse-slow`}
+      style={{ willChange: 'transform', width: size, height: size }}
+    >
       <div
         className="absolute inset-0 rounded-full blur-2xl"
         style={{ background: `radial-gradient(circle, ${C.lavender} 0%, transparent 70%)`, opacity: 0.9 }}
@@ -569,7 +580,7 @@ function SymptomBadge({
   const color = SYMPTOM_TONES[tone];
   return (
     <motion.div
-      className="absolute flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-2.5 py-1.5 text-[10.5px] font-semibold shadow-md hn-float-c"
+      className="absolute flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-2.5 py-1.5 text-[10.5px] font-semibold shadow-md hn-float-c hn-pulse-soft"
       style={{ ...style, color: C.ink700, animationDelay: `${delay}s`, opacity: 0.95 }}
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}

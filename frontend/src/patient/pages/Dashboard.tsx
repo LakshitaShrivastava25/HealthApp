@@ -20,12 +20,6 @@ const docBadgeTone: Record<string, 'info' | 'success' | 'warning' | 'neutral' | 
 
 type Doc = { id: string; title: string; category: string; status: string; document_date: string | null; hospital_name: string };
 type Med = { id: string; name: string; dosage: string; instructions: string; reminders: { id: string; time_of_day: string }[] };
-type Notification = { id: string; text: string; tone: 'warning' | 'info' };
-type DoctorRequest = {
-  id: string;
-  status: string;
-  doctor_detail: { full_name: string; specialization: string; clinic_name: string } | null;
-};
 
 export default function Dashboard() {
   const { activeProfile, profiles } = useAuth();
@@ -33,13 +27,11 @@ export default function Dashboard() {
   const [medications, setMedications] = useState<Med[]>([]);
   const [timelineCount, setTimelineCount] = useState(0);
   const [doctorAccessCount, setDoctorAccessCount] = useState(0);
-  const [doctorRequests, setDoctorRequests] = useState<DoctorRequest[]>([]);
   const [question, setQuestion] = useState('');
   const [askedQuestion, setAskedQuestion] = useState<string | null>(null);
   const [askLoading, setAskLoading] = useState(false);
   const [askAnswer, setAskAnswer] = useState<string | null>(null);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
-  const [notifOpen, setNotifOpen] = useState(false);
 
   useEffect(() => {
     if (!activeProfile) return;
@@ -51,7 +43,6 @@ export default function Dashboard() {
       .then((r) => {
         const grants = r.data.results ?? r.data;
         setDoctorAccessCount(grants.filter((g: { status: string }) => g.status === 'approved').length);
-        setDoctorRequests(grants.filter((g: DoctorRequest) => g.status === 'pending'));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfile]);
@@ -78,20 +69,6 @@ export default function Dashboard() {
     }
   }
 
-  // Real notifications, derived from actual data — not decorative.
-  const notifications: Notification[] = [
-    ...documents
-      .filter((d) => d.status === 'needs_review')
-      .map((d) => ({ id: `doc-${d.id}`, text: `"${d.title}" needs your review`, tone: 'warning' as const })),
-    ...documents
-      .filter((d) => d.status === 'processing')
-      .map((d) => ({ id: `proc-${d.id}`, text: `"${d.title}" is still processing`, tone: 'info' as const })),
-    ...doctorRequests.map((req) => ({
-      id: `access-${req.id}`,
-      text: `Dr. ${req.doctor_detail?.full_name ?? 'A doctor'} has requested access to your records`,
-      tone: 'info' as const,
-    })),
-  ];
 
   // A readiness score built from real signals on the account — not a medical
   // measurement. Kept deliberately simple and explainable.
@@ -112,37 +89,9 @@ export default function Dashboard() {
         title={`Welcome back, ${firstName || '...'} 👋`}
         subtitle="Here's your health summary for today"
         action={
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <button
-                onClick={() => setNotifOpen((v) => !v)}
-                className="relative w-10 h-10 rounded-full flex items-center justify-center text-ink-700 hover:bg-surface transition-colors"
-              >
-                <Bell size={18} />
-                {notifications.length > 0 && (
-                  <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-danger" />
-                )}
-              </button>
-              {notifOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-card py-2 z-20">
-                  <p className="px-3 pb-1 text-xs font-semibold text-ink-500 uppercase tracking-wide">Notifications</p>
-                  {notifications.length === 0 ? (
-                    <p className="px-3 py-3 text-sm text-ink-500">You're all caught up.</p>
-                  ) : (
-                    notifications.map((n) => (
-                      <div key={n.id} className="px-3 py-2 text-sm text-ink-700 flex items-start gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${n.tone === 'warning' ? 'bg-warning' : 'bg-info'}`} />
-                        {n.text}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-            <Button onClick={() => window.location.assign('/patient/locker')}>
-              <Plus size={16} /> Add Record
-            </Button>
-          </div>
+          <Button onClick={() => window.location.assign('/patient/locker')}>
+            <Plus size={16} /> Add Record
+          </Button>
         }
       />
 

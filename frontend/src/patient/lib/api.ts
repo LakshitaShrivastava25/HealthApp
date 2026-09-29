@@ -116,12 +116,18 @@ export const authApi = {
 
 export const profilesApi = {
   list: () => api.get('/profiles/'),
+  // The full writable field set from ProfileSerializer — the add-family-member
+  // form collects the same details the profile view shows, so a member added
+  // here is not a second-class record missing half its data.
   create: (data: {
     full_name: string;
     relation: string;
     blood_group?: string;
     date_of_birth?: string;
     gender?: string;
+    height_cm?: number;
+    weight_kg?: number;
+    preferred_language?: string;
   }) => api.post('/profiles/', data),
   update: (
     id: string,
@@ -212,6 +218,8 @@ export const medicinesApi = {
 
 export const allergiesApi = {
   list: (profileId: string) => api.get('/allergies/', { params: { profile_id: profileId } }),
+  create: (data: { profile: string; kind: string; substance: string; reaction?: string }) =>
+    api.post('/allergies/', data),
 };
 
 export const emergencyApi = {

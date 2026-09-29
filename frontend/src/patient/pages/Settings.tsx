@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   User,
   ShieldCheck,
@@ -10,11 +10,13 @@ import {
   ChevronRight,
   Trash2,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Button } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
-import { authApi, profilesApi } from '../lib/api';
+import { allergiesApi, authApi, profilesApi } from '../lib/api';
+import { todayIso } from '@shared/dates';
 
 const notBuiltItems = [
   { icon: ShieldCheck, label: 'Security & Privacy' },
@@ -29,6 +31,23 @@ const supportItems = [
   { icon: Info, label: 'About Us' },
 ];
 
+type Allergy = { id: string; kind: string; substance: string; reaction: string };
+
+/** AllergyRecord.Kind, for the little tag beside each substance. */
+const ALLERGY_KIND_LABELS: Record<string, string> = {
+  drug: 'Drug',
+  food: 'Food',
+  environmental: 'Environmental',
+  other: 'Other',
+};
+
+/** "prefer_not_to_say" -> "Prefer not to say"; "male" -> "Male"; "" -> "—". */
+function genderLabel(gender?: string) {
+  if (!gender) return '—';
+  const words = gender.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export default function Settings() {
   const { logout, activeProfile, refreshProfiles } = useAuth();
 
@@ -42,6 +61,39 @@ export default function Settings() {
   const [language, setLanguage] = useState(activeProfile?.preferred_language || 'English');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  /**
+   * Allergies live in their own table (AllergyRecord, one row per substance)
+   * rather than on Profile, so they need their own fetch — the profile
+   * object in AuthContext does not carry them.
+   *
+   * Refetched per profile: switching family members from the header must not
+   * leave the previous person's allergies on screen, which on a medical
+   * record is worse than showing none at all.
+   */
+  const [allergies, setAllergies] = useState<Allergy[]>([]);
+  const [allergiesLoaded, setAllergiesLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!activeProfile) return;
+    let cancelled = false;
+    setAllergiesLoaded(false);
+    allergiesApi
+      .list(activeProfile.id)
+      .then((r) => {
+        if (cancelled) return;
+        setAllergies((r.data.results ?? r.data) as Allergy[]);
+        setAllergiesLoaded(true);
+      })
+      .catch(() => {
+        // A failed fetch must not be rendered as "no known allergies" —
+        // allergiesLoaded stays false so the card says nothing either way.
+        if (!cancelled) setAllergies([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfile]);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -118,11 +170,37 @@ export default function Settings() {
               <p className="text-xs text-ink-500 capitalize">{activeProfile?.relation}</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs text-ink-500">
                 <span>Date of birth: {activeProfile?.date_of_birth || '—'}</span>
-                <span className="capitalize">Gender: {activeProfile?.gender || '—'}</span>
+                {/* Sentence case, not `capitalize`: the stored value is
+                    snake_case, and per-word capitalisation turns
+                    prefer_not_to_say into "Prefer Not To Say". */}
+                <span>Gender: {genderLabel(activeProfile?.gender)}</span>
                 <span>Blood group: {activeProfile?.blood_group || '—'}</span>
                 <span>Height: {activeProfile?.height_cm ? `${activeProfile.height_cm} cm` : '—'}</span>
                 <span>Weight: {activeProfile?.weight_kg ? `${activeProfile.weight_kg} kg` : '—'}</span>
                 <span>Language: {activeProfile?.preferred_language || 'English'}</span>
+              </div>
+
+              <div className="mt-3 border-t border-border pt-3">
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                  <ShieldAlert size={12} className="text-warning" /> Allergies
+                </p>
+                {!allergiesLoaded ? (
+                  <p className="text-xs text-ink-300">Loading…</p>
+                ) : allergies.length === 0 ? (
+                  <p className="text-xs text-ink-500">None recorded.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {allergies.map((a) => (
+                      <li key={a.id} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                        <span className="font-medium text-ink-900">{a.substance}</span>
+                        <span className="rounded-full bg-surface px-1.5 py-0.5 text-[10px] text-ink-500">
+                          {ALLERGY_KIND_LABELS[a.kind] || a.kind}
+                        </span>
+                        {a.reaction && <span className="text-ink-500">— {a.reaction}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               {saved && (
                 <p className="text-xs text-success flex items-center gap-1 mt-2">
@@ -138,8 +216,13 @@ export default function Settings() {
                 placeholder="Full name"
                 className="text-sm px-3 py-2 rounded-lg border border-border outline-none"
               />
+              {/* Capped at today, matching the signup form and the
+                  add-family-member form. The server rejects a future date
+                  of birth as well, so an uncapped picker here would only
+                  produce a rejected save. */}
               <input
                 type="date"
+                max={todayIso()}
                 value={dob}
                 onChange={(e) => setDob(e.target.value)}
                 className="text-sm px-3 py-2 rounded-lg border border-border outline-none"
@@ -153,6 +236,10 @@ export default function Settings() {
                 <option value="male">Male</option>
                 <option value="female">Female</option>
                 <option value="other">Other</option>
+                {/* Profile.Gender's fourth choice. Omitting it meant anyone
+                    who had picked it elsewhere saw a blank gender here, and
+                    silently lost it on the next save. */}
+                <option value="prefer_not_to_say">Prefer not to say</option>
               </select>
               <input
                 value={bloodGroup}

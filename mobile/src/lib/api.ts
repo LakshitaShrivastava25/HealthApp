@@ -1,7 +1,7 @@
 import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 
 import { getApiBaseUrl } from './config';
-import { clearTokens, getAccessToken, getRefreshToken, setAccessToken } from './tokens';
+import { clearTokens, getAccessToken, getRefreshToken, setAccessToken, setTokens } from './tokens';
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -50,10 +50,17 @@ async function refreshAccessToken(): Promise<string | null> {
     if (!refresh) return null;
     try {
       const { data } = await axios.post(`${getApiBaseUrl()}/auth/refresh/`, { refresh });
-      await setAccessToken(data.access);
+      // The backend rotates refresh tokens; keeping the new one is what lets
+      // a session slide forward instead of ending 30 days after login.
+      if (data.refresh) await setTokens(data.access, data.refresh);
+      else await setAccessToken(data.access);
       return data.access as string;
-    } catch {
-      return null;
+    } catch (err) {
+      // Only a rejected refresh token ends the session. A timeout or no
+      // network rethrows, so the caller fails this once and the person
+      // stays signed in for when the connection comes back.
+      if ((err as AxiosError).response) return null;
+      throw err;
     } finally {
       // Cleared inside the same promise so the next 401 starts a fresh
       // attempt rather than re-awaiting this settled one.
@@ -73,7 +80,12 @@ api.interceptors.response.use(
     }
     original._retry = true;
 
-    const access = await refreshAccessToken();
+    let access: string | null;
+    try {
+      access = await refreshAccessToken();
+    } catch {
+      return Promise.reject(error);
+    }
     if (!access) {
       await clearTokens();
       onSessionExpired?.();

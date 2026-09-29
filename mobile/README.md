@@ -1,4 +1,4 @@
-# CurePath Mobile
+# CuraPath Mobile
 
 An Expo (React Native) client for the **same** Django backend the web app uses.
 No API logic is duplicated server-side — every screen here talks to

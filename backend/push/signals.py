@@ -87,14 +87,14 @@ def _doctor_post_save(sender, instance, created, **kwargs):
         notify_account(
             instance.account,
             "You're verified",
-            'Your CurePath doctor account is approved. You can now request patient access.',
+            'Your CuraPath doctor account is approved. You can now request patient access.',
             {'url': '/', 'type': 'doctor_verified'},
         )
     elif instance.verification_status == Doctor.VerificationStatus.REJECTED:
         notify_account(
             instance.account,
             'Verification update',
-            "We couldn't verify your doctor account. Open CurePath for details.",
+            "We couldn't verify your doctor account. Open CuraPath for details.",
             {'url': '/', 'type': 'doctor_rejected'},
         )
 

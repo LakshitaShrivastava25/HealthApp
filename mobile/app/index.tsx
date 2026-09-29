@@ -26,7 +26,7 @@ export default function Index() {
   if (isLoading || seenIntro === null) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', backgroundColor: colors.surface }}>
-        <Loading />
+        <Loading label="Connecting to CuraPath… the first start can take a moment." />
       </View>
     );
   }

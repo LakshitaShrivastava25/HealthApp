@@ -40,7 +40,7 @@ export default function HelpSupport() {
     <Screen>
       <Card>
         <CardHeader
-          title="How CurePath works"
+          title="How CuraPath works"
           subtitle="Your records, your consent, on your phone"
         />
         {[

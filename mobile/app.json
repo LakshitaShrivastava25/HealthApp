@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "CurePath",
+    "name": "CuraPath",
     "slug": "healthnow-mobile",
-    "version": "1.0.2",
+    "version": "1.0.4",
     "orientation": "portrait",
     "scheme": "healthnow",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
         "backgroundColor": "#6D5BD0"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 3
+      "versionCode": 5
     },
     "plugins": [
       "expo-router",

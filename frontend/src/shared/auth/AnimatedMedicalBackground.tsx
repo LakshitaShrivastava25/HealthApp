@@ -160,7 +160,7 @@ export default function AnimatedMedicalBackground() {
         className="absolute left-[2%] bottom-[6%] hidden xl:block"
       >
         <FloatingObject float="hn-float-a" opacity={0.5}>
-          <Stethoscope size={168} />
+          <Stethoscope size={202} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -168,7 +168,7 @@ export default function AnimatedMedicalBackground() {
           one object from that pair that survives on every breakpoint. */}
       <ParallaxLayer origin={origin} strength={6} className="absolute left-[10%] bottom-[16%] sm:left-[13%]">
         <FloatingObject float="hn-float-b" opacity={0.62}>
-          <HeartEcg size={100} animated={!reduced} />
+          <HeartEcg size={128} animated={!reduced} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -180,7 +180,7 @@ export default function AnimatedMedicalBackground() {
         className="absolute right-[3%] bottom-[8%] hidden xl:block"
       >
         <FloatingObject float="hn-float-c" opacity={0.55}>
-          <Prescription size={128} />
+          <Prescription size={156} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -188,7 +188,7 @@ export default function AnimatedMedicalBackground() {
           the privacy message the security badge repeats in words. */}
       <ParallaxLayer origin={origin} strength={7} className="absolute bottom-[20%] right-[13%] hidden sm:block">
         <FloatingObject float="hn-float-d" opacity={0.5}>
-          <MedicalShield size={92} animated={!reduced} />
+          <MedicalShield size={116} animated={!reduced} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -216,7 +216,7 @@ export default function AnimatedMedicalBackground() {
                C1260,355 1320,350 1360,320 C1410,285 1440,300 1470,318 C1550,360 1610,315 1672,295"
             fill="none"
             stroke={C.white}
-            strokeOpacity="0.8"
+            strokeOpacity="0.65"
             strokeWidth="3"
             strokeLinecap="round"
           />
@@ -226,7 +226,7 @@ export default function AnimatedMedicalBackground() {
                C1260,355 1320,350 1360,320 C1410,285 1440,300 1470,318 C1550,360 1610,315 1672,295"
             fill="none"
             stroke={C.purpleSoft}
-            strokeOpacity="0.5"
+            strokeOpacity="0.35"
             strokeWidth="2"
             strokeLinecap="round"
             strokeDasharray="4 70"
@@ -237,7 +237,7 @@ export default function AnimatedMedicalBackground() {
           <JourneyArrow x={1360} y={320} rotate={-6} />
         </svg>
 
-        <StoryCluster origin={origin} strength={5} left="1%" top="15%" label="Symptoms" tone="purple">
+        <StoryCluster origin={origin} strength={5} left="1%" top="21%" label="Symptoms" tone="purple">
           <div className="relative">
             <CharacterArt src={patientImg} alt="" size={220} float="hn-float-b" />
             <SymptomBadge icon="thermometer" label="Fever" tone="purple" style={{ left: 82, top: 50 }} delay={0} />
@@ -483,7 +483,7 @@ function CharacterArt({
         width={size}
         height={size}
         initial={{ opacity: 0, scale: 0.94 }}
-        animate={{ opacity: 0.95, scale: 1 }}
+        animate={{ opacity: 0.82, scale: 1 }}
         transition={{ duration: 1.1, delay: 0.2 }}
         className="relative select-none"
         draggable={false}

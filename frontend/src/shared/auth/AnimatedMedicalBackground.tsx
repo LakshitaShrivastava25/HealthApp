@@ -157,18 +157,20 @@ export default function AnimatedMedicalBackground() {
       <ParallaxLayer
         origin={origin}
         strength={10}
-        className="absolute left-[2%] bottom-[6%] hidden xl:block"
+        className="absolute left-[1%] bottom-[3%] hidden xl:block"
       >
         <FloatingObject float="hn-float-a" opacity={0.5}>
-          <Stethoscope size={202} />
+          <Stethoscope size={240} />
         </FloatingObject>
       </ParallaxLayer>
 
-      {/* Heart + ECG: sits with the stethoscope in the low-left corner, the
-          one object from that pair that survives on every breakpoint. */}
-      <ParallaxLayer origin={origin} strength={6} className="absolute left-[10%] bottom-[16%] sm:left-[13%]">
+      {/* Heart + ECG: pushed further right and higher than the stethoscope
+          — before they crowded the same corner, now they spread across
+          the whole low-left quadrant instead of the one corner. Still the
+          one object from this pair that survives on every breakpoint. */}
+      <ParallaxLayer origin={origin} strength={6} className="absolute left-[19%] bottom-[13%] sm:left-[21%]">
         <FloatingObject float="hn-float-b" opacity={0.62}>
-          <HeartEcg size={128} animated={!reduced} />
+          <HeartEcg size={158} animated={!reduced} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -177,18 +179,37 @@ export default function AnimatedMedicalBackground() {
       <ParallaxLayer
         origin={origin}
         strength={8}
-        className="absolute right-[3%] bottom-[8%] hidden xl:block"
+        className="absolute right-[2%] bottom-[4%] hidden xl:block"
       >
         <FloatingObject float="hn-float-c" opacity={0.55}>
-          <Prescription size={156} />
+          <Prescription size={184} />
         </FloatingObject>
       </ParallaxLayer>
 
-      {/* Shield: security, low-right — kept on tablet because it carries
-          the privacy message the security badge repeats in words. */}
-      <ParallaxLayer origin={origin} strength={7} className="absolute bottom-[20%] right-[13%] hidden sm:block">
+      {/* Shield: security, spread further from the prescription so the
+          low-right quadrant fills out the same way the low-left one does
+          — kept on tablet because it carries the privacy message the
+          security badge repeats in words. */}
+      <ParallaxLayer origin={origin} strength={7} className="absolute bottom-[22%] right-[17%] hidden sm:block">
         <FloatingObject float="hn-float-d" opacity={0.5}>
-          <MedicalShield size={116} animated={!reduced} />
+          <MedicalShield size={140} animated={!reduced} />
+        </FloatingObject>
+      </ParallaxLayer>
+
+      {/* A second, smaller heartbeat up in the top band, between the
+          Symptoms and Doctor Consultation clusters — the upper half had
+          a wide gap of bare gradient with nothing living in it. */}
+      <ParallaxLayer origin={origin} strength={5} className="absolute left-[16%] top-[5%] hidden 2xl:block">
+        <FloatingObject float="hn-float-d" opacity={0.45}>
+          <HeartEcg size={68} animated={!reduced} />
+        </FloatingObject>
+      </ParallaxLayer>
+
+      {/* ...and its mirror on the right, between Treatment and Better
+          Health, for the same reason. */}
+      <ParallaxLayer origin={origin} strength={5} className="absolute right-[13%] top-[3%] hidden 2xl:block">
+        <FloatingObject float="hn-float-a" opacity={0.4}>
+          <Capsule size={64} />
         </FloatingObject>
       </ParallaxLayer>
 

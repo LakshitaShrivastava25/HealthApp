@@ -116,6 +116,14 @@ export default function AuthKeyframes() {
 
       @keyframes hn-spin { to { transform: rotate(360deg); } }
 
+      /* Tiny sparkle glints scattered across the mid-canvas — a quick
+         bright flash then gone, staggered per-glint via animation-delay
+         so they read as scattered twinkling rather than one pulse. */
+      @keyframes hn-twinkle {
+        0%, 100% { opacity: 0;   transform: scale(0.4); }
+        50%      { opacity: 0.9; transform: scale(1);   }
+      }
+
       /* A gentle "breathing" scale, layered on top of a float animation
          (via a comma-separated animation list) so badges and pills read
          as alive even in the instant their float pass is near zero. */
@@ -152,6 +160,7 @@ export default function AuthKeyframes() {
          instead of one animation clobbering the other. */
       .hn-pulse-soft { animation: hn-pulse-soft 3.2s ease-in-out infinite; }
       .hn-pulse-slow { animation: hn-pulse-slow 6s ease-in-out infinite; }
+      .hn-twinkle    { animation: hn-twinkle 3.6s ease-in-out infinite; }
 
       @media (prefers-reduced-motion: reduce) {
         .hn-float-a, .hn-float-b, .hn-float-c, .hn-float-d,
@@ -159,7 +168,7 @@ export default function AuthKeyframes() {
         .hn-orbit, .hn-orbit-rev,
         .hn-blob-a, .hn-blob-b, .hn-blob-c,
         .hn-particle, .hn-card-float, .hn-shake, .hn-dot-bounce,
-        .hn-flow-run, .hn-flow-dot, .hn-pulse-soft, .hn-pulse-slow {
+        .hn-flow-run, .hn-flow-dot, .hn-pulse-soft, .hn-pulse-slow, .hn-twinkle {
           animation: none !important;
         }
         /* Particles animate in from opacity 0, so with the animation off
@@ -167,6 +176,7 @@ export default function AuthKeyframes() {
         .hn-particle { opacity: 0.45 !important; }
         .hn-drift-fade { opacity: 0.45 !important; }
         .hn-flow-dot { opacity: 0.75 !important; }
+        .hn-twinkle { opacity: 0.5 !important; }
         .hn-spin { animation: hn-spin 1.4s linear infinite; }
       }
     `}</style>

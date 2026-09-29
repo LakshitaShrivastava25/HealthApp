@@ -56,10 +56,21 @@ const PARTICLES = [
   { l: 58, t: 96, s: 4, d: 13, delay: 2.2 },
   { l: 74, t: 42, s: 3, d: 19, delay: 5 },
   { l: 96, t: 79, s: 4, d: 14, delay: 3.6 },
+  { l: 3, t: 35, s: 3, d: 15, delay: 2.9 },
+  { l: 12, t: 58, s: 4, d: 12, delay: 4.4 },
+  { l: 25, t: 6, s: 3, d: 17, delay: 1.3 },
+  { l: 31, t: 63, s: 5, d: 14, delay: 5.8 },
+  { l: 40, t: 30, s: 3, d: 19, delay: 0.4 },
+  { l: 52, t: 62, s: 4, d: 13, delay: 3.3 },
+  { l: 63, t: 8, s: 3, d: 16, delay: 4.9 },
+  { l: 69, t: 68, s: 4, d: 18, delay: 1.6 },
+  { l: 85, t: 48, s: 3, d: 15, delay: 5.1 },
+  { l: 91, t: 92, s: 5, d: 12, delay: 2.6 },
 ] as const;
 
 /* Plus signs get their own table — different sizes, tones and speeds, so
-   they never pulse in lockstep. */
+   they never pulse in lockstep. Doubled up from the original set so the
+   wide mid-canvas bands (which have nothing else in them) aren't bare. */
 const PLUSES = [
   { l: '30%', t: '16%', size: 26, tone: 'purple', dur: 11, delay: 0, depth: 4, hide: '' },
   { l: '68%', t: '10%', size: 18, tone: 'teal', dur: 13, delay: 2.4, depth: 3, hide: '' },
@@ -67,6 +78,28 @@ const PLUSES = [
   { l: '17%', t: '78%', size: 22, tone: 'teal', dur: 14, delay: 3.7, depth: 4, hide: 'hidden sm:block' },
   { l: '52%', t: '92%', size: 16, tone: 'purple', dur: 12, delay: 5, depth: 3, hide: 'hidden lg:block' },
   { l: '89%', t: '34%', size: 20, tone: 'purple', dur: 10.5, delay: 1.8, depth: 4, hide: 'hidden lg:block' },
+  { l: '9%', t: '48%', size: 20, tone: 'teal', dur: 12.5, delay: 2.9, depth: 4, hide: 'hidden lg:block' },
+  { l: '41%', t: '8%', size: 15, tone: 'purple', dur: 10, delay: 4.2, depth: 3, hide: 'hidden md:block' },
+  { l: '58%', t: '84%', size: 24, tone: 'teal', dur: 13.5, delay: 0.7, depth: 4, hide: 'hidden sm:block' },
+  { l: '95%', t: '58%', size: 17, tone: 'purple', dur: 11.5, delay: 3.4, depth: 3, hide: 'hidden lg:block' },
+  { l: '4%', t: '90%', size: 19, tone: 'teal', dur: 14.5, delay: 1.4, depth: 4, hide: 'hidden md:block' },
+  { l: '35%', t: '95%', size: 14, tone: 'purple', dur: 9, delay: 5.4, depth: 3, hide: 'hidden lg:block' },
+] as const;
+
+/* A scatter of tiny twinkling glints — the little bright pinpricks the
+   reference mock has drifting along its wave. Pure decoration, no medical
+   meaning, just something living in the otherwise-bare mid-canvas. */
+const GLINTS = [
+  { l: 12, t: 12, size: 5, delay: 0 },
+  { l: 30, t: 45, size: 6, delay: 1.4 },
+  { l: 46, t: 20, size: 4, delay: 2.8 },
+  { l: 54, t: 70, size: 5, delay: 0.6 },
+  { l: 62, t: 38, size: 6, delay: 3.6 },
+  { l: 73, t: 14, size: 4, delay: 2.1 },
+  { l: 81, t: 55, size: 5, delay: 4.4 },
+  { l: 90, t: 22, size: 6, delay: 1.1 },
+  { l: 20, t: 82, size: 4, delay: 3.2 },
+  { l: 67, t: 88, size: 5, delay: 0.2 },
 ] as const;
 
 /* Each ring carries one travelling dot. Alternating direction keeps the
@@ -374,6 +407,41 @@ export default function AnimatedMedicalBackground() {
             }}
           />
         ))}
+      </ParallaxLayer>
+
+      {/* 5a — tiny twinkling glints, scattered across the mid-canvas so
+          the wide bare bands between the corner objects and the card
+          aren't empty gradient. */}
+      <ParallaxLayer origin={origin} strength={1} className="absolute inset-0 hidden md:block">
+        {GLINTS.map((g, i) => (
+          <span
+            key={i}
+            className="hn-twinkle absolute rounded-full"
+            style={{
+              left: `${g.l}%`,
+              top: `${g.t}%`,
+              width: g.size,
+              height: g.size,
+              background: C.white,
+              boxShadow: `0 0 ${g.size * 2}px ${C.white}, 0 0 ${g.size}px ${C.tealSoft}`,
+              animationDelay: `${g.delay}s`,
+            }}
+          />
+        ))}
+      </ParallaxLayer>
+
+      {/* A couple of extra medical accents in the wide mid-left / mid-right
+          bands — otherwise the largest stretch of the page has nothing in
+          it but blob gradient. */}
+      <ParallaxLayer origin={origin} strength={3} className="absolute left-[6%] top-[52%] hidden lg:block">
+        <FloatingObject float="hn-float-c" opacity={0.4}>
+          <PlusMark size={22} tone="teal" />
+        </FloatingObject>
+      </ParallaxLayer>
+      <ParallaxLayer origin={origin} strength={3} className="absolute right-[7%] top-[46%] hidden lg:block">
+        <FloatingObject float="hn-float-b" opacity={0.4}>
+          <Capsule size={48} />
+        </FloatingObject>
       </ParallaxLayer>
 
       {/* 6 — centre wash. Without this the card sits on top of the busiest

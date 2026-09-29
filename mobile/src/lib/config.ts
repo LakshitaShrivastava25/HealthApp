@@ -27,10 +27,10 @@ import { Platform } from 'react-native';
  */
 
 /** Fallback used when EXPO_PUBLIC_USE_PRODUCTION_API is not set. */
-const USE_PRODUCTION_API = false;
+const USE_PRODUCTION_API = true;
 
 /** The live backend. Override from `.env` if the host changes. */
-const DEFAULT_PRODUCTION_API_URL = 'https://api.healthnow.app/api';
+const DEFAULT_PRODUCTION_API_URL = 'https://healthapp-backend-li7g.onrender.com/api';
 
 const DJANGO_PORT = 8000;
 

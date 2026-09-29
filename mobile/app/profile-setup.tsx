@@ -1,8 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import DateField from '../src/components/DateField';
 import { Button, Card, ErrorNote, Input } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { profilesApi } from '../src/lib/api';
@@ -70,8 +72,12 @@ export default function ProfileSetup() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={spacing.xl}
+      >
+        <View style={styles.inner}>
           <View>
             <Text style={type.h1}>Set up your profile</Text>
             <Text style={[type.caption, { marginTop: spacing.xs }]}>
@@ -87,14 +93,18 @@ export default function ProfileSetup() {
               onChangeText={setFullName}
               placeholder="e.g. Priya Sharma"
               autoCapitalize="words"
+              autoComplete="name"
+              textContentType="name"
+              returnKeyType="done"
             />
 
-            <Input
+            <DateField
               label="Date of birth (optional)"
               value={dateOfBirth}
-              onChangeText={setDateOfBirth}
-              placeholder="YYYY-MM-DD"
-              keyboardType="numbers-and-punctuation"
+              onChange={setDateOfBirth}
+              placeholder="Pick your date of birth"
+              maximumDate={new Date()}
+              minimumDate={new Date(1900, 0, 1)}
             />
             {!dobValid && (
               <Text style={styles.fieldError}>
@@ -140,15 +150,16 @@ export default function ProfileSetup() {
               Continue
             </Button>
           </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  scroll: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1, justifyContent: 'center' },
+  scroll: { padding: spacing.lg, flexGrow: 1, justifyContent: 'center' },
+  inner: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: spacing.lg },
   groupLabel: { ...type.caption, marginBottom: spacing.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   chip: {

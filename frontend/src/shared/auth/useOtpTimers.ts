@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Mirrors OTP_TTL_MINUTES in backend/accounts/services.py. */
-export const OTP_TTL_SECONDS = 5 * 60;
+export const OTP_TTL_SECONDS = 10 * 60;
 /** How long before "Resend code" becomes available again. */
 export const RESEND_COOLDOWN_SECONDS = 30;
 /** Mirrors OTP_RATE_LIMIT_PER_HOUR — the point at which sending stops. */

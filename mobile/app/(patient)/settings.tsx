@@ -8,6 +8,7 @@ import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '
 import { useAuth } from '../../src/context/AuthContext';
 import { authApi, profilesApi } from '../../src/lib/api';
 import { colors, radius, spacing, type } from '../../src/theme';
+import NotificationSettingsCard from '../../src/components/NotificationSettingsCard';
 
 const RELATIONS = ['father', 'mother', 'spouse', 'son', 'daughter', 'other'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
@@ -190,7 +191,7 @@ export default function Settings() {
             ].map(([label, value]) => (
               <Row key={label} style={styles.factRow}>
                 <Text style={[type.caption, { flex: 1 }]}>{label}</Text>
-                <Text style={type.label}>{value}</Text>
+                <Text style={[type.label, styles.factValue]}>{value}</Text>
               </Row>
             ))}
             <Button variant="secondary" onPress={startEditing} style={{ marginTop: spacing.md }}>
@@ -257,6 +258,8 @@ export default function Settings() {
         )}
       </Card>
 
+      <NotificationSettingsCard note="Medicine reminders and doctor access requests" />
+
       <Card>
         <CardHeader title="Account" />
         <Row style={styles.factRow}>
@@ -292,6 +295,7 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
+  factValue: { flexShrink: 1, textAlign: 'right', marginLeft: spacing.md },
   factRow: {
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,

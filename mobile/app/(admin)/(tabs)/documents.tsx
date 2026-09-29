@@ -110,7 +110,7 @@ export default function AdminDocuments() {
                     {d.title || 'Untitled document'}
                   </Text>
                   <Text style={type.micro}>Uploaded {d.uploaded_at.slice(0, 10)}</Text>
-                  <Row style={{ marginTop: spacing.sm }}>
+                  <Row style={{ marginTop: spacing.sm, flexWrap: 'wrap' }}>
                     <Badge tone="neutral">{d.category}</Badge>
                     <Badge tone={d.status === 'needs_review' ? 'warning' : 'success'}>
                       {d.status.replace('_', ' ')}

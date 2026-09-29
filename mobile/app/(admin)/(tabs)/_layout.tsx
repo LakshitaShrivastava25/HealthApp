@@ -16,6 +16,7 @@ export default function AdminTabs() {
         animation: 'shift',
         tabBarActiveTintColor: colors.ink900,
         tabBarInactiveTintColor: colors.ink300,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         headerStyle: { backgroundColor: colors.card },

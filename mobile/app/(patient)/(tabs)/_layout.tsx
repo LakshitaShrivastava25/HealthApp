@@ -24,6 +24,7 @@ export default function PatientTabs() {
         animation: 'shift',
         tabBarActiveTintColor: colors.brandPurple,
         tabBarInactiveTintColor: colors.ink300,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         // The active family member has to be visible and switchable from
@@ -90,7 +91,7 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.card,
     borderTopWidth: 0,
-    height: Platform.OS === 'ios' ? 90 : 70,
+    minHeight: Platform.OS === 'ios' ? 90 : 70,
     paddingTop: 8,
     paddingBottom: Platform.OS === 'ios' ? 28 : 10,
     shadowColor: '#101828',

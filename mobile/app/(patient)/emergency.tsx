@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
+import PhoneInput, { isValidPhone, toE164 } from '../../src/components/PhoneInput';
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { allergiesApi, emergencyApi, medicinesApi, unwrap } from '../../src/lib/api';
@@ -86,7 +87,7 @@ export default function EmergencyCard() {
     setCreating(true);
     setError(null);
     try {
-      await emergencyApi.create(activeProfile.id, contactName.trim(), contactPhone.trim());
+      await emergencyApi.create(activeProfile.id, contactName.trim(), toE164(contactPhone));
       await load();
     } catch {
       setError("Couldn't create the card. Check your connection and try again.");
@@ -162,16 +163,14 @@ export default function EmergencyCard() {
             placeholder="e.g. Anita Sharma"
             autoCapitalize="words"
           />
-          <Input
-            label="Emergency contact phone"
+          <PhoneInput
+            label="Emergency contact mobile"
             value={contactPhone}
             onChangeText={setContactPhone}
-            placeholder="+91 98765 43210"
-            keyboardType="phone-pad"
           />
           <Button
             onPress={handleCreate}
-            disabled={!contactName.trim() || !contactPhone.trim()}
+            disabled={!contactName.trim() || !isValidPhone(contactPhone)}
             loading={creating}
           >
             Generate emergency QR
@@ -181,7 +180,9 @@ export default function EmergencyCard() {
         <>
           <Card>
             <Row style={{ justifyContent: 'space-between' }}>
-              <Text style={type.h2}>{activeProfile?.full_name}</Text>
+              <Text style={[type.h2, { flex: 1 }]} numberOfLines={2}>
+                {activeProfile?.full_name}
+              </Text>
               <Badge tone={ep.is_active ? 'success' : 'danger'}>
                 {ep.is_active ? 'Active' : 'Revoked'}
               </Badge>
@@ -207,7 +208,7 @@ export default function EmergencyCard() {
               {ep.include_blood_group && (
                 <Row>
                   <Feather name="droplet" size={14} color={colors.danger} />
-                  <Text style={type.caption}>
+                  <Text style={[type.caption, { flex: 1 }]}>
                     Blood group: {activeProfile?.blood_group || 'not recorded'}
                   </Text>
                 </Row>
@@ -231,7 +232,7 @@ export default function EmergencyCard() {
               {ep.include_emergency_contact && (
                 <Row>
                   <Feather name="phone" size={14} color={colors.brandTeal} />
-                  <Text style={type.caption}>
+                  <Text style={[type.caption, { flex: 1 }]}>
                     {ep.emergency_contact_name} · {ep.emergency_contact_phone}
                   </Text>
                 </Row>

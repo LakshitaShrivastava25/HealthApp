@@ -8,6 +8,7 @@ import {
   unwrap,
 } from '../lib/api';
 import { setApiBaseUrl } from '../lib/config';
+import { clearLocalNotifications, unregisterForPush } from '../lib/notifications';
 import { clearTokens, getAccessToken, getStoredApiBaseUrl, setTokens } from '../lib/tokens';
 
 export type Role = 'patient' | 'doctor' | 'admin' | 'ocr_reviewer' | 'claims_ops';
@@ -143,6 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshDoctor, refreshProfiles]);
 
   const logout = useCallback(async () => {
+    // Unregister while the session can still authenticate the request, so
+    // the next person to sign in on this phone doesn't get these alerts.
+    await unregisterForPush();
+    await clearLocalNotifications();
     await clearTokens();
     setAccount(null);
     setProfiles([]);

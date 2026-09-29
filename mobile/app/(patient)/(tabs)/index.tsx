@@ -219,6 +219,7 @@ export default function Dashboard() {
           <Pressable
             onPress={() => ask(question)}
             disabled={asking || !question.trim()}
+            hitSlop={6}
             style={[styles.askSend, (asking || !question.trim()) && { opacity: 0.5 }]}
           >
             <Feather name="arrow-up" size={18} color={colors.brandPurple} />

@@ -161,6 +161,12 @@ export const insuranceApi = {
     api.post(`/insurance/${policyId}/estimate/`, { claim_category, estimated_bill }),
 };
 
+export const pushApi = {
+  register: (token: string, platform: 'android' | 'ios') =>
+    api.post('/auth/push-devices/', { token, platform }),
+  unregister: (token: string) => api.delete('/auth/push-devices/', { data: { token } }),
+};
+
 export const medicinesApi = {
   list: (profileId: string) => api.get('/medications/', { params: { profile_id: profileId } }),
   create: (data: Record<string, unknown>) => api.post('/medications/', data),

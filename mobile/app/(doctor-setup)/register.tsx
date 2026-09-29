@@ -197,7 +197,7 @@ export default function DoctorRegister() {
             <Text style={[type.caption, { flex: 1 }]} numberOfLines={1}>
               {license.name}
             </Text>
-            <Pressable onPress={() => setLicense(null)}>
+            <Pressable onPress={() => setLicense(null)} hitSlop={12}>
               <Feather name="x" size={16} color={colors.ink500} />
             </Pressable>
           </Row>

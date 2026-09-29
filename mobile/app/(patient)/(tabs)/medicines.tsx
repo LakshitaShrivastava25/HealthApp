@@ -7,6 +7,7 @@ import { Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import { Button, Card, EmptyState, ErrorNote, Input, Row, Screen } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { medicinesApi, unwrap } from '../../../src/lib/api';
+import { syncMedicineReminders } from '../../../src/lib/notifications';
 import { colors, radius, spacing, type } from '../../../src/theme';
 
 type Reminder = { id: string; time_of_day: string; days_of_week: string };
@@ -31,7 +32,7 @@ function formatTime(hhmmss: string) {
 }
 
 export default function Medicines() {
-  const { activeProfile } = useAuth();
+  const { activeProfile, profiles } = useAuth();
 
   const [medications, setMedications] = useState<Medication[]>([]);
   const [takenToday, setTakenToday] = useState<Set<string>>(new Set());
@@ -122,6 +123,7 @@ export default function Medicines() {
       setFrequency('daily');
       setShowForm(false);
       await load();
+      void syncMedicineReminders(profiles);
     } catch {
       setFormError("Couldn't save that medicine. Check your connection and try again.");
     } finally {
@@ -134,6 +136,7 @@ export default function Medicines() {
     try {
       await medicinesApi.delete(id);
       await load();
+      void syncMedicineReminders(profiles);
     } catch {
       setError("Couldn't remove that medicine.");
     }
@@ -246,15 +249,15 @@ export default function Medicines() {
             {confirmDeleteId === m.id ? (
               <Row>
                 <Text style={[type.caption, { color: colors.danger, flex: 1 }]}>Remove {m.name}?</Text>
-                <Pressable onPress={() => handleDelete(m.id)}>
+                <Pressable onPress={() => handleDelete(m.id)} hitSlop={10} style={styles.actionTap}>
                   <Text style={styles.dangerAction}>Yes, remove</Text>
                 </Pressable>
-                <Pressable onPress={() => setConfirmDeleteId(null)}>
+                <Pressable onPress={() => setConfirmDeleteId(null)} hitSlop={10} style={styles.actionTap}>
                   <Text style={styles.mutedAction}>Cancel</Text>
                 </Pressable>
               </Row>
             ) : (
-              <Pressable onPress={() => setConfirmDeleteId(m.id)}>
+              <Pressable onPress={() => setConfirmDeleteId(m.id)} hitSlop={10} style={styles.actionTap}>
                 <Row>
                   <Feather name="trash-2" size={13} color={colors.ink500} />
                   <Text style={styles.mutedAction}>Remove</Text>
@@ -269,6 +272,7 @@ export default function Medicines() {
 }
 
 const styles = StyleSheet.create({
+  actionTap: { paddingVertical: 6, paddingHorizontal: 4 },
   pillIcon: {
     width: 40,
     height: 40,

@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'ai',
     'doctors',
     'admin_portal',
+    'push',
 ]
 
 MIDDLEWARE = [
@@ -141,12 +142,17 @@ CORS_ALLOWED_ORIGINS = os.getenv(
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 OCR_PROVIDER_API_KEY = os.getenv('OCR_PROVIDER_API_KEY', '')
 
-# 2Factor.in SMS OTP (see accounts/services.py). Until the API key is set,
-# OTPs are only printed to the server log (and returned when DEBUG=True).
-# TWOFACTOR_OTP_TEMPLATE is the REQUIRED approved SMS OTP template name from
-# the 2Factor dashboard; without it no OTP is sent (see accounts/services.py).
+# 2Factor.in OTP SMS, sent as a DLT transactional SMS (see accounts/services.py).
+# Until the API key is set, OTPs are only printed to the server log (and
+# returned when DEBUG=True). The Sender ID + template must be mapped under
+# Transactional SMS in the 2Factor dashboard; the OTP fills its first variable.
 TWOFACTOR_API_KEY = os.getenv('TWOFACTOR_API_KEY', '')
-TWOFACTOR_OTP_TEMPLATE = os.getenv('TWOFACTOR_OTP_TEMPLATE', '')
+TWOFACTOR_SENDER_ID = os.getenv('TWOFACTOR_SENDER_ID', 'CURAPT')
+TWOFACTOR_TEMPLATE_NAME = os.getenv('TWOFACTOR_TEMPLATE_NAME', 'CuraPathOTP')
+# Optional DLT ids (PE ID / content template ID) — only needed if 2Factor
+# asks for them; leave blank otherwise.
+TWOFACTOR_DLT_PE_ID = os.getenv('TWOFACTOR_DLT_PE_ID', '')
+TWOFACTOR_DLT_TEMPLATE_ID = os.getenv('TWOFACTOR_DLT_TEMPLATE_ID', '')
 
 # Show the OTP flow's INFO logs ("Sending OTP via 2Factor SMS ...") in the
 # server console; Python's default root level (WARNING) would hide them.

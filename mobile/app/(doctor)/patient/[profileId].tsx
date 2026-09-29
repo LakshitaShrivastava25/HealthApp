@@ -148,7 +148,7 @@ export default function PatientRecordView() {
         ) : (
           timeline.map((e) => (
             <Row key={e.id} style={styles.listRow}>
-              <Text style={[type.micro, { width: 62 }]}>{e.event_date}</Text>
+              <Text style={[type.micro, { minWidth: 62, flexShrink: 0 }]}>{e.event_date}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={type.label}>{e.title}</Text>
                 {!!e.summary && <Text style={type.micro}>{e.summary}</Text>}

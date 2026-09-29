@@ -367,11 +367,11 @@ export default function Insurance() {
                 </Row>
                 {estimate.eligible && (
                   <Row style={{ marginTop: spacing.sm, gap: spacing.xl }}>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={type.micro}>Insurer pays</Text>
                       <Text style={type.title}>{money(estimate.estimated_insurer_share)}</Text>
                     </View>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={type.micro}>You pay</Text>
                       <Text style={type.title}>{money(estimate.estimated_out_of_pocket)}</Text>
                     </View>
@@ -413,6 +413,7 @@ export default function Insurance() {
               <Pressable
                 onPress={handleAsk}
                 disabled={chatBusy || !question.trim()}
+                hitSlop={8}
                 style={[styles.askSend, (chatBusy || !question.trim()) && { opacity: 0.4 }]}
               >
                 <Feather name="arrow-up" size={16} color={colors.white} />

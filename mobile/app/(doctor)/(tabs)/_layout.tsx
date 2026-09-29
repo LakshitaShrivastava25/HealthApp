@@ -16,6 +16,7 @@ export default function DoctorTabs() {
         animation: 'shift',
         tabBarActiveTintColor: colors.brandTeal,
         tabBarInactiveTintColor: colors.ink300,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         headerStyle: { backgroundColor: colors.card },

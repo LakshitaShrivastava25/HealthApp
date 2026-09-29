@@ -2,22 +2,23 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
+  Keyboard,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BeatingHeart from '../src/components/BeatingHeart';
 import { RecordsArt } from '../src/components/Illustrations';
+import PhoneInput, { isValidPhone, toE164 } from '../src/components/PhoneInput';
 import { Button, Card, ErrorNote, Input } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
-import { getApiBaseUrl, setApiBaseUrl } from '../src/lib/config';
+import { getApiBaseUrl, IS_PRODUCTION, setApiBaseUrl } from '../src/lib/config';
 import { storeApiBaseUrl } from '../src/lib/tokens';
 import { colors, radius, spacing, type } from '../src/theme';
 import { useConfirmExit } from '../src/lib/useBackHandler';
@@ -26,7 +27,10 @@ const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
 
 /** Mirrors the backend's OTP_TTL_MINUTES in accounts/services.py. */
-const OTP_TTL_SECONDS = 5 * 60;
+const OTP_TTL_SECONDS = 10 * 60;
+
+/** After this long, say the server is waking up rather than look frozen. */
+const SLOW_REQUEST_MS = 6000;
 
 function describeError(err: unknown, fallback: string) {
   const e = err as { response?: { status?: number; data?: Record<string, unknown> }; message?: string };
@@ -36,7 +40,9 @@ function describeError(err: unknown, fallback: string) {
   if (status === 429) return 'Too many OTP requests. Try again in a little while.';
   if (status === 400) return 'That code was not right. Check it and try again.';
   if (!e?.response) {
-    return "Couldn't reach the server. Check that the backend is running and that this phone is on the same network.";
+    return IS_PRODUCTION
+      ? "Couldn't reach CurePath. Check your internet connection and try again."
+      : "Couldn't reach the server. Check that the backend is running and that this phone is on the same network.";
   }
   return fallback;
 }
@@ -67,6 +73,31 @@ export default function Login() {
   const [baseUrlDraft, setBaseUrlDraft] = useState(getApiBaseUrl());
 
   const otpInputRef = useRef<TextInput>(null);
+  const phoneInputRef = useRef<TextInput>(null);
+
+  const { width, height } = useWindowDimensions();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  // A free-tier server sleeps when idle and takes a while to answer the
+  // first request; say so instead of leaving a spinner that looks stuck.
+  useEffect(() => {
+    if (!busy) {
+      setSlow(false);
+      return;
+    }
+    const id = setTimeout(() => setSlow(true), SLOW_REQUEST_MS);
+    return () => clearTimeout(id);
+  }, [busy]);
 
   // One ticker drives both the resend cooldown and the code's real expiry,
   // so the screen can never claim a code is still valid after the backend
@@ -80,9 +111,11 @@ export default function Login() {
     return () => clearInterval(id);
   }, [step]);
 
-  const fullNumber = phone.trim().startsWith('+') ? phone.trim() : `+91${phone.trim()}`;
+  const fullNumber = toE164(phone);
 
   async function handleSendOtp(isResend = false) {
+    if (busy) return;
+    Keyboard.dismiss();
     setError(null);
     setBusy(true);
     try {
@@ -126,26 +159,36 @@ export default function Login() {
     setError(null);
   }
 
-  const phoneReady = phone.trim().replace(/\D/g, '').length >= 10;
+  const phoneReady = isValidPhone(phone);
+
+  // The illustration is decoration: drop it while typing, and on short
+  // screens, so the field and its button always fit above the keyboard.
+  const showHero = step === 'phone' && !keyboardOpen && height >= 640;
+  const heroWidth = Math.min(200, width * 0.5);
+  const compact = keyboardOpen || height < 640;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAwareScrollView
+        contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]}
+        keyboardShouldPersistTaps="handled"
+        // Room for the button under the focused field, not just the field.
+        bottomOffset={96}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.brandBlock}>
-            {step === 'phone' && (
+        <View style={styles.inner}>
+          <View style={[styles.brandBlock, compact && styles.brandBlockCompact]}>
+            {showHero && (
               <View style={styles.hero}>
-                <RecordsArt width={200} />
+                <RecordsArt width={heroWidth} />
               </View>
             )}
-            <BeatingHeart size={56} halo />
-            <Text style={styles.brandName}>CurePath</Text>
-            <Text style={styles.brandTag}>
-              Your family's health records, insurance and medicines in one place.
-            </Text>
+            <BeatingHeart size={compact ? 40 : 56} halo={!compact} />
+            <Text style={[styles.brandName, compact && styles.brandNameCompact]}>CurePath</Text>
+            {!compact && (
+              <Text style={styles.brandTag}>
+                Your family's health records, insurance and medicines in one place.
+              </Text>
+            )}
           </View>
 
           <Card>
@@ -156,13 +199,14 @@ export default function Login() {
                   We'll text you a 6-digit code. The same number works for patients, doctors and
                   staff — your account decides what you see.
                 </Text>
-                <Input
-                  label="Phone number"
+                <PhoneInput
+                  ref={phoneInputRef}
+                  label="Mobile number"
                   value={phone}
-                  onChangeText={setPhone}
-                  placeholder="+91 98765 43210"
-                  keyboardType="phone-pad"
-                  autoComplete="tel"
+                  onChangeText={(digits) => {
+                    setPhone(digits);
+                    if (error) setError(null);
+                  }}
                   returnKeyType="go"
                   onSubmitEditing={() => phoneReady && handleSendOtp()}
                 />
@@ -172,9 +216,20 @@ export default function Login() {
               </>
             ) : (
               <>
-                <Pressable onPress={() => setStep('phone')} style={styles.backRow}>
+                <Pressable
+                  onPress={() => {
+                    setStep('phone');
+                    setError(null);
+                    setTimeout(() => phoneInputRef.current?.focus(), 250);
+                  }}
+                  style={styles.backRow}
+                  hitSlop={12}
+                >
                   <Feather name="arrow-left" size={15} color={colors.ink500} />
-                  <Text style={type.caption}>{fullNumber}</Text>
+                  <Text style={type.caption}>
+                    {fullNumber.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')}
+                  </Text>
+                  <Text style={styles.changeLink}>Change</Text>
                 </Pressable>
 
                 <Text style={type.h2}>Enter the code</Text>
@@ -189,7 +244,11 @@ export default function Login() {
                     {Array.from({ length: OTP_LENGTH }).map((_, i) => (
                       <View
                         key={i}
-                        style={[styles.otpCell, otp.length === i && styles.otpCellActive]}
+                        style={[
+                          styles.otpCell,
+                          !!otp[i] && styles.otpCellFilled,
+                          otp.length === i && styles.otpCellActive,
+                        ]}
                       >
                         <Text style={styles.otpDigit}>{otp[i] ?? ''}</Text>
                       </View>
@@ -206,12 +265,14 @@ export default function Login() {
                   onChangeText={(text) => {
                     const digits = text.replace(/\D/g, '').slice(0, OTP_LENGTH);
                     setOtp(digits);
+                    if (error) setError(null);
                     if (digits.length === OTP_LENGTH) handleVerify(digits);
                   }}
                   keyboardType="number-pad"
                   textContentType="oneTimeCode"
                   autoComplete="sms-otp"
-                  maxLength={OTP_LENGTH}
+                  // No maxLength: an SMS autofill or paste can carry extra
+                  // characters, and onChangeText trims to six digits.
                   style={styles.hiddenInput}
                   autoFocus
                 />
@@ -231,14 +292,21 @@ export default function Login() {
 
                 <Pressable
                   onPress={() => secondsLeft === 0 && handleSendOtp(true)}
-                  disabled={secondsLeft > 0}
+                  disabled={secondsLeft > 0 || busy}
                   style={styles.resend}
+                  hitSlop={12}
                 >
                   <Text style={[type.caption, secondsLeft === 0 && styles.resendActive]}>
                     {secondsLeft > 0 ? `Resend code in ${secondsLeft}s` : 'Resend code'}
                   </Text>
                 </Pressable>
               </>
+            )}
+
+            {busy && slow && (
+              <Text style={[type.caption, styles.slowNote]}>
+                Waking up the server — this can take up to a minute the first time.
+              </Text>
             )}
 
             {!!error && (
@@ -248,12 +316,16 @@ export default function Login() {
             )}
           </Card>
 
-          <Pressable onPress={() => setShowConnection((v) => !v)} style={styles.connToggle}>
-            <Feather name="wifi" size={13} color={colors.ink500} />
-            <Text style={type.caption}>Can't connect?</Text>
-          </Pressable>
+          {/* The server-address panel is a development aid; someone using
+              the release build has no address to type in. */}
+          {!IS_PRODUCTION && (
+            <Pressable onPress={() => setShowConnection((v) => !v)} style={styles.connToggle}>
+              <Feather name="wifi" size={13} color={colors.ink500} />
+              <Text style={type.caption}>Can't connect?</Text>
+            </Pressable>
+          )}
 
-          {showConnection && (
+          {!IS_PRODUCTION && showConnection && (
             <Card>
               <Text style={type.title}>Server address</Text>
               <Text style={[type.caption, styles.stepNote]}>
@@ -280,18 +352,25 @@ export default function Login() {
 
           <View style={styles.securityRow}>
             <Feather name="shield" size={13} color={colors.ink300} />
-            <Text style={type.micro}>Your records are private and only visible to you.</Text>
+            <Text style={[type.micro, { flexShrink: 1, textAlign: 'center' }]}>
+              Your records are private and only visible to you.
+            </Text>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  scroll: { padding: spacing.lg, gap: spacing.md, flexGrow: 1, justifyContent: 'center' },
+  scroll: { padding: spacing.lg, flexGrow: 1, justifyContent: 'center' },
+  scrollCompact: { justifyContent: 'flex-start', paddingTop: spacing.xl },
+  // Caps the form's width on tablets and landscape so it doesn't stretch edge to edge.
+  inner: { width: '100%', maxWidth: 440, alignSelf: 'center', gap: spacing.md },
   brandBlock: { alignItems: 'center', marginBottom: spacing.lg },
+  brandBlockCompact: { marginBottom: spacing.xs },
+  brandNameCompact: { fontSize: 22, marginTop: spacing.sm },
   hero: { marginBottom: spacing.sm },
   brandName: { ...type.h1, marginTop: spacing.md },
   brandTag: {
@@ -302,10 +381,13 @@ const styles = StyleSheet.create({
   },
   stepNote: { marginTop: spacing.xs, marginBottom: spacing.lg },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.lg },
+  changeLink: { fontSize: 12, fontWeight: '600', color: colors.brandPurple, marginLeft: 2 },
+  // Cells share the row's width, so six always fit — a 320dp phone included.
+  otpRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.lg },
   otpCell: {
-    width: 46,
-    height: 54,
+    flex: 1,
+    maxWidth: 56,
+    height: 56,
     borderRadius: radius.md,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -313,6 +395,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  otpCellFilled: { borderColor: colors.ink300, backgroundColor: colors.card },
   otpCellActive: { borderColor: colors.brandPurple, backgroundColor: colors.brandLavender },
   otpDigit: { fontSize: 22, fontWeight: '700', color: colors.ink900 },
   hiddenInput: { position: 'absolute', opacity: 0, height: 1, width: 1 },
@@ -325,8 +408,9 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     marginBottom: spacing.md,
   },
-  debugText: { fontSize: 12, color: colors.info },
-  resend: { alignItems: 'center', marginTop: spacing.md },
+  debugText: { fontSize: 12, color: colors.info, flexShrink: 1 },
+  resend: { alignItems: 'center', marginTop: spacing.md, paddingVertical: spacing.xs },
+  slowNote: { textAlign: 'center', marginTop: spacing.md },
   resendActive: { color: colors.brandPurple, fontWeight: '600' },
   connToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   securityRow: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },

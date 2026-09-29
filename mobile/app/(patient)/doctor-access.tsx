@@ -160,7 +160,7 @@ export default function DoctorAccess() {
                 <Text style={type.label}>Dr. {g.doctor_detail?.full_name ?? 'Unknown doctor'}</Text>
                 <Text style={type.micro}>{g.doctor_detail?.specialization}</Text>
               </View>
-              <Pressable onPress={() => confirmRevoke(g)} disabled={acting === g.id}>
+              <Pressable onPress={() => confirmRevoke(g)} disabled={acting === g.id} hitSlop={10}>
                 <Text style={styles.revokeText}>Revoke</Text>
               </Pressable>
             </Row>
@@ -173,7 +173,9 @@ export default function DoctorAccess() {
           <CardHeader title="Past requests" />
           {past.map((g) => (
             <Row key={g.id} style={{ justifyContent: 'space-between', paddingVertical: spacing.sm }}>
-              <Text style={type.caption}>Dr. {g.doctor_detail?.full_name ?? 'Unknown doctor'}</Text>
+              <Text style={[type.caption, { flex: 1 }]} numberOfLines={1}>
+                Dr. {g.doctor_detail?.full_name ?? 'Unknown doctor'}
+              </Text>
               <Badge tone={g.status === 'denied' ? 'danger' : 'neutral'}>{g.status}</Badge>
             </Row>
           ))}

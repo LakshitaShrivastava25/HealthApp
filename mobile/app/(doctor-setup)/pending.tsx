@@ -70,7 +70,7 @@ export default function PendingVerification() {
           ].map(([label, value]) => (
             <Row key={label} style={styles.factRow}>
               <Text style={[type.caption, { flex: 1 }]}>{label}</Text>
-              <Text style={type.label}>{value}</Text>
+              <Text style={[type.label, styles.factValue]}>{value}</Text>
             </Row>
           ))}
         </Card>
@@ -96,6 +96,7 @@ export default function PendingVerification() {
 }
 
 const styles = StyleSheet.create({
+  factValue: { flexShrink: 1, textAlign: 'right', marginLeft: spacing.md },
   iconWrap: {
     width: 56,
     height: 56,

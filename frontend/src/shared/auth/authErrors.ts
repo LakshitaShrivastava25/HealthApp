@@ -14,7 +14,7 @@
  */
 
 export type AuthErrorContext = {
-  /** The local 5-minute countdown has reached zero. */
+  /** The local 10-minute countdown has reached zero. */
   expired?: boolean;
   /** How many codes this session has already had rejected. */
   rejectedAttempts?: number;
@@ -59,7 +59,7 @@ export function describeVerifyOtpError(err: unknown, ctx: AuthErrorContext = {})
   }
   if (status === 400) {
     if (ctx.expired) {
-      return 'That code has expired. Codes are valid for 5 minutes — request a new one.';
+      return 'That code has expired. Codes are valid for 10 minutes — request a new one.';
     }
     if ((ctx.rejectedAttempts ?? 0) + 1 >= MAX_VERIFY_ATTEMPTS) {
       return 'Too many incorrect attempts. This code is no longer valid — request a new one.';

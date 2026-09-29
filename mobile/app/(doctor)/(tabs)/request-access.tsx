@@ -102,7 +102,7 @@ export default function RequestAccess() {
         {success && (
           <Row style={styles.successRow}>
             <Feather name="check-circle" size={15} color={colors.success} />
-            <Text style={[type.caption, { color: colors.success }]}>
+            <Text style={[type.caption, { color: colors.success, flex: 1 }]}>
               Request sent — waiting for the patient to approve.
             </Text>
           </Row>

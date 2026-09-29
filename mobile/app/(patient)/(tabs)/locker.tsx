@@ -179,7 +179,7 @@ export default function Locker() {
                 <Text style={type.micro}>
                   {[d.document_date, d.hospital_name].filter(Boolean).join(' · ') || 'No date recorded'}
                 </Text>
-                <Row style={{ marginTop: spacing.sm }}>
+                <Row style={{ marginTop: spacing.sm, flexWrap: 'wrap' }}>
                   <Badge tone={categoryTone[d.category as keyof typeof categoryTone] ?? 'neutral'}>
                     {d.category}
                   </Badge>

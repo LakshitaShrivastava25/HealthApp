@@ -140,13 +140,13 @@ export default function FindCare() {
                   {!!days && (
                     <Row>
                       <Feather name="calendar" size={13} color={colors.ink300} />
-                      <Text style={type.caption}>{days}</Text>
+                      <Text style={[type.caption, { flex: 1 }]}>{days}</Text>
                     </Row>
                   )}
                   {!!hours && (
                     <Row>
                       <Feather name="clock" size={13} color={colors.ink300} />
-                      <Text style={type.caption}>{hours}</Text>
+                      <Text style={[type.caption, { flex: 1 }]}>{hours}</Text>
                     </Row>
                   )}
                 </>

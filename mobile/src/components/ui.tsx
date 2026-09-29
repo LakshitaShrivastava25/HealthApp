@@ -1,8 +1,7 @@
-import { ReactNode } from 'react';
+import { forwardRef, ReactNode, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +11,7 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { colors, radius, shadow, spacing, tones, type ToneName, type as typeScale } from '../theme';
 import { EmptyArt } from './Illustrations';
@@ -105,19 +105,53 @@ export function Button({
   );
 }
 
-export function Input(props: TextInputProps & { label?: string }) {
-  const { label, style, ...rest } = props;
+type InputProps = TextInputProps & {
+  label?: string;
+  /** Quiet helper line under the field. */
+  hint?: string;
+  /** Replaces the hint and turns the border red. */
+  error?: string | null;
+};
+
+/**
+ * Text field with a visible focus ring, so it is always obvious which box
+ * the keyboard is typing into. Forwards its ref so screens can move focus
+ * from one field to the next with the keyboard's "next" key.
+ */
+export const Input = forwardRef<TextInput, InputProps>(function Input(props, ref) {
+  const { label, hint, error, style, onFocus, onBlur, ...rest } = props;
+  const [focused, setFocused] = useState(false);
   return (
     <View style={{ marginBottom: spacing.md }}>
       {!!label && <Text style={styles.inputLabel}>{label}</Text>}
       <TextInput
+        ref={ref}
         placeholderTextColor={colors.ink300}
         {...rest}
-        style={[styles.input, style]}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
+        style={[
+          styles.input,
+          rest.multiline && styles.inputMultiline,
+          focused && styles.inputFocused,
+          !!error && styles.inputError,
+          style,
+        ]}
       />
+      {error ? (
+        <Text style={[styles.inputHint, { color: colors.danger }]}>{error}</Text>
+      ) : hint ? (
+        <Text style={styles.inputHint}>{hint}</Text>
+      ) : null}
     </View>
   );
-}
+});
 
 export function EmptyState({ title, note }: { title: string; note?: string }) {
   return (
@@ -161,23 +195,36 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
   );
 }
 
-/** Standard page body: consistent padding and a pull-to-refresh slot. */
+/**
+ * Standard page body: consistent padding and a pull-to-refresh slot.
+ *
+ * Keyboard-aware on both platforms: when a field is focused the page grows
+ * by the keyboard's height and scrolls that field into view, following the
+ * keyboard's own animation. A plain KeyboardAvoidingView cannot do this
+ * reliably here — Android draws edge-to-edge, so the window no longer
+ * shrinks for the keyboard, and screens under a header or tab bar would
+ * need hand-tuned offsets.
+ */
 export function Screen({
   children,
   refreshControl,
+  contentStyle,
 }: {
   children: ReactNode;
   refreshControl?: React.ReactElement<RefreshControlProps>;
+  contentStyle?: StyleProp<ViewStyle>;
 }) {
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={{ flex: 1, backgroundColor: colors.surface }}
-      contentContainerStyle={styles.screenContent}
+      contentContainerStyle={[styles.screenContent, contentStyle]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      bottomOffset={spacing.xl}
       refreshControl={refreshControl}
     >
       {children}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -218,11 +265,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   buttonDisabled: { opacity: 0.45 },
-  buttonText: { fontSize: 15, fontWeight: '600' },
+  buttonText: { fontSize: 15, fontWeight: '600', flexShrink: 1, textAlign: 'center' },
   inputLabel: { ...typeScale.caption, marginBottom: spacing.xs },
   input: {
     minHeight: 46,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.card,
     borderRadius: radius.md,
@@ -230,9 +277,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.ink900,
   },
+  inputMultiline: { minHeight: 88, paddingTop: spacing.md, textAlignVertical: 'top' },
+  inputFocused: { borderColor: colors.brandPurple, backgroundColor: colors.white },
+  inputError: { borderColor: colors.danger },
+  inputHint: { ...typeScale.micro, color: colors.ink500, marginTop: spacing.xs },
   emptyState: { paddingVertical: spacing.xxl, alignItems: 'center' },
   loading: { paddingVertical: spacing.xxxl, alignItems: 'center' },
   retryText: { fontSize: 13, fontWeight: '600', color: colors.danger },
-  screenContent: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
+  // Capped and centred so tablets and landscape get a readable column, not a stretched one.
+  screenContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.md,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

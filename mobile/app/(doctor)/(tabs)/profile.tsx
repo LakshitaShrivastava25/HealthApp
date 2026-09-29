@@ -8,6 +8,7 @@ import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '
 import { useAuth } from '../../../src/context/AuthContext';
 import { doctorApi } from '../../../src/lib/api';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import NotificationSettingsCard from '../../../src/components/NotificationSettingsCard';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -127,7 +128,9 @@ export default function DoctorProfile() {
 
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Text style={type.h2}>Dr. {doctor?.full_name}</Text>
+          <Text style={[type.h2, { flex: 1 }]} numberOfLines={2}>
+            Dr. {doctor?.full_name}
+          </Text>
           <Badge tone={verificationTone}>{doctor?.verification_status}</Badge>
         </Row>
 
@@ -241,6 +244,8 @@ export default function DoctorProfile() {
           </Row>
         )}
       </Card>
+
+      <NotificationSettingsCard note="Patient approvals and verification updates" />
 
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>

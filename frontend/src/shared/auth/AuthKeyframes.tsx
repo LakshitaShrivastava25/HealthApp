@@ -58,6 +58,21 @@ export default function AuthKeyframes() {
         100% { stroke-dashoffset: -30; }
       }
 
+      /* The journey line connecting the story clusters (symptoms → doctor
+         → treatment → better health). A long dash chases along the path
+         so it reads as something flowing rather than a static line. */
+      @keyframes hn-flow-run {
+        0%   { stroke-dashoffset: 1400; }
+        100% { stroke-dashoffset: 0; }
+      }
+
+      /* The little dot markers riding the journey line — same idea as
+         hn-glow-pulse but staggered per-marker via animation-delay. */
+      @keyframes hn-flow-dot {
+        0%, 100% { opacity: 0.35; transform: scale(0.85); }
+        50%      { opacity: 1;    transform: scale(1.15); }
+      }
+
       @keyframes hn-orbit     { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
       @keyframes hn-orbit-rev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
 
@@ -108,6 +123,8 @@ export default function AuthKeyframes() {
       .hn-drift-fade { animation: hn-drift-fade 11s ease-in-out infinite; }
       .hn-glow-pulse { animation: hn-glow-pulse 4.5s ease-in-out infinite; transform-origin: center; }
       .hn-ecg-run    { animation: hn-ecg-run 4s linear infinite; }
+      .hn-flow-run   { animation: hn-flow-run 14s linear infinite; }
+      .hn-flow-dot   { animation: hn-flow-dot 2.6s ease-in-out infinite; transform-origin: center; }
       .hn-orbit      { animation: hn-orbit 46s linear infinite; }
       .hn-orbit-rev  { animation: hn-orbit-rev 62s linear infinite; }
       .hn-blob-a     { animation: hn-blob-a 24s ease-in-out infinite; }
@@ -124,13 +141,15 @@ export default function AuthKeyframes() {
         .hn-drift-fade, .hn-glow-pulse, .hn-ecg-run,
         .hn-orbit, .hn-orbit-rev,
         .hn-blob-a, .hn-blob-b, .hn-blob-c,
-        .hn-particle, .hn-card-float, .hn-shake, .hn-dot-bounce {
+        .hn-particle, .hn-card-float, .hn-shake, .hn-dot-bounce,
+        .hn-flow-run, .hn-flow-dot {
           animation: none !important;
         }
         /* Particles animate in from opacity 0, so with the animation off
            they would never appear at all. Pin them visible instead. */
         .hn-particle { opacity: 0.45 !important; }
         .hn-drift-fade { opacity: 0.45 !important; }
+        .hn-flow-dot { opacity: 0.75 !important; }
         .hn-spin { animation: hn-spin 1.4s linear infinite; }
       }
     `}</style>

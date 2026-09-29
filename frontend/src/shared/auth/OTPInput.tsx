@@ -41,13 +41,39 @@ export default function OTPInput({
   autoFocus?: boolean;
 }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
+  /**
+   * The value as of the last write, which is not the same thing as the value
+   * of the last render.
+   *
+   * focusBox() runs in the same tick as onChange, and el.focus() dispatches
+   * the focus event synchronously — before React has re-rendered with the new
+   * value. The gap-guard in onFocus therefore used to read a `value` that was
+   * one keystroke out of date, conclude the box it had just advanced to was
+   * past the end of the code, and bounce focus straight back. The next digit
+   * then landed on top of the previous one, so typing "123456" produced
+   * "246": every second digit was silently overwritten. Confirmed in the
+   * browser on all three portals.
+   */
+  const latest = useRef(value);
   const firedFor = useRef<string | null>(null);
   const wasInvalid = useRef(false);
   const shake = useAnimationControls();
 
+  // Keeps the ref honest when the value changes from outside this component
+  // (the caller clearing the code after a failed verify, for instance).
+  useEffect(() => {
+    latest.current = value;
+  }, [value]);
+
   useEffect(() => {
     if (autoFocus) refs.current[0]?.focus();
   }, [autoFocus]);
+
+  /** Every write goes through here so `latest` can never drift from onChange. */
+  function commit(next: string) {
+    latest.current = next;
+    onChange(next);
+  }
 
   // Fire once per completed code. Without the ref guard this would call
   // the caller's verify on every re-render while the code sits full.
@@ -86,7 +112,7 @@ export default function OTPInput({
     for (let i = 0; i < cleaned.length && index + i < LENGTH; i++) {
       chars[index + i] = cleaned[i];
     }
-    onChange(chars.slice(0, LENGTH).join(''));
+    commit(chars.slice(0, LENGTH).join(''));
     focusBox(index + cleaned.length);
   }
 
@@ -98,10 +124,10 @@ export default function OTPInput({
         // gapless without silently discarding what came after it.
         const chars = value.split('');
         chars.splice(index, 1);
-        onChange(chars.join(''));
+        commit(chars.join(''));
         focusBox(index);
       } else if (value.length > 0) {
-        onChange(value.slice(0, -1));
+        commit(value.slice(0, -1));
         focusBox(value.length - 1);
       }
       return;
@@ -154,9 +180,12 @@ export default function OTPInput({
             }}
             onFocus={(e) => {
               // Clicking box 5 while only two digits are entered would
-              // otherwise open a gap; send them to the next real box.
-              if (i > value.length) {
-                focusBox(value.length);
+              // otherwise open a gap; send them to the next real box. Read
+              // from `latest` rather than `value`: this fires synchronously
+              // during focus(), which can happen before the render that
+              // carries the digit just typed.
+              if (i > latest.current.length) {
+                focusBox(latest.current.length);
                 return;
               }
               e.target.select();

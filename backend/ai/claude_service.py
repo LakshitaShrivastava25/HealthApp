@@ -212,7 +212,13 @@ class ClaudeService:
             document.doctor_name = (result.get('doctor_name') or document.doctor_name or '')[:150]
             document.hospital_name = (result.get('hospital_name') or document.hospital_name or '')[:150]
             parsed_date = _parse_iso_date(result.get('date'))
-            if parsed_date:
+            # A misread year ("2027" for "2017") must not land in the record:
+            # document_date is validated against today on every API write, so
+            # letting extraction write one anyway would be the one way past
+            # that rule. Dropped rather than raised — a wrong date is not a
+            # reason to fail an upload whose file arrived intact, and the
+            # review screen asks the person for the date either way.
+            if parsed_date and parsed_date <= timezone.localdate():
                 document.document_date = parsed_date
 
         document.structured_data = result

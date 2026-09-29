@@ -31,9 +31,17 @@ export default function Topbar({
   }
 
   return (
-    <header className="relative overflow-hidden sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between gap-2">
+    <header className="relative sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between gap-2">
       {/* Header-variant ambient art: 3 small icons, far right, so it
-          never sits under the page title itself. */}
+          never sits under the page title itself.
+
+          Deliberately NOT `overflow-hidden` on this header. That was here to
+          keep the ambient art's oversized icons from widening the page, but
+          AmbientBackground is inset-0 and already clips its own children —
+          so the rule was redundant, and it cropped the profile menu below to
+          the header's 83px, leaving a ~12px sliver that read as "clicking
+          does nothing". Anything absolutely positioned from this header must
+          be free to extend past it. */}
       <AmbientBackground variant="header" />
       <div className="relative flex min-w-0 items-center gap-2">
         <MobileMenuButton />

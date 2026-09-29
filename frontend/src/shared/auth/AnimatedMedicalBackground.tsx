@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { C } from './tokens';
 import { Capsule, HeartEcg, MedicalShield, PlusMark, Prescription, Stethoscope } from './MedicalArt';
@@ -194,114 +194,113 @@ export default function AnimatedMedicalBackground() {
 
       {/* 4a — the story: symptoms → doctor → treatment → better health,
           each a photo-illustration cluster with a labelled pill underneath,
-          threaded together by the journey line below. Wide layout only —
-          four extra clusters have nowhere honest to go once the viewport
-          narrows, so they hide rather than crowd the card. */}
+          threaded together by the journey line below. Every position here
+          is lifted straight from the reference mock (measured in its own
+          1672×941 pixel space, then expressed as a percentage) rather than
+          eyeballed, so the composition matches it point for point. Wide
+          layout only — four extra clusters have nowhere honest to go once
+          the viewport narrows, so they hide rather than crowd the card. */}
       <div className="pointer-events-none absolute inset-0 hidden 2xl:block">
-        {/* the connecting journey line, drawn once behind every cluster */}
+        {/* the connecting journey line: one thin, pale, mostly-still path —
+            the mock's line is barely there, not a bold animated stripe —
+            plus three small arrows marking each hand-off. */}
         <svg
           className="absolute inset-0 h-full w-full"
-          viewBox="0 0 100 45"
+          viewBox="0 0 1672 941"
           preserveAspectRatio="none"
           aria-hidden="true"
         >
           <path
-            d="M6 34 C 14 18, 20 14, 27 20 C 34 26, 40 30, 50 26 C 60 22, 66 12, 74 16 C 82 20, 88 24, 94 34"
+            d="M0,300 C100,345 200,345 300,290 C370,255 430,270 460,295 C520,340 560,330 600,270
+               C700,190 800,260 850,330 C950,400 1020,315 1080,270 C1140,225 1165,255 1200,300
+               C1260,355 1320,350 1360,320 C1410,285 1440,300 1470,318 C1550,360 1610,315 1672,295"
             fill="none"
-            stroke={C.purple}
-            strokeOpacity="0.22"
-            strokeWidth="0.35"
+            stroke={C.white}
+            strokeOpacity="0.8"
+            strokeWidth="3"
             strokeLinecap="round"
           />
           <path
-            d="M6 34 C 14 18, 20 14, 27 20 C 34 26, 40 30, 50 26 C 60 22, 66 12, 74 16 C 82 20, 88 24, 94 34"
+            d="M0,300 C100,345 200,345 300,290 C370,255 430,270 460,295 C520,340 560,330 600,270
+               C700,190 800,260 850,330 C950,400 1020,315 1080,270 C1140,225 1165,255 1200,300
+               C1260,355 1320,350 1360,320 C1410,285 1440,300 1470,318 C1550,360 1610,315 1672,295"
             fill="none"
-            stroke={C.tealSoft}
-            strokeWidth="0.5"
+            stroke={C.purpleSoft}
+            strokeOpacity="0.5"
+            strokeWidth="2"
             strokeLinecap="round"
-            strokeDasharray="1.4 12"
+            strokeDasharray="4 70"
             className={reduced ? '' : 'hn-flow-run'}
-            style={{ opacity: 0.85 }}
           />
+          <JourneyArrow x={300} y={290} rotate={-18} />
+          <JourneyArrow x={1080} y={270} rotate={-12} />
+          <JourneyArrow x={1360} y={320} rotate={-6} />
         </svg>
 
-        <StoryCluster
-          origin={origin}
-          strength={5}
-          left="4%"
-          top="9%"
-          label="Symptoms"
-          tone="purple"
-        >
+        <StoryCluster origin={origin} strength={5} left="1%" top="15%" label="Symptoms" tone="purple">
           <div className="relative">
-            <CharacterArt src={patientImg} alt="" size={168} float="hn-float-b" />
-            <SymptomBadge icon="thermometer" label="Fever" tone="purple" style={{ left: -18, top: -6 }} delay={0} />
-            <SymptomBadge icon="zap" label="Headache" tone="teal" style={{ left: 108, top: 14 }} delay={0.8} />
-            <SymptomBadge icon="battery" label="Fatigue" tone="purple" style={{ left: 90, top: 128 }} delay={1.6} />
+            <CharacterArt src={patientImg} alt="" size={220} float="hn-float-b" />
+            <SymptomBadge icon="thermometer" label="Fever" tone="purple" style={{ left: 82, top: 50 }} delay={0} />
+            <SymptomBadge icon="zap" label="Headache" tone="purple" style={{ left: 150, top: 80 }} delay={0.8} />
+            <SymptomBadge icon="battery" label="Fatigue" tone="pink" style={{ left: 168, top: 134 }} delay={1.6} />
           </div>
         </StoryCluster>
 
-        <StoryCluster
-          origin={origin}
-          strength={4}
-          left="23%"
-          top="4%"
-          label="Doctor Consultation"
-          tone="teal"
-        >
-          <CharacterArt src={doctorImg} alt="" size={176} float="hn-float-c" />
-        </StoryCluster>
-
-        <StoryCluster
-          origin={origin}
-          strength={4}
-          left="66%"
-          top="4%"
-          label="Treatment"
-          tone="blue"
-        >
+        <StoryCluster origin={origin} strength={4} left="23%" top="15%" label="Doctor Consultation" tone="teal">
           <div className="relative">
-            <Prescription size={112} />
-            <div className="absolute" style={{ left: -14, top: 66 }}>
-              <Capsule size={58} />
-            </div>
-            <div className="absolute" style={{ right: -20, top: -18 }}>
-              <MedicalShield size={44} animated={!reduced} />
+            <CharacterArt src={doctorImg} alt="" size={220} float="hn-float-c" />
+            <div className="absolute" style={{ left: 88, top: -26 }}>
+              <PlusBadge size={58} />
             </div>
           </div>
         </StoryCluster>
 
-        <StoryCluster
-          origin={origin}
-          strength={5}
-          left="87%"
-          top="7%"
-          label="Better Health"
-          tone="teal"
-        >
-          <CharacterArt src={healthyImg} alt="" size={168} float="hn-float-a" />
+        <StoryCluster origin={origin} strength={4} left="70%" top="20%" label="Treatment" tone="blue">
+          <div className="relative">
+            <div className="absolute" style={{ left: -62, top: -60 }}>
+              <FloatingObject float="hn-float-b" opacity={0.7}>
+                <span
+                  className="block rounded-full"
+                  style={{
+                    width: 24,
+                    height: 24,
+                    background: `radial-gradient(circle at 35% 30%, ${C.white}, ${C.tealSoft} 60%, ${C.teal} 100%)`,
+                    boxShadow: `0 0 16px ${C.teal}55`,
+                  }}
+                />
+              </FloatingObject>
+            </div>
+            <Prescription size={130} />
+            <div className="absolute" style={{ left: 52, top: 92 }}>
+              <BlisterPack width={96} />
+            </div>
+            <div className="absolute" style={{ left: 98, top: 16 }}>
+              <MedicalShield size={62} animated={!reduced} />
+            </div>
+          </div>
+        </StoryCluster>
+
+        <StoryCluster origin={origin} strength={5} left="84%" top="16%" label="Better Health" tone="teal">
+          <div className="relative">
+            <div className="absolute" style={{ left: 92, top: -86 }}>
+              <FloatingObject float="hn-float-a" opacity={0.6}>
+                <PlusMark size={34} tone="purple" />
+              </FloatingObject>
+            </div>
+            <CharacterArt src={healthyImg} alt="" size={220} float="hn-float-a" />
+            <div className="absolute" style={{ left: 148, top: 6 }}>
+              <FloatingObject float="hn-float-b" opacity={0.85}>
+                <HeartBadge size={58} />
+              </FloatingObject>
+            </div>
+            <div className="absolute" style={{ left: -4, top: 36 }}>
+              <FloatingObject float="hn-float-c" opacity={0.8}>
+                <SparkleBadge size={42} />
+              </FloatingObject>
+            </div>
+          </div>
         </StoryCluster>
       </div>
-
-      <ParallaxLayer
-        origin={origin}
-        strength={5}
-        className="absolute bottom-[24%] left-[18%] hidden xl:block"
-      >
-        <FloatingObject float="hn-float-c" opacity={0.5}>
-          <Capsule size={82} />
-        </FloatingObject>
-      </ParallaxLayer>
-
-      <ParallaxLayer
-        origin={origin}
-        strength={4}
-        className="absolute right-[22%] top-[7%] hidden xl:block 2xl:hidden"
-      >
-        <FloatingObject float="hn-float-b" opacity={0.42}>
-          <Capsule size={54} />
-        </FloatingObject>
-      </ParallaxLayer>
 
       {PLUSES.map((p) => (
         // inset-0 matters: the plus is positioned by percentage, so its
@@ -531,6 +530,8 @@ const SYMPTOM_ICONS = {
  * staggered by `delay` so the three around the patient illustration never
  * move in lockstep.
  */
+const SYMPTOM_TONES = { purple: C.purple, teal: C.teal, pink: '#E0669B' } as const;
+
 function SymptomBadge({
   icon,
   label,
@@ -540,11 +541,11 @@ function SymptomBadge({
 }: {
   icon: keyof typeof SYMPTOM_ICONS;
   label: string;
-  tone: 'purple' | 'teal';
+  tone: keyof typeof SYMPTOM_TONES;
   style: { left: number; top: number };
   delay: number;
 }) {
-  const color = tone === 'teal' ? C.teal : C.purple;
+  const color = SYMPTOM_TONES[tone];
   return (
     <motion.div
       className="absolute flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-2.5 py-1.5 text-[10.5px] font-semibold shadow-md hn-float-c"
@@ -558,5 +559,133 @@ function SymptomBadge({
       </svg>
       {label}
     </motion.div>
+  );
+}
+
+/* -- Small accent badges, one per cluster ------------------------------ */
+
+/** The chevron marking each hand-off on the journey line. */
+function JourneyArrow({ x, y, rotate }: { x: number; y: number; rotate: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rotate})`} opacity="0.55">
+      <path
+        d="M-9,-11 L9,0 L-9,11"
+        fill="none"
+        stroke={C.purple}
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </g>
+  );
+}
+
+/** The small blue rounded-square "plus" badge over the doctor cluster. */
+function PlusBadge({ size = 58 }: { size?: number }) {
+  const id = useId();
+  const grad = `plus-badge-${id}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 58 58" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={grad} x1="10%" y1="0%" x2="90%" y2="100%">
+          <stop offset="0%" stopColor={C.blue} />
+          <stop offset="100%" stopColor={C.purple} />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="54" height="54" rx="16" fill={`url(#${grad})`} opacity="0.92" />
+      <rect x="2" y="2" width="54" height="54" rx="16" stroke={C.white} strokeOpacity="0.4" strokeWidth="1.5" />
+      <path d="M29 16 V42 M16 29 H42" stroke={C.white} strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** The small heart-with-ECG badge over the "Better Health" cluster —
+ *  visually a compact cousin of the big bottom-left HeartEcg. */
+function HeartBadge({ size = 58 }: { size?: number }) {
+  const id = useId();
+  const grad = `heart-badge-${id}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 58 58" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={grad} x1="10%" y1="0%" x2="90%" y2="100%">
+          <stop offset="0%" stopColor={C.blue} />
+          <stop offset="100%" stopColor={C.purple} />
+        </linearGradient>
+      </defs>
+      <circle cx="29" cy="29" r="27" fill={C.white} opacity="0.5" />
+      <path
+        d="M29 42 C26 39 10 28 10 17 C10 11 15 7 20 7 C24 7 27 9 29 13 C31 9 34 7 38 7 C43 7 48 11 48 17 C48 28 32 39 29 42 Z"
+        fill={`url(#${grad})`}
+        opacity="0.92"
+      />
+      <path
+        d="M13 24 H22 L25 18 L29 32 L33 22 L36 24 H45"
+        stroke={C.white}
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** The small four-point sparkle/star badge floating beside the healthy
+ *  woman — a little "glow up" marker with no medical meaning of its own. */
+function SparkleBadge({ size = 42 }: { size?: number }) {
+  const id = useId();
+  const grad = `sparkle-badge-${id}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 42 42" fill="none" aria-hidden="true">
+      <defs>
+        <radialGradient id={grad}>
+          <stop offset="0%" stopColor={C.white} />
+          <stop offset="60%" stopColor={C.tealSoft} />
+          <stop offset="100%" stopColor={C.teal} />
+        </radialGradient>
+      </defs>
+      <circle cx="21" cy="21" r="20" fill={`url(#${grad})`} opacity="0.9" />
+      <path
+        d="M21 10 C21 16 22 19 28 19 C22 19 21 22 21 28 C21 22 20 19 14 19 C20 19 21 16 21 10 Z"
+        fill={C.white}
+        opacity="0.95"
+      />
+    </svg>
+  );
+}
+
+/** The teal blister pack of pills beside the treatment clipboard. */
+function BlisterPack({ width = 96 }: { width?: number }) {
+  const id = useId();
+  const grad = `blister-${id}`;
+  const cols = 4;
+  const rows = 2;
+  const pad = 10;
+  const cell = (width - pad * 2) / cols;
+  const height = cell * rows + pad * 2;
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={grad} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={C.tealSoft} />
+          <stop offset="100%" stopColor={C.teal} />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width={width} height={height} rx="14" fill={`url(#${grad})`} opacity="0.85" />
+      <rect x="0" y="0" width={width} height={height} rx="14" stroke={C.white} strokeOpacity="0.5" strokeWidth="1.5" />
+      {Array.from({ length: rows }).map((_, r) =>
+        Array.from({ length: cols }).map((_, c) => (
+          <ellipse
+            key={`${r}-${c}`}
+            cx={pad + cell * c + cell / 2}
+            cy={pad + cell * r + cell / 2}
+            rx={cell * 0.32}
+            ry={cell * 0.38}
+            fill={C.white}
+            opacity="0.85"
+          />
+        )),
+      )}
+    </svg>
   );
 }

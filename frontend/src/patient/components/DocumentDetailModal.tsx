@@ -8,6 +8,7 @@ import {
   humanizeKey,
   INTERNAL_KEYS,
 } from '@shared/components/extractionState';
+import { todayIso } from '@shared/dates';
 
 type DocumentDetail = {
   id: string;
@@ -153,7 +154,12 @@ export default function DocumentDetailModal({
     const fromAi = (k: string) => (typeof sd[k] === 'string' ? (sd[k] as string) : '');
     setRTitle(d.title || fromAi('title'));
     setRCategory(d.category || fromAi('category') || 'other');
-    setRDate(d.document_date || fromAi('document_date') || '');
+    // Never seed the picker with a future date. The column can no longer
+    // hold one, but structured_data still carries whatever extraction read,
+    // and prefilling that would leave the field showing a value its own max
+    // forbids and the server rejects — a dead end the person cannot explain.
+    const suggestedDate = d.document_date || fromAi('document_date') || '';
+    setRDate(suggestedDate && suggestedDate > todayIso() ? '' : suggestedDate);
     setRHospital(d.hospital_name || fromAi('hospital_name'));
     setRDoctor(d.doctor_name || fromAi('doctor_name'));
   }
@@ -283,10 +289,14 @@ export default function DocumentDetailModal({
                     <div>
                       <label htmlFor="rv-date" className="mb-1 block text-[11px] font-semibold text-ink-700">Document date</label>
                       {/* Native date input, matching date_of_birth and
-                          premium_due_date elsewhere in this app. */}
+                          premium_due_date elsewhere in this app. Capped at
+                          today: a report cannot have been taken in the
+                          future. The same rule is enforced server-side,
+                          because the picker can be bypassed. */}
                       <input
                         id="rv-date"
                         type="date"
+                        max={todayIso()}
                         value={rDate}
                         onChange={(e) => setRDate(e.target.value)}
                         className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30"

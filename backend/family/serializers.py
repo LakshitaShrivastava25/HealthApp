@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import AllergyRecord, Notification, Profile
@@ -16,6 +17,19 @@ class ProfileSerializer(serializers.ModelSerializer):
         # reference_code is generated server-side and is the identifier a
         # patient shares — never something a client gets to choose.
         read_only_fields = ['id', 'created_at', 'reference_code']
+
+    def validate_date_of_birth(self, value):
+        """
+        Nobody is born in the future. The signup and add-family-member forms
+        both cap their date pickers at today, but a picker is a convenience,
+        not a constraint — this is the rule.
+
+        localdate(), not utcnow().date(): TIME_ZONE is Asia/Kolkata, and a
+        UTC comparison would reject a birthday entered today before 05:30 IST.
+        """
+        if value and value > timezone.localdate():
+            raise serializers.ValidationError('Date of birth cannot be in the future.')
+        return value
 
     def get_initials(self, obj):
         parts = obj.full_name.split()

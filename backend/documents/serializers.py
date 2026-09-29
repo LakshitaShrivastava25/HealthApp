@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Document, TimelineEvent
@@ -12,6 +13,22 @@ class DocumentSerializer(serializers.ModelSerializer):
             'structured_data', 'uploaded_at', 'processed_at',
         ]
         read_only_fields = ['id', 'status', 'structured_data', 'uploaded_at', 'processed_at']
+
+    def validate_document_date(self, value):
+        """
+        document_date is when the scan or report was taken, so it can never
+        be after today. The review screen caps its date picker too, but that
+        is only a convenience — this runs on both the upload (POST) and the
+        review screen's edit (PATCH), which is the write path the Confirm
+        button actually uses.
+
+        Compared against localdate(), not utcnow().date(): TIME_ZONE is
+        Asia/Kolkata, and a UTC comparison would reject today as "future"
+        for anyone filling this in before 05:30 IST.
+        """
+        if value and value > timezone.localdate():
+            raise serializers.ValidationError('Document date cannot be in the future.')
+        return value
 
 
 class DocumentCorrectionSerializer(serializers.Serializer):

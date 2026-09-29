@@ -70,6 +70,49 @@ class DocumentViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Doctors cannot delete a patient's documents.")
         instance.delete()
 
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        """
+        POST /api/documents/<id>/confirm/ — the person has reviewed the
+        extracted details on the review screen and confirms they are right.
+
+        This is the ONLY thing that moves a document to PROCESSED. The
+        review screen saves its edits through the ordinary PATCH on this
+        viewset first and then calls this, mirroring the insurance flow
+        (update, then confirm), so this stays a single auditable "a human
+        agreed" step rather than a second write path.
+
+        The derived records are rebuilt afterwards because the PATCH that
+        just ran may have corrected the very fields they are built from —
+        a fixed title or date would otherwise stay wrong on the timeline.
+        """
+        if hasattr(request.user, 'doctor_profile'):
+            raise PermissionDenied("Doctors cannot confirm a patient's documents.")
+        document = self.get_object()
+        document.status = Document.Status.PROCESSED
+        document.processed_at = timezone.now()
+        document.save(update_fields=['status', 'processed_at'])
+        rebuild_derived_records(document)
+        return Response(DocumentSerializer(document).data)
+
+    @action(detail=True, methods=['post'], url_path='retry-processing')
+    def retry_processing(self, request, pk=None):
+        """
+        POST /api/documents/<id>/retry-processing/ — re-run extraction on a
+        document whose processing failed.
+
+        The file is already stored, so a retry costs nothing but the call,
+        which matters when the original failure was a transient API outage.
+        """
+        if hasattr(request.user, 'doctor_profile'):
+            raise PermissionDenied("Doctors cannot process a patient's documents.")
+        document = self.get_object()
+        document.status = Document.Status.PROCESSING
+        document.save(update_fields=['status'])
+        ClaudeService().process_document(document)
+        document.refresh_from_db()
+        return Response(DocumentSerializer(document).data)
+
     @action(detail=True, methods=['patch'])
     def correct(self, request, pk=None):
         """Patient corrects a misread field after reviewing OCR output."""

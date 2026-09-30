@@ -72,18 +72,18 @@ const PARTICLES = [
    they never pulse in lockstep. Doubled up from the original set so the
    wide mid-canvas bands (which have nothing else in them) aren't bare. */
 const PLUSES = [
-  { l: '30%', t: '16%', size: 26, tone: 'purple', dur: 11, delay: 0, depth: 4, hide: '' },
-  { l: '68%', t: '10%', size: 18, tone: 'teal', dur: 13, delay: 2.4, depth: 3, hide: '' },
-  { l: '78%', t: '62%', size: 34, tone: 'purple', dur: 9.5, delay: 1.1, depth: 5, hide: '' },
-  { l: '17%', t: '78%', size: 22, tone: 'teal', dur: 14, delay: 3.7, depth: 4, hide: 'hidden sm:block' },
-  { l: '52%', t: '92%', size: 16, tone: 'purple', dur: 12, delay: 5, depth: 3, hide: 'hidden lg:block' },
-  { l: '89%', t: '34%', size: 20, tone: 'purple', dur: 10.5, delay: 1.8, depth: 4, hide: 'hidden lg:block' },
-  { l: '9%', t: '48%', size: 20, tone: 'teal', dur: 12.5, delay: 2.9, depth: 4, hide: 'hidden lg:block' },
-  { l: '41%', t: '8%', size: 15, tone: 'purple', dur: 10, delay: 4.2, depth: 3, hide: 'hidden md:block' },
-  { l: '58%', t: '84%', size: 24, tone: 'teal', dur: 13.5, delay: 0.7, depth: 4, hide: 'hidden sm:block' },
-  { l: '95%', t: '58%', size: 17, tone: 'purple', dur: 11.5, delay: 3.4, depth: 3, hide: 'hidden lg:block' },
-  { l: '4%', t: '90%', size: 19, tone: 'teal', dur: 14.5, delay: 1.4, depth: 4, hide: 'hidden md:block' },
-  { l: '35%', t: '95%', size: 14, tone: 'purple', dur: 9, delay: 5.4, depth: 3, hide: 'hidden lg:block' },
+  { l: '30%', t: '16%', size: 32, tone: 'purple', dur: 11, delay: 0, depth: 4, hide: '' },
+  { l: '68%', t: '10%', size: 22, tone: 'teal', dur: 13, delay: 2.4, depth: 3, hide: '' },
+  { l: '78%', t: '62%', size: 40, tone: 'purple', dur: 9.5, delay: 1.1, depth: 5, hide: '' },
+  { l: '17%', t: '78%', size: 27, tone: 'teal', dur: 14, delay: 3.7, depth: 4, hide: 'hidden sm:block' },
+  { l: '52%', t: '92%', size: 20, tone: 'purple', dur: 12, delay: 5, depth: 3, hide: 'hidden lg:block' },
+  { l: '89%', t: '34%', size: 25, tone: 'purple', dur: 10.5, delay: 1.8, depth: 4, hide: 'hidden lg:block' },
+  { l: '9%', t: '48%', size: 25, tone: 'teal', dur: 12.5, delay: 2.9, depth: 4, hide: 'hidden lg:block' },
+  { l: '41%', t: '8%', size: 19, tone: 'purple', dur: 10, delay: 4.2, depth: 3, hide: 'hidden md:block' },
+  { l: '58%', t: '84%', size: 29, tone: 'teal', dur: 13.5, delay: 0.7, depth: 4, hide: 'hidden sm:block' },
+  { l: '95%', t: '58%', size: 21, tone: 'purple', dur: 11.5, delay: 3.4, depth: 3, hide: 'hidden lg:block' },
+  { l: '4%', t: '90%', size: 24, tone: 'teal', dur: 14.5, delay: 1.4, depth: 4, hide: 'hidden md:block' },
+  { l: '35%', t: '95%', size: 18, tone: 'purple', dur: 9, delay: 5.4, depth: 3, hide: 'hidden lg:block' },
 ] as const;
 
 /* A scatter of tiny twinkling glints — the little bright pinpricks the
@@ -193,7 +193,7 @@ export default function AnimatedMedicalBackground() {
         className="absolute left-[1%] bottom-[3%] hidden xl:block"
       >
         <FloatingObject float="hn-float-a" opacity={0.5}>
-          <Stethoscope size={240} />
+          <Stethoscope size={300} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -203,7 +203,7 @@ export default function AnimatedMedicalBackground() {
           one object from this pair that survives on every breakpoint. */}
       <ParallaxLayer origin={origin} strength={6} className="absolute left-[19%] bottom-[13%] sm:left-[21%]">
         <FloatingObject float="hn-float-b" opacity={0.62}>
-          <HeartEcg size={158} animated={!reduced} />
+          <HeartEcg size={196} animated={!reduced} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -215,7 +215,7 @@ export default function AnimatedMedicalBackground() {
         className="absolute right-[2%] bottom-[4%] hidden xl:block"
       >
         <FloatingObject float="hn-float-c" opacity={0.55}>
-          <Prescription size={184} />
+          <Prescription size={230} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -225,7 +225,23 @@ export default function AnimatedMedicalBackground() {
           security badge repeats in words. */}
       <ParallaxLayer origin={origin} strength={7} className="absolute bottom-[22%] right-[17%] hidden sm:block">
         <FloatingObject float="hn-float-d" opacity={0.5}>
-          <MedicalShield size={140} animated={!reduced} />
+          <MedicalShield size={176} animated={!reduced} />
+        </FloatingObject>
+      </ParallaxLayer>
+
+      {/* A small stethoscope up top, mirrored loosely against the big one
+          down in the corner — the upper band otherwise reads emptier than
+          the lower one now that the lower objects have grown. Kept small
+          and faint so it reads as a background echo, not a second focal
+          object competing with the corner piece. */}
+      <ParallaxLayer origin={origin} strength={4} className="absolute left-[40%] top-[2%] hidden lg:block">
+        <FloatingObject float="hn-float-c" opacity={0.38}>
+          <Stethoscope size={92} />
+        </FloatingObject>
+      </ParallaxLayer>
+      <ParallaxLayer origin={origin} strength={4} className="absolute right-[24%] top-[6%] hidden xl:block">
+        <FloatingObject float="hn-float-a" opacity={0.32}>
+          <Stethoscope size={70} />
         </FloatingObject>
       </ParallaxLayer>
 
@@ -441,6 +457,27 @@ export default function AnimatedMedicalBackground() {
       <ParallaxLayer origin={origin} strength={3} className="absolute right-[7%] top-[46%] hidden lg:block">
         <FloatingObject float="hn-float-b" opacity={0.4}>
           <Capsule size={48} />
+        </FloatingObject>
+      </ParallaxLayer>
+
+      {/* The bottom-centre band, between the two corner clusters, was the
+          single largest patch of bare gradient in the page — nothing lived
+          there once the card's centre wash faded out below it. A capsule
+          and a heart, at roughly the same scale the (now-larger) corner
+          objects use, close that gap without crowding the card above them. */}
+      <ParallaxLayer origin={origin} strength={5} className="absolute left-[38%] bottom-[3%] hidden md:block">
+        <FloatingObject float="hn-float-d" opacity={0.46}>
+          <Capsule size={70} />
+        </FloatingObject>
+      </ParallaxLayer>
+      <ParallaxLayer origin={origin} strength={5} className="absolute right-[36%] bottom-[6%] hidden lg:block">
+        <FloatingObject float="hn-float-b" opacity={0.4}>
+          <HeartEcg size={84} animated={!reduced} />
+        </FloatingObject>
+      </ParallaxLayer>
+      <ParallaxLayer origin={origin} strength={4} className="absolute left-[46%] bottom-[10%] hidden xl:block">
+        <FloatingObject float="hn-float-a" opacity={0.4}>
+          <PlusMark size={26} tone="purple" />
         </FloatingObject>
       </ParallaxLayer>
 

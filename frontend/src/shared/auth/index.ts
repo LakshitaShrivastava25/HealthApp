@@ -1,5 +1,5 @@
 /**
- * The shared auth UI, used by all three HealthNow portals.
+ * The shared auth UI, used by all three CuraPath portals.
  *
  * Everything a login/registration screen needs is re-exported from here
  * so a page imports one path instead of a dozen, and so moving a file

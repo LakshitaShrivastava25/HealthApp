@@ -1,5 +1,5 @@
 /**
- * The HealthNow palette, as plain values.
+ * The CuraPath palette, as plain values.
  *
  * These are the exact same colours the three portals' tailwind.config.js
  * files define — duplicated here only because SVG gradients, canvas-style

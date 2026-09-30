@@ -47,7 +47,7 @@ export default function Sidebar() {
           <ShieldAlert size={18} strokeWidth={2.5} />
         </div>
         <div>
-          <p className="font-bold text-ink-900 leading-tight">HealthNow Admin</p>
+          <p className="font-bold text-ink-900 leading-tight">CuraPath Admin</p>
           <p className="text-[11px] text-accent-ink font-medium leading-tight capitalize">{staff?.role.replace('_', ' ')}</p>
         </div>
       </div>

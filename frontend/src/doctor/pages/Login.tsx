@@ -117,7 +117,7 @@ export default function Login() {
             <Step key="phone">
               <StepHeading
                 title="Sign in to your practice"
-                subtitle="Use the phone number registered with HealthNow."
+                subtitle="Use the phone number registered with CuraPath."
               />
 
               <PhoneField

@@ -55,6 +55,6 @@ if (import.meta.env.DEV) {
   // Which backend a dev build is talking to is the first thing you want to
   // know when a request fails, and the least obvious from the UI.
   console.info(
-    `[HealthNow] API target: ${IS_PRODUCTION ? 'PRODUCTION' : 'DEVELOPMENT'} → ${API_BASE_URL}`,
+    `[CuraPath] API target: ${IS_PRODUCTION ? 'PRODUCTION' : 'DEVELOPMENT'} → ${API_BASE_URL}`,
   );
 }

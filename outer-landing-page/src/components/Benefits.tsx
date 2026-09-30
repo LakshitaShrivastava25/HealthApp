@@ -30,7 +30,7 @@ export default function Benefits() {
       <div className="mx-auto max-w-6xl">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-            Why Families Choose HealthNow
+            Why Families Choose CuraPath
           </h2>
           <p className="mt-4 text-lg text-body">
             Less admin, fewer surprises — healthcare that works quietly in the background of your life.

@@ -41,7 +41,7 @@ export default function HelpSupport() {
 
   return (
     <>
-      <Topbar title="Help & Support" subtitle="Get help or reach the HealthNow team" />
+      <Topbar title="Help & Support" subtitle="Get help or reach the CuraPath team" />
       <main className="p-4 sm:p-6 lg:p-8 max-w-3xl space-y-6">
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-2">
@@ -54,7 +54,7 @@ export default function HelpSupport() {
             </div>
           </div>
           <a
-            href={`mailto:${SUPPORT_EMAIL}?subject=HealthNow Support Request`}
+            href={`mailto:${SUPPORT_EMAIL}?subject=CuraPath Support Request`}
             className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-accent-ink hover:underline"
           >
             <Mail size={15} /> {SUPPORT_EMAIL}

@@ -125,7 +125,7 @@ export default function Login() {
                 subtitle={
                   <span className="inline-flex items-center gap-1">
                     <Lock size={11} />
-                    Restricted to HealthNow staff accounts.
+                    Restricted to CuraPath staff accounts.
                   </span>
                 }
               />

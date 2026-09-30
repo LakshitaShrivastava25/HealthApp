@@ -5,11 +5,11 @@ import { EASE_OUT } from './tokens';
 export type Portal = 'patient' | 'doctor' | 'admin';
 
 /**
- * The HealthNow brand lockup for the auth screens.
+ * The CuraPath brand lockup for the auth screens.
  *
  * The mark itself is unchanged from what Sidebar.tsx and the old login
  * already shipped — a solid brand-teal rounded square holding a lucide
- * icon, beside one bold "HealthNow" wordmark. That matters more than it
+ * icon, beside one bold "CuraPath" wordmark. That matters more than it
  * looks: a person signs in and lands on the dashboard a second later, and
  * a logo that shifts between those two frames reads as two products.
  *
@@ -19,9 +19,9 @@ export type Portal = 'patient' | 'doctor' | 'admin';
  */
 
 const MARKS = {
-  patient: { Icon: HeartPulse, label: 'HealthNow', sub: 'Your Health, Our Priority' },
-  doctor: { Icon: Stethoscope, label: 'HealthNow', sub: 'Doctor Portal' },
-  admin: { Icon: ShieldCheck, label: 'HealthNow', sub: 'Admin Portal' },
+  patient: { Icon: HeartPulse, label: 'CuraPath', sub: 'Your Health, Our Priority' },
+  doctor: { Icon: Stethoscope, label: 'CuraPath', sub: 'Doctor Portal' },
+  admin: { Icon: ShieldCheck, label: 'CuraPath', sub: 'Admin Portal' },
 } as const;
 
 export default function HealthNowLogo({

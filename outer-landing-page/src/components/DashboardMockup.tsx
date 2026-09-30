@@ -94,7 +94,7 @@ export default function DashboardMockup() {
         <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
         <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
         <span className="ml-3 rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-400">
-          app.healthnow.in/dashboard
+          web.curapath.in/dashboard
         </span>
       </div>
 

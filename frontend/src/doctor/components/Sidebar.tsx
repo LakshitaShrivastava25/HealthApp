@@ -32,7 +32,7 @@ export default function Sidebar() {
           <Stethoscope size={18} strokeWidth={2.5} />
         </div>
         <div>
-          <p className="font-bold text-ink-900 leading-tight">HealthNow Doctor</p>
+          <p className="font-bold text-ink-900 leading-tight">CuraPath Doctor</p>
           <p className="text-[11px] text-accent-ink font-medium leading-tight truncate max-w-[150px]">
             Dr. {doctor?.full_name}
           </p>

@@ -1,4 +1,5 @@
 import Reveal from './Reveal'
+import BrandMark from './BrandMark'
 import { MAIN_APP_URL } from '../config'
 
 export default function Footer() {
@@ -6,10 +7,8 @@ export default function Footer() {
     <footer className="relative border-t border-slate-100 bg-white/70 px-6 py-16">
       <Reveal className="mx-auto flex max-w-4xl flex-col items-center gap-6 text-center">
         <div className="flex items-center gap-2 text-xl font-semibold text-ink">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white">
-            +
-          </span>
-          HealthNow
+          <BrandMark size={32} />
+          CuraPath
         </div>
         <p className="max-w-md text-body">
           Ready to bring your family&apos;s healthcare into one calm place?
@@ -20,7 +19,7 @@ export default function Footer() {
         >
           Use App
         </a>
-        <p className="mt-4 text-sm text-slate-400">HealthNow. All rights reserved.</p>
+        <p className="mt-4 text-sm text-slate-400">CuraPath. All rights reserved.</p>
       </Reveal>
     </footer>
   )

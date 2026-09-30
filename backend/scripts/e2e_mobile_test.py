@@ -76,7 +76,7 @@ def login(phone):
 
 # A genuinely parseable one-page PDF, built by hand so the test does not
 # depend on any fixture file being present.
-def tiny_pdf(text='HealthNow end-to-end test document'):
+def tiny_pdf(text='CuraPath end-to-end test document'):
     content = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
     objs = [
         b'<< /Type /Catalog /Pages 2 0 R >>',

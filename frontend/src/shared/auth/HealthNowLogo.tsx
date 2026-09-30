@@ -43,8 +43,18 @@ export default function HealthNowLogo({
       <div className="flex items-center gap-2.5">
         <div className="relative">
           {/* Bloom. Sits behind the badge, never animates a shadow. */}
-          <div className="absolute inset-0 rounded-xl bg-brand-teal/35 blur-lg" aria-hidden="true" />
-          <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-brand-teal text-white shadow-[0_6px_16px_-4px_rgba(14,165,166,0.55)]">
+          <div
+            className="absolute inset-0 rounded-xl blur-lg"
+            style={{ background: 'linear-gradient(135deg, #4CC7C8 0%, #2E9BD6 45%, #5B4BC4 100%)', opacity: 0.4 }}
+            aria-hidden="true"
+          />
+          {/* The brand mark: same gradient as the app icon and favicon, so
+              this badge, the mobile app icon and the browser tab icon all
+              read as one consistent logo rather than three near-misses. */}
+          <div
+            className="relative flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-[0_6px_16px_-4px_rgba(91,75,196,0.5)]"
+            style={{ background: 'linear-gradient(135deg, #4CC7C8 0%, #2E9BD6 45%, #5B4BC4 100%)' }}
+          >
             <Icon size={22} strokeWidth={2.5} />
           </div>
         </div>

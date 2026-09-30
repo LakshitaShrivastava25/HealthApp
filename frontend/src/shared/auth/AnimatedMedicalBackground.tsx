@@ -74,9 +74,67 @@ const RINGS = [
   { r: 356, spin: 'hn-orbit', dot: C.purpleSoft, opacity: 0.07 },
 ] as const;
 
-export default function AnimatedMedicalBackground() {
+/**
+ * Per-variant tuning for the six illustrated objects.
+ *
+ * `auth` reproduces the original values exactly — the login screens are a
+ * card on an empty field, and the art is deliberately sparse so it never
+ * competes with the form.
+ *
+ * `landing` is the portal selector: a much wider page with two small cards
+ * in the middle and large empty bands either side. The same pieces are
+ * enlarged and pulled inward to fill those bands, and appear from `lg`
+ * rather than `xl` so the sides are not bare on a laptop. Opacity is
+ * trimmed as size grows, so a 300px stethoscope is no louder than the
+ * 188px one it replaces.
+ *
+ * `scale` exists because two of the pieces are visible below `lg`, where
+ * there is no empty flank to fill and the enlargement actively hurts: the
+ * 150px heart ran under the "HealthNow" wordmark at 390px, and the 176px
+ * shield crowded the footnote on a tablet. Scaling them back to about their
+ * auth size there keeps the bigger composition for wide screens only.
+ */
+const OBJECTS = {
+  auth: {
+    stethoscope: { size: 188, pos: 'left-[3%] top-[26%] hidden xl:block', opacity: 0.5 },
+    heart: { size: 112, pos: 'left-[9%] top-[9%] sm:left-[12%]', opacity: 0.62, scale: '' },
+    prescription: { size: 148, pos: 'right-[4%] top-[17%] hidden xl:block', opacity: 0.55 },
+    shield: { size: 104, pos: 'bottom-[12%] right-[8%] hidden sm:block', opacity: 0.5, scale: '' },
+    capsuleLarge: { size: 82, pos: 'bottom-[18%] left-[13%] hidden xl:block', opacity: 0.5 },
+    capsuleSmall: { size: 54, pos: 'right-[22%] top-[7%] hidden xl:block', opacity: 0.42 },
+  },
+  landing: {
+    stethoscope: { size: 300, pos: 'left-[1%] top-[24%] hidden lg:block', opacity: 0.42 },
+    heart: { size: 150, pos: 'left-[9%] top-[7%] sm:left-[13%]', opacity: 0.5, scale: 'origin-top-left scale-[0.72] lg:scale-100' },
+    prescription: { size: 220, pos: 'right-[9%] top-[12%] hidden lg:block', opacity: 0.45 },
+    shield: { size: 176, pos: 'bottom-[13%] right-[4%] hidden sm:block', opacity: 0.42, scale: 'origin-bottom-right scale-[0.6] lg:scale-100' },
+    capsuleLarge: { size: 124, pos: 'bottom-[19%] left-[18%] hidden lg:block', opacity: 0.44 },
+    capsuleSmall: { size: 78, pos: 'right-[26%] top-[6%] hidden xl:block', opacity: 0.38 },
+  },
+} as const;
+
+/**
+ * Extra pieces the landing page adds on top, to balance the arc across the
+ * full width. Empty for `auth` — the login screens keep exactly the six
+ * objects they have always had.
+ */
+const LANDING_EXTRAS = [
+  { art: 'heart', size: 104, pos: 'right-[4%] top-[6%] hidden xl:block', opacity: 0.4, float: 'hn-float-c', depth: 6 },
+  { art: 'prescription', size: 132, pos: 'left-[4%] bottom-[6%] hidden xl:block', opacity: 0.34, float: 'hn-float-d', depth: 7 },
+  { art: 'capsule', size: 92, pos: 'right-[16%] bottom-[8%] hidden lg:block', opacity: 0.4, float: 'hn-float-a', depth: 5 },
+] as const;
+
+export default function AnimatedMedicalBackground({
+  variant = 'auth',
+}: {
+  /** `landing` enlarges the art and adds pieces to fill the portal
+   *  selector's wide empty flanks. Defaults to the login-screen look. */
+  variant?: 'auth' | 'landing';
+} = {}) {
   const origin = usePointerParallax();
   const reduced = useReducedMotion();
+  const obj = OBJECTS[variant];
+  const extras = variant === 'landing' ? LANDING_EXTRAS : [];
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -154,17 +212,19 @@ export default function AnimatedMedicalBackground() {
       <ParallaxLayer
         origin={origin}
         strength={10}
-        className="absolute left-[3%] top-[26%] hidden xl:block"
+        className={`absolute ${obj.stethoscope.pos}`}
       >
-        <FloatingObject float="hn-float-a" opacity={0.5}>
-          <Stethoscope size={188} />
+        <FloatingObject float="hn-float-a" opacity={obj.stethoscope.opacity}>
+          <Stethoscope size={obj.stethoscope.size} />
         </FloatingObject>
       </ParallaxLayer>
 
       {/* Heart + ECG: the one object that survives on every breakpoint. */}
-      <ParallaxLayer origin={origin} strength={6} className="absolute left-[9%] top-[9%] sm:left-[12%]">
-        <FloatingObject float="hn-float-b" opacity={0.62}>
-          <HeartEcg size={112} animated={!reduced} />
+      <ParallaxLayer origin={origin} strength={6} className={`absolute ${obj.heart.pos}`}>
+        <FloatingObject float="hn-float-b" opacity={obj.heart.opacity}>
+          <div className={obj.heart.scale}>
+            <HeartEcg size={obj.heart.size} animated={!reduced} />
+          </div>
         </FloatingObject>
       </ParallaxLayer>
 
@@ -172,40 +232,56 @@ export default function AnimatedMedicalBackground() {
       <ParallaxLayer
         origin={origin}
         strength={8}
-        className="absolute right-[4%] top-[17%] hidden xl:block"
+        className={`absolute ${obj.prescription.pos}`}
       >
-        <FloatingObject float="hn-float-c" opacity={0.55}>
-          <Prescription size={148} />
+        <FloatingObject float="hn-float-c" opacity={obj.prescription.opacity}>
+          <Prescription size={obj.prescription.size} />
         </FloatingObject>
       </ParallaxLayer>
 
       {/* Shield: security, low-right — kept on tablet because it carries
           the privacy message the security badge repeats in words. */}
-      <ParallaxLayer origin={origin} strength={7} className="absolute bottom-[12%] right-[8%] hidden sm:block">
-        <FloatingObject float="hn-float-d" opacity={0.5}>
-          <MedicalShield size={104} animated={!reduced} />
+      <ParallaxLayer origin={origin} strength={7} className={`absolute ${obj.shield.pos}`}>
+        <FloatingObject float="hn-float-d" opacity={obj.shield.opacity}>
+          <div className={obj.shield.scale}>
+            <MedicalShield size={obj.shield.size} animated={!reduced} />
+          </div>
         </FloatingObject>
       </ParallaxLayer>
 
       <ParallaxLayer
         origin={origin}
         strength={5}
-        className="absolute bottom-[18%] left-[13%] hidden xl:block"
+        className={`absolute ${obj.capsuleLarge.pos}`}
       >
-        <FloatingObject float="hn-float-c" opacity={0.5}>
-          <Capsule size={82} />
+        <FloatingObject float="hn-float-c" opacity={obj.capsuleLarge.opacity}>
+          <Capsule size={obj.capsuleLarge.size} />
         </FloatingObject>
       </ParallaxLayer>
 
       <ParallaxLayer
         origin={origin}
         strength={4}
-        className="absolute right-[22%] top-[7%] hidden xl:block"
+        className={`absolute ${obj.capsuleSmall.pos}`}
       >
-        <FloatingObject float="hn-float-b" opacity={0.42}>
-          <Capsule size={54} />
+        <FloatingObject float="hn-float-b" opacity={obj.capsuleSmall.opacity}>
+          <Capsule size={obj.capsuleSmall.size} />
         </FloatingObject>
       </ParallaxLayer>
+
+      {extras.map((e) => (
+        <ParallaxLayer key={e.pos} origin={origin} strength={e.depth} className={`absolute ${e.pos}`}>
+          <FloatingObject float={e.float} opacity={e.opacity}>
+            {e.art === 'heart' ? (
+              <HeartEcg size={e.size} animated={!reduced} />
+            ) : e.art === 'prescription' ? (
+              <Prescription size={e.size} />
+            ) : (
+              <Capsule size={e.size} />
+            )}
+          </FloatingObject>
+        </ParallaxLayer>
+      ))}
 
       {PLUSES.map((p) => (
         // inset-0 matters: the plus is positioned by percentage, so its

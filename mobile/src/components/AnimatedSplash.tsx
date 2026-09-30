@@ -15,6 +15,13 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 const MIN_VISIBLE_MS = 1600;
 
 /**
+ * Never longer than this, even if the session is still loading — past it
+ * the app's own "connecting" screen takes over, which at least says what
+ * is happening instead of looping an animation.
+ */
+const MAX_VISIBLE_MS = 4000;
+
+/**
  * Branded launch screen shown over the app while the session is restored
  * from secure storage. It hands off from the static native splash (same
  * colour, same mark) and then animates, so launch reads as one motion.
@@ -22,6 +29,7 @@ const MIN_VISIBLE_MS = 1600;
 export default function AnimatedSplash({ children }: { children: ReactNode }) {
   const { isLoading } = useAuth();
   const [minElapsed, setMinElapsed] = useState(false);
+  const [maxElapsed, setMaxElapsed] = useState(false);
   const [visible, setVisible] = useState(true);
 
   const logoScale = useRef(new Animated.Value(0.6)).current;
@@ -50,13 +58,17 @@ export default function AnimatedSplash({ children }: { children: ReactNode }) {
     ).start();
 
     const t = setTimeout(() => setMinElapsed(true), MIN_VISIBLE_MS);
-    return () => clearTimeout(t);
+    const cap = setTimeout(() => setMaxElapsed(true), MAX_VISIBLE_MS);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(cap);
+    };
   }, [logoOpacity, logoScale, pulse, textOffset, textOpacity]);
 
   useEffect(() => {
-    if (!minElapsed || isLoading) return;
+    if (!maxElapsed && (!minElapsed || isLoading)) return;
     Animated.timing(fade, { toValue: 0, duration: 350, useNativeDriver: true }).start(() => setVisible(false));
-  }, [fade, isLoading, minElapsed]);
+  }, [fade, isLoading, minElapsed, maxElapsed]);
 
   const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] });
   const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
@@ -80,7 +92,7 @@ export default function AnimatedSplash({ children }: { children: ReactNode }) {
             </View>
 
             <Animated.View style={{ opacity: textOpacity, transform: [{ translateY: textOffset }], alignItems: 'center' }}>
-              <Text style={styles.name}>CurePath</Text>
+              <Text style={styles.name}>CuraPath</Text>
               <Text style={styles.tag}>Your family's health, in one place</Text>
             </Animated.View>
 

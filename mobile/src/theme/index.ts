@@ -1,5 +1,5 @@
 /**
- * The CurePath palette, ported from the web app's tailwind.config.js.
+ * The CuraPath palette, ported from the web app's tailwind.config.js.
  *
  * Same values, so the two clients read as one product. Kept as plain
  * objects rather than utility classes because React Native styles are

@@ -41,7 +41,7 @@ function describeError(err: unknown, fallback: string) {
   if (status === 400) return 'That code was not right. Check it and try again.';
   if (!e?.response) {
     return IS_PRODUCTION
-      ? "Couldn't reach CurePath. Check your internet connection and try again."
+      ? "Couldn't reach CuraPath. Check your internet connection and try again."
       : "Couldn't reach the server. Check that the backend is running and that this phone is on the same network.";
   }
   return fallback;
@@ -183,7 +183,7 @@ export default function Login() {
               </View>
             )}
             <BeatingHeart size={compact ? 40 : 56} halo={!compact} />
-            <Text style={[styles.brandName, compact && styles.brandNameCompact]}>CurePath</Text>
+            <Text style={[styles.brandName, compact && styles.brandNameCompact]}>CuraPath</Text>
             {!compact && (
               <Text style={styles.brandTag}>
                 Your family's health records, insurance and medicines in one place.

@@ -40,6 +40,9 @@ export function HeartEcg({ size = 130, className = '', animated = true }: ArtPro
           <stop offset="0%" stopColor={C.purple} stopOpacity="0.32" />
           <stop offset="100%" stopColor={C.purple} stopOpacity="0" />
         </radialGradient>
+        <filter id={`heart-shadow-${id}`} x="-30%" y="-20%" width="160%" height="150%">
+          <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor={C.purpleDark} floodOpacity="0.3" />
+        </filter>
       </defs>
 
       {/* Soft bloom behind the shape — this is what makes it sit *in* the
@@ -49,7 +52,7 @@ export function HeartEcg({ size = 130, className = '', animated = true }: ArtPro
       <path
         d="M50 86 C46 82 12 58 12 34 C12 21 22 12 33 12 C41 12 47 16 50 22 C53 16 59 12 67 12 C78 12 88 21 88 34 C88 58 54 82 50 86 Z"
         fill={`url(#${fill})`}
-        opacity="0.9"
+        filter={`url(#heart-shadow-${id})`}
       />
       {/* Highlight along the upper-left lobe — a flat fill reads as a
           sticker; this gives the shape a light source. */}
@@ -90,6 +93,7 @@ export function Stethoscope({ size = 190, className = '' }: ArtProps) {
   const id = useId();
   const tube = `steth-tube-${id}`;
   const disc = `steth-disc-${id}`;
+  const shadow = `steth-shadow-${id}`;
 
   return (
     <svg
@@ -101,48 +105,40 @@ export function Stethoscope({ size = 190, className = '' }: ArtProps) {
       aria-hidden="true"
     >
       <defs>
+        {/* A richer, three-stop gradient with a near-white highlight reads
+            as a lit, dimensional object rather than a flat tinted shape —
+            the same trick a glossy app icon uses. */}
         <linearGradient id={tube} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={C.purpleSoft} />
+          <stop offset="0%" stopColor={C.white} />
+          <stop offset="35%" stopColor={C.purpleSoft} />
           <stop offset="100%" stopColor={C.purpleDark} />
         </linearGradient>
-        <linearGradient id={disc} x1="20%" y1="0%" x2="80%" y2="100%">
-          <stop offset="0%" stopColor={C.tealSoft} />
+        <linearGradient id={disc} x1="15%" y1="0%" x2="85%" y2="100%">
+          <stop offset="0%" stopColor={C.white} />
+          <stop offset="30%" stopColor={C.tealSoft} />
           <stop offset="100%" stopColor={C.teal} />
         </linearGradient>
+        <filter id={shadow} x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor={C.purpleDark} floodOpacity="0.28" />
+        </filter>
       </defs>
 
-      {/* Binaural tubes meeting at the Y-join */}
-      <path
-        d="M26 18 C20 46 32 60 50 62"
-        stroke={`url(#${tube})`}
-        strokeWidth="7"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
-      <path
-        d="M74 18 C80 46 68 60 50 62"
-        stroke={`url(#${tube})`}
-        strokeWidth="7"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
-      {/* Stem down to the chestpiece */}
-      <path
-        d="M50 62 C50 82 56 92 63 97"
-        stroke={`url(#${tube})`}
-        strokeWidth="7"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
+      <g filter={`url(#${shadow})`}>
+        {/* Binaural tubes meeting at the Y-join */}
+        <path d="M26 18 C20 46 32 60 50 62" stroke={`url(#${tube})`} strokeWidth="7" strokeLinecap="round" />
+        <path d="M74 18 C80 46 68 60 50 62" stroke={`url(#${tube})`} strokeWidth="7" strokeLinecap="round" />
+        {/* Stem down to the chestpiece */}
+        <path d="M50 62 C50 82 56 92 63 97" stroke={`url(#${tube})`} strokeWidth="7" strokeLinecap="round" />
 
-      {/* Earpieces */}
-      <rect x="19" y="6" width="14" height="14" rx="7" fill={`url(#${tube})`} opacity="0.9" />
-      <rect x="67" y="6" width="14" height="14" rx="7" fill={`url(#${tube})`} opacity="0.9" />
+        {/* Earpieces */}
+        <rect x="19" y="6" width="14" height="14" rx="7" fill={`url(#${tube})`} />
+        <rect x="67" y="6" width="14" height="14" rx="7" fill={`url(#${tube})`} />
 
-      {/* Chestpiece */}
-      <circle cx="72" cy="102" r="15" fill={`url(#${disc})`} opacity="0.9" />
-      <circle cx="72" cy="102" r="9" fill={C.white} opacity="0.45" />
-      <circle cx="68" cy="98" r="3.2" fill={C.white} opacity="0.6" />
+        {/* Chestpiece, with a bright specular dot for the "glossy" read */}
+        <circle cx="72" cy="102" r="15" fill={`url(#${disc})`} />
+        <circle cx="72" cy="102" r="9" fill={C.white} opacity="0.5" />
+        <circle cx="67" cy="97" r="3.6" fill={C.white} opacity="0.85" />
+      </g>
     </svg>
   );
 }
@@ -172,19 +168,23 @@ export function Prescription({ size = 150, className = '' }: ArtProps) {
           <stop offset="0%" stopColor={C.purpleSoft} />
           <stop offset="100%" stopColor={C.purple} />
         </linearGradient>
+        <filter id={`rx-shadow-${id}`} x="-30%" y="-20%" width="160%" height="140%">
+          <feDropShadow dx="0" dy="5" stdDeviation="5" floodColor={C.purpleDark} floodOpacity="0.22" />
+        </filter>
       </defs>
 
-      <rect x="8" y="12" width="84" height="106" rx="11" fill={`url(#${paper})`} />
-      <rect
-        x="8"
-        y="12"
-        width="84"
-        height="106"
-        rx="11"
-        stroke={C.purple}
-        strokeOpacity="0.22"
-        strokeWidth="1.5"
-      />
+      <g filter={`url(#rx-shadow-${id})`}>
+        <rect x="8" y="12" width="84" height="106" rx="11" fill={`url(#${paper})`} />
+        <rect
+          x="8"
+          y="12"
+          width="84"
+          height="106"
+          rx="11"
+          stroke={C.purple}
+          strokeOpacity="0.22"
+          strokeWidth="1.5"
+        />
       {/* Clipboard clasp */}
       <rect x="37" y="4" width="26" height="15" rx="5" fill={`url(#${clip})`} opacity="0.9" />
 
@@ -212,6 +212,7 @@ export function Prescription({ size = 150, className = '' }: ArtProps) {
         strokeLinecap="round"
         fill="none"
       />
+      </g>
     </svg>
   );
 }
@@ -234,32 +235,37 @@ export function MedicalShield({ size = 120, className = '', animated = true }: A
     >
       <defs>
         <linearGradient id={body} x1="10%" y1="0%" x2="90%" y2="100%">
-          <stop offset="0%" stopColor={C.tealSoft} />
-          <stop offset="60%" stopColor={C.teal} />
+          <stop offset="0%" stopColor={C.white} />
+          <stop offset="30%" stopColor={C.tealSoft} />
+          <stop offset="75%" stopColor={C.blue} />
           <stop offset="100%" stopColor={C.purple} />
         </linearGradient>
         <radialGradient id={glow}>
           <stop offset="0%" stopColor={C.teal} stopOpacity="0.3" />
           <stop offset="100%" stopColor={C.teal} stopOpacity="0" />
         </radialGradient>
+        <filter id={`shield-shadow-${id}`} x="-40%" y="-30%" width="180%" height="160%">
+          <feDropShadow dx="0" dy="5" stdDeviation="5" floodColor={C.purpleDark} floodOpacity="0.3" />
+        </filter>
       </defs>
 
       <circle cx="50" cy="55" r="52" fill={`url(#${glow})`} className={animated ? 'hn-glow-pulse' : ''} />
 
-      <path
-        d="M50 6 L88 20 V56 C88 82 70 99 50 106 C30 99 12 82 12 56 V20 Z"
-        fill={`url(#${body})`}
-        opacity="0.88"
-      />
-      <path
-        d="M50 6 L88 20 V56 C88 82 70 99 50 106"
-        stroke={C.white}
-        strokeOpacity="0.25"
-        strokeWidth="2"
-        fill="none"
-      />
-      {/* Medical cross */}
-      <path d="M43 32 H57 V48 H73 V62 H57 V78 H43 V62 H27 V48 H43 Z" fill={C.white} opacity="0.85" />
+      <g filter={`url(#shield-shadow-${id})`}>
+        <path d="M50 6 L88 20 V56 C88 82 70 99 50 106 C30 99 12 82 12 56 V20 Z" fill={`url(#${body})`} />
+        <path
+          d="M50 6 L88 20 V56 C88 82 70 99 50 106"
+          stroke={C.white}
+          strokeOpacity="0.4"
+          strokeWidth="2"
+          fill="none"
+        />
+        {/* A soft highlight wash across the upper-left face, the thing
+            that sells "glossy badge" instead of "flat sticker". */}
+        <path d="M50 6 L20 18 V52 C20 40 30 22 50 6 Z" fill={C.white} opacity="0.22" />
+        {/* Medical cross */}
+        <path d="M43 32 H57 V48 H73 V62 H57 V78 H43 V62 H27 V48 H43 Z" fill={C.white} opacity="0.92" />
+      </g>
     </svg>
   );
 }

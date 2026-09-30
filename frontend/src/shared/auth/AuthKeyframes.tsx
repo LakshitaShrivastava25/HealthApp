@@ -58,6 +58,21 @@ export default function AuthKeyframes() {
         100% { stroke-dashoffset: -30; }
       }
 
+      /* The journey line connecting the story clusters (symptoms → doctor
+         → treatment → better health). A long dash chases along the path
+         so it reads as something flowing rather than a static line. */
+      @keyframes hn-flow-run {
+        0%   { stroke-dashoffset: 1400; }
+        100% { stroke-dashoffset: 0; }
+      }
+
+      /* The little dot markers riding the journey line — same idea as
+         hn-glow-pulse but staggered per-marker via animation-delay. */
+      @keyframes hn-flow-dot {
+        0%, 100% { opacity: 0.35; transform: scale(0.85); }
+        50%      { opacity: 1;    transform: scale(1.15); }
+      }
+
       @keyframes hn-orbit     { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
       @keyframes hn-orbit-rev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
 
@@ -101,6 +116,26 @@ export default function AuthKeyframes() {
 
       @keyframes hn-spin { to { transform: rotate(360deg); } }
 
+      /* Tiny sparkle glints scattered across the mid-canvas — a quick
+         bright flash then gone, staggered per-glint via animation-delay
+         so they read as scattered twinkling rather than one pulse. */
+      @keyframes hn-twinkle {
+        0%, 100% { opacity: 0;   transform: scale(0.4); }
+        50%      { opacity: 0.9; transform: scale(1);   }
+      }
+
+      /* A gentle "breathing" scale, layered on top of a float animation
+         (via a comma-separated animation list) so badges and pills read
+         as alive even in the instant their float pass is near zero. */
+      @keyframes hn-pulse-soft {
+        0%, 100% { scale: 1; }
+        50%      { scale: 1.06; }
+      }
+      @keyframes hn-pulse-slow {
+        0%, 100% { scale: 1; }
+        50%      { scale: 1.025; }
+      }
+
       .hn-float-a { animation: hn-float-a 9s   ease-in-out infinite; }
       .hn-float-b { animation: hn-float-b 7.5s ease-in-out infinite; }
       .hn-float-c { animation: hn-float-c 10.5s ease-in-out infinite; }
@@ -108,6 +143,8 @@ export default function AuthKeyframes() {
       .hn-drift-fade { animation: hn-drift-fade 11s ease-in-out infinite; }
       .hn-glow-pulse { animation: hn-glow-pulse 4.5s ease-in-out infinite; transform-origin: center; }
       .hn-ecg-run    { animation: hn-ecg-run 4s linear infinite; }
+      .hn-flow-run   { animation: hn-flow-run 8s linear infinite; }
+      .hn-flow-dot   { animation: hn-flow-dot 2.6s ease-in-out infinite; transform-origin: center; }
       .hn-orbit      { animation: hn-orbit 46s linear infinite; }
       .hn-orbit-rev  { animation: hn-orbit-rev 62s linear infinite; }
       .hn-blob-a     { animation: hn-blob-a 24s ease-in-out infinite; }
@@ -118,19 +155,28 @@ export default function AuthKeyframes() {
       .hn-shake      { animation: hn-shake 0.4s ease-in-out 1; }
       .hn-dot-bounce { animation: hn-dot-bounce 1.1s ease-in-out infinite; }
       .hn-spin       { animation: hn-spin 0.7s linear infinite; }
+      /* Separate CSS properties (not the transform shorthand), so these
+         combine cleanly with any .hn-float-* class on the same element
+         instead of one animation clobbering the other. */
+      .hn-pulse-soft { animation: hn-pulse-soft 3.2s ease-in-out infinite; }
+      .hn-pulse-slow { animation: hn-pulse-slow 6s ease-in-out infinite; }
+      .hn-twinkle    { animation: hn-twinkle 3.6s ease-in-out infinite; }
 
       @media (prefers-reduced-motion: reduce) {
         .hn-float-a, .hn-float-b, .hn-float-c, .hn-float-d,
         .hn-drift-fade, .hn-glow-pulse, .hn-ecg-run,
         .hn-orbit, .hn-orbit-rev,
         .hn-blob-a, .hn-blob-b, .hn-blob-c,
-        .hn-particle, .hn-card-float, .hn-shake, .hn-dot-bounce {
+        .hn-particle, .hn-card-float, .hn-shake, .hn-dot-bounce,
+        .hn-flow-run, .hn-flow-dot, .hn-pulse-soft, .hn-pulse-slow, .hn-twinkle {
           animation: none !important;
         }
         /* Particles animate in from opacity 0, so with the animation off
            they would never appear at all. Pin them visible instead. */
         .hn-particle { opacity: 0.45 !important; }
         .hn-drift-fade { opacity: 0.45 !important; }
+        .hn-flow-dot { opacity: 0.75 !important; }
+        .hn-twinkle { opacity: 0.5 !important; }
         .hn-spin { animation: hn-spin 1.4s linear infinite; }
       }
     `}</style>

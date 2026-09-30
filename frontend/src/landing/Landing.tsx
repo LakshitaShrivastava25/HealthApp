@@ -19,11 +19,9 @@ import './landing.css';
  * <AuthShell> mounts it (same 0.7s opacity fade, same keyframe injection),
  * because that wrapper is part of how the effect looks, not incidental.
  *
- * It asks for the `landing` variant: this page is far wider than a login
- * screen and its two cards occupy only the middle, so the auth composition
- * left large empty bands down both flanks. The variant enlarges the same
- * pieces and adds a few more to fill them — same artwork, same float
- * keyframes, same speeds.
+ * It takes the background exactly as the login screens do, with no props:
+ * the story illustration (characters + journey line) is meant to appear on
+ * every page that renders this component, not only here.
  */
 export default function Landing() {
   return (
@@ -31,7 +29,7 @@ export default function Landing() {
       <AuthKeyframes />
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7 }}>
-        <AnimatedMedicalBackground variant="landing" />
+        <AnimatedMedicalBackground />
       </motion.div>
 
       <div className="page">

@@ -9,6 +9,7 @@ import {
 } from '../lib/api';
 import { setApiBaseUrl } from '../lib/config';
 import { clearLocalNotifications, unregisterForPush } from '../lib/notifications';
+import { clearSessionCache, readSessionCache, writeSessionCache } from '../lib/sessionCache';
 import { clearTokens, getAccessToken, getStoredApiBaseUrl, setTokens } from '../lib/tokens';
 
 export type Role = 'patient' | 'doctor' | 'admin' | 'ocr_reviewer' | 'claims_ops';
@@ -98,6 +99,14 @@ function portalForAccount(account: Account | null, doctor: DoctorRecord | null):
   return 'patient';
 }
 
+/** True only when the server itself rejected the session — not for timeouts or no network. */
+function isAuthRejection(err: unknown) {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return status === 401 || status === 403;
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [account, setAccount] = useState<Account | null>(null);
@@ -148,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // the next person to sign in on this phone doesn't get these alerts.
     await unregisterForPush();
     await clearLocalNotifications();
+    clearSessionCache();
     await clearTokens();
     setAccount(null);
     setProfiles([]);
@@ -156,8 +166,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setHasRegistered(false);
   }, []);
 
+  // Keep a copy of the loaded session so the next launch can open straight
+  // into the app. Written whenever it changes (login, a family member
+  // added, a doctor profile edited), never while signed out.
+  useEffect(() => {
+    if (!account) return;
+    writeSessionCache({ account, profiles, doctor });
+  }, [account, profiles, doctor]);
+
   // Restore a session on cold start, and let the API layer end it if a
   // refresh token turns out to be dead.
+  //
+  // A returning user is shown their last session straight away and the
+  // live one is fetched behind it, so opening the app never waits on the
+  // server. Only a real rejection from the server signs them out — a
+  // timeout or no signal just leaves the saved session in place.
   useEffect(() => {
     setSessionExpiredHandler(() => {
       void logout();
@@ -171,16 +194,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         return;
       }
-      try {
-        await loadSession();
-      } catch {
-        await clearTokens();
-      } finally {
+
+      const cached = await readSessionCache<Account, Profile, DoctorRecord>();
+      if (cached?.account) {
+        setAccount(cached.account);
+        setProfiles(cached.profiles ?? []);
+        setActiveProfile(cached.profiles?.[0] ?? null);
+        setDoctor(cached.doctor ?? null);
+        setHasRegistered(!!cached.doctor);
         setIsLoading(false);
+        loadSession().catch(() => {
+          // Offline or server asleep: keep showing the saved session. A dead
+          // login is handled by the API layer's session-expired handler.
+        });
+        return;
       }
+
+      // No saved copy yet (first launch after installing this version):
+      // wait for the server, retrying while a sleeping backend wakes up.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          await loadSession();
+          break;
+        } catch (err) {
+          if (isAuthRejection(err)) {
+            await clearTokens();
+            break;
+          }
+          if (attempt < 3) await wait(3000 * (attempt + 1));
+        }
+      }
+      setIsLoading(false);
     })();
     return () => setSessionExpiredHandler(null);
-  }, [loadSession, logout]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sendOtp = useCallback(async (phone: string) => {
     const { data } = await authApi.sendOtp(phone);

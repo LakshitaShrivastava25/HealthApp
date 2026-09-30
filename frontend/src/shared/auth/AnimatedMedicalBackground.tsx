@@ -316,7 +316,15 @@ export default function AnimatedMedicalBackground() {
           </div>
         </StoryCluster>
 
-        <StoryCluster origin={origin} strength={4} left="23%" top="15%" label="Doctor Consultation" tone="teal">
+        <StoryCluster
+          origin={origin}
+          strength={4}
+          left="23%"
+          top="15%"
+          label="Doctor Consultation"
+          tone="teal"
+          labelOffsetX={-56}
+        >
           <div className="relative">
             <CharacterArt src={doctorImg} alt="" size={220} float="hn-float-c" />
             <div className="absolute" style={{ left: 88, top: -26 }}>
@@ -552,6 +560,7 @@ function StoryCluster({
   top,
   label,
   tone,
+  labelOffsetX,
   children,
 }: {
   origin: ParallaxOrigin;
@@ -560,12 +569,21 @@ function StoryCluster({
   top: string;
   label: string;
   tone: 'purple' | 'teal' | 'blue';
+  /** Nudges only the pill label left/right in px, independent of the
+   *  illustration above it. The "Doctor Consultation" label sits close
+   *  enough to the card's left edge that at some viewport widths (roughly
+   *  1536–1800px) its right end tucks behind the card and reads as cut
+   *  off — this pulls just the label clear without moving the doctor/
+   *  patient artwork or any other cluster. */
+  labelOffsetX?: number;
   children: ReactNode;
 }) {
   return (
     <ParallaxLayer origin={origin} strength={strength} className="absolute" style={{ left, top }}>
       <div className="pointer-events-auto">{children}</div>
-      <StoryLabel tone={tone}>{label}</StoryLabel>
+      <StoryLabel tone={tone} offsetX={labelOffsetX}>
+        {label}
+      </StoryLabel>
     </ParallaxLayer>
   );
 }
@@ -574,12 +592,20 @@ function StoryCluster({
  * The small pill tag under each cluster — a dot in the chapter's tone plus
  * its name, on a soft white card, matching the reference mock's labels.
  */
-function StoryLabel({ tone, children }: { tone: 'purple' | 'teal' | 'blue'; children: ReactNode }) {
+function StoryLabel({
+  tone,
+  offsetX,
+  children,
+}: {
+  tone: 'purple' | 'teal' | 'blue';
+  offsetX?: number;
+  children: ReactNode;
+}) {
   const dot = tone === 'teal' ? C.teal : tone === 'blue' ? C.blue : C.purple;
   return (
     <div
       className="hn-float-d hn-pulse-soft mt-3 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white/80 px-3 py-1 text-[11px] font-medium shadow-sm backdrop-blur-sm"
-      style={{ color: C.ink700 }}
+      style={{ color: C.ink700, marginLeft: offsetX }}
     >
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
       {children}

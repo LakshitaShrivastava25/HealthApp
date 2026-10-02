@@ -269,7 +269,7 @@ export default function Login() {
                   more honest than a "Create account" link that would only
                   lead back to this same field. */}
               <p className="mt-5 border-t border-border/70 pt-4 text-center text-[11.5px] leading-relaxed text-ink-500">
-                New to HealthNow? Just enter your number — signing in for the first time creates your account.
+                New to CuraPath? Just enter your number — signing in for the first time creates your account.
               </p>
             </Step>
           )}
@@ -326,6 +326,20 @@ export default function Login() {
                   onResend={() => handleSendOtp(true)}
                 />
               </div>
+
+              {/* Shown for the whole OTP step, not just on error: the usual
+                  reason someone stalls here is a code that simply has not
+                  arrived yet, and silence at that moment reads as the app
+                  being broken. When sends are exhausted this becomes the
+                  way out, so "No codes left this hour" above is a status
+                  rather than a dead end. Plain text, not a mailto: neither
+                  support domain has MX records today, so a link would
+                  promise a reply that cannot arrive. */}
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+                {timers.sendsExhausted
+                  ? 'Try again in about an hour, or contact support if this keeps happening.'
+                  : "Didn't get a code? Check your signal, wait a minute — delivery can lag — or use Resend above."}
+              </p>
 
               <FormError message={error} />
 

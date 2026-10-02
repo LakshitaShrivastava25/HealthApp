@@ -56,6 +56,11 @@ export default function PhoneField({
             onChange={handleCountrySelect}
             disabled={disabled}
             aria-label="Country dialling code"
+            // Pauses the page's ambient background animations for as long
+            // as this native dropdown is open — see the matching CSS rule
+            // in AuthKeyframes.tsx for why.
+            onFocus={() => document.body.classList.add('hn-freeze-bg')}
+            onBlur={() => document.body.classList.remove('hn-freeze-bg')}
             className="max-w-[104px] cursor-pointer bg-transparent py-3 pl-2 pr-2 text-sm font-medium text-ink-900 outline-none disabled:cursor-not-allowed"
           >
             {COUNTRIES.map((c) => (

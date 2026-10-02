@@ -5,11 +5,11 @@ import { EASE_OUT } from './tokens';
 export type Portal = 'patient' | 'doctor' | 'admin';
 
 /**
- * The HealthNow brand lockup for the auth screens.
+ * The CuraPath brand lockup for the auth screens.
  *
  * The mark itself is unchanged from what Sidebar.tsx and the old login
  * already shipped — a solid brand-teal rounded square holding a lucide
- * icon, beside one bold "HealthNow" wordmark. That matters more than it
+ * icon, beside one bold "CuraPath" wordmark. That matters more than it
  * looks: a person signs in and lands on the dashboard a second later, and
  * a logo that shifts between those two frames reads as two products.
  *
@@ -19,9 +19,9 @@ export type Portal = 'patient' | 'doctor' | 'admin';
  */
 
 const MARKS = {
-  patient: { Icon: HeartPulse, label: 'HealthNow', sub: 'Your Health, Our Priority' },
-  doctor: { Icon: Stethoscope, label: 'HealthNow', sub: 'Doctor Portal' },
-  admin: { Icon: ShieldCheck, label: 'HealthNow', sub: 'Admin Portal' },
+  patient: { Icon: HeartPulse, label: 'CuraPath', sub: 'Your Health, Our Priority' },
+  doctor: { Icon: Stethoscope, label: 'CuraPath', sub: 'Doctor Portal' },
+  admin: { Icon: ShieldCheck, label: 'CuraPath', sub: 'Admin Portal' },
 } as const;
 
 export default function HealthNowLogo({
@@ -43,8 +43,18 @@ export default function HealthNowLogo({
       <div className="flex items-center gap-2.5">
         <div className="relative">
           {/* Bloom. Sits behind the badge, never animates a shadow. */}
-          <div className="absolute inset-0 rounded-xl bg-brand-teal/35 blur-lg" aria-hidden="true" />
-          <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-brand-teal text-white shadow-[0_6px_16px_-4px_rgba(14,165,166,0.55)]">
+          <div
+            className="absolute inset-0 rounded-xl blur-lg"
+            style={{ background: 'linear-gradient(135deg, #4CC7C8 0%, #2E9BD6 45%, #5B4BC4 100%)', opacity: 0.4 }}
+            aria-hidden="true"
+          />
+          {/* The brand mark: same gradient as the app icon and favicon, so
+              this badge, the mobile app icon and the browser tab icon all
+              read as one consistent logo rather than three near-misses. */}
+          <div
+            className="relative flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-[0_6px_16px_-4px_rgba(91,75,196,0.5)]"
+            style={{ background: 'linear-gradient(135deg, #4CC7C8 0%, #2E9BD6 45%, #5B4BC4 100%)' }}
+          >
             <Icon size={22} strokeWidth={2.5} />
           </div>
         </div>

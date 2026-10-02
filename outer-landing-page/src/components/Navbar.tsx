@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
-import { CloseIcon, HeartPulseIcon, MenuIcon } from './icons'
+import { CloseIcon, MenuIcon } from './icons'
+import BrandMark from './BrandMark'
 import { MAIN_APP_URL } from '../config'
 
 const navLinks = [
@@ -19,10 +20,8 @@ export default function Navbar() {
     <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <a href="#hero" className="flex items-center gap-2 text-lg font-semibold text-ink">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white">
-            <HeartPulseIcon className="h-[18px] w-[18px]" strokeWidth={2} />
-          </span>
-          HealthNow
+          <BrandMark size={32} />
+          CuraPath
         </a>
 
         <nav className="hidden items-center gap-7 lg:flex">

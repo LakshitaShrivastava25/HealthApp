@@ -33,7 +33,7 @@ export function describeSendOtpError(err: unknown): string {
   const status = e?.response?.status;
 
   if (!e?.response) {
-    return "Can't reach HealthNow right now. Check your connection and try again.";
+    return "Can't reach CuraPath right now. Check your connection and try again.";
   }
   if (status === 429) {
     // The backend allows five codes per number per hour.
@@ -50,7 +50,7 @@ export function describeVerifyOtpError(err: unknown, ctx: AuthErrorContext = {})
   const status = e?.response?.status;
 
   if (!e?.response) {
-    return "Can't reach HealthNow right now. Check your connection and try again.";
+    return "Can't reach CuraPath right now. Check your connection and try again.";
   }
   if (status === 403) {
     // e.g. "This account has been deleted. Contact support if this was a

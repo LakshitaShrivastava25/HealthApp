@@ -13,14 +13,14 @@ export default function AboutUs() {
     <section id="about-us" className="relative scroll-mt-20 px-6 py-24 sm:py-32">
       <div className="mx-auto max-w-4xl text-center">
         <Reveal>
-          <h2 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">About HealthNow</h2>
+          <h2 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">About CuraPath</h2>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-body">
             Across India, a typical family manages health records scattered across paper files,
             WhatsApp photos of prescriptions, and insurance PDFs buried in email — with no single place
             that ties it all together for parents, kids, and aging grandparents alike.
           </p>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-body">
-            We built HealthNow to change that. Our mission is to bring every record, reminder, and
+            We built CuraPath to change that. Our mission is to bring every record, reminder, and
             decision into one calm, AI-guided place — so families spend less time hunting for
             information and more time on what actually matters: each other.
           </p>
@@ -48,10 +48,10 @@ export default function AboutUs() {
               Questions, feedback, or partnership ideas — we&apos;d love to hear from you.
             </p>
             <a
-              href="mailto:hello@healthnow.in"
+              href="mailto:hello@curapath.in"
               className="mt-4 inline-block font-semibold text-brand transition hover:text-brand-dark"
             >
-              hello@healthnow.in
+              hello@curapath.in
             </a>
           </div>
         </Reveal>

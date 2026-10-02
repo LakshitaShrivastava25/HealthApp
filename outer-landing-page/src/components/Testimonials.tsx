@@ -12,7 +12,7 @@ const testimonials = [
   },
   {
     quote:
-      "Tracking my kids' vaccination records was a nightmare before HealthNow. Now I get a gentle reminder before every dose is due, and our pediatrician can see the full history instantly.",
+      "Tracking my kids' vaccination records was a nightmare before CuraPath. Now I get a gentle reminder before every dose is due, and our pediatrician can see the full history instantly.",
     name: 'Priya S.',
     role: 'Mother of two',
     initial: 'P',
@@ -20,7 +20,7 @@ const testimonials = [
   },
   {
     quote:
-      "I never understood what my insurance actually covered until HealthNow's AI broke it down in plain language. It even estimated my claim amount before I filed — spot on.",
+      "I never understood what my insurance actually covered until CuraPath's AI broke it down in plain language. It even estimated my claim amount before I filed — spot on.",
     name: 'Anjali M.',
     role: 'Policyholder',
     initial: 'A',

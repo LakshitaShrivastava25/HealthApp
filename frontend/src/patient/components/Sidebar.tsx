@@ -57,7 +57,7 @@ export default function Sidebar() {
           <HeartPulse size={18} strokeWidth={2.5} />
         </div>
         <div>
-          <p className="font-bold text-ink-900 leading-tight">HealthNow</p>
+          <p className="font-bold text-ink-900 leading-tight">CuraPath</p>
           <p className="text-[11px] text-ink-500 leading-tight">Your Health, Our Priority</p>
         </div>
       </div>

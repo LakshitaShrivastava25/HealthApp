@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { motion, useTransform } from 'framer-motion';
 import type { ParallaxOrigin } from './usePointerParallax';
 
@@ -15,18 +15,21 @@ export default function ParallaxLayer({
   origin,
   strength,
   className = '',
+  style,
   children,
 }: {
   origin: ParallaxOrigin;
   strength: number;
   className?: string;
+  /** Extra CSS (left/top positioning, etc.) merged in under the x/y transform. */
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   const x = useTransform(origin.x, (v) => v * strength);
   const y = useTransform(origin.y, (v) => v * strength);
 
   return (
-    <motion.div style={{ x, y }} className={className}>
+    <motion.div style={{ ...style, x, y }} className={className}>
       {children}
     </motion.div>
   );

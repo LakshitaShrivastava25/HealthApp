@@ -1,5 +1,5 @@
 """
-Django settings for the HealthNow backend.
+Django settings for the CuraPath backend.
 
 Database: reads DATABASE_URL from the environment via dj-database-url.
 Drops in the Neon PostgreSQL connection string later with zero code

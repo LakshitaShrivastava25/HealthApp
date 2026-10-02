@@ -179,6 +179,31 @@ export default function AuthKeyframes() {
         .hn-twinkle { opacity: 0.5 !important; }
         .hn-spin { animation: hn-spin 1.4s linear infinite; }
       }
+
+      /*
+       * A native <select> popup (the country-code dropdown) is rendered by
+       * the OS, outside the page's own compositor layer. On some Chrome +
+       * GPU-driver combinations, having dozens of infinite CSS animations
+       * still running on the page underneath that popup causes a
+       * flickering/hanging render — a known class of bug, not something a
+       * single root cause can be patched away. PhoneField toggles this
+       * class on <body> for as long as that dropdown has focus, which
+       * reuses the exact same "freeze" technique as prefers-reduced-motion
+       * above rather than inventing a second one.
+       */
+      body.hn-freeze-bg .hn-float-a, body.hn-freeze-bg .hn-float-b,
+      body.hn-freeze-bg .hn-float-c, body.hn-freeze-bg .hn-float-d,
+      body.hn-freeze-bg .hn-drift-fade, body.hn-freeze-bg .hn-glow-pulse,
+      body.hn-freeze-bg .hn-ecg-run,
+      body.hn-freeze-bg .hn-orbit, body.hn-freeze-bg .hn-orbit-rev,
+      body.hn-freeze-bg .hn-blob-a, body.hn-freeze-bg .hn-blob-b, body.hn-freeze-bg .hn-blob-c,
+      body.hn-freeze-bg .hn-particle, body.hn-freeze-bg .hn-card-float,
+      body.hn-freeze-bg .hn-shake, body.hn-freeze-bg .hn-dot-bounce,
+      body.hn-freeze-bg .hn-flow-run, body.hn-freeze-bg .hn-flow-dot,
+      body.hn-freeze-bg .hn-pulse-soft, body.hn-freeze-bg .hn-pulse-slow,
+      body.hn-freeze-bg .hn-twinkle, body.hn-freeze-bg .hn-spin {
+        animation-play-state: paused !important;
+      }
     `}</style>
   );
 }

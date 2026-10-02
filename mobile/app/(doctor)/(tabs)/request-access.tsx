@@ -9,9 +9,18 @@ import { useAuth } from '../../../src/context/AuthContext';
 import { accessApi } from '../../../src/lib/api';
 import { colors, radius, spacing, type } from '../../../src/theme';
 
-/** Profile ids are UUIDs — checking the shape locally turns a confusing
- *  server rejection into an immediate, specific message. */
+/** A patient reference code: two letters then four digits, e.g. AB1234 —
+ *  the shape family/models.py generates. The backend matches it
+ *  case-insensitively (doctors/serializers.py ProfileReferenceCodeField). */
+const CODE_RE = /^[A-Z]{2}\d{4}$/;
+/** Legacy fallback the backend still accepts: the raw profile UUID. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Trimmed, and uppercased when it is a short code, so "ab1234 " works. */
+function normalise(raw: string): string {
+  const trimmed = raw.trim();
+  return UUID_RE.test(trimmed) ? trimmed : trimmed.toUpperCase();
+}
 
 export default function RequestAccess() {
   const { doctor } = useAuth();
@@ -22,7 +31,8 @@ export default function RequestAccess() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const looksValid = UUID_RE.test(profileId.trim());
+  const reference = normalise(profileId);
+  const looksValid = CODE_RE.test(reference) || UUID_RE.test(reference);
 
   async function handlePaste() {
     const text = await Clipboard.getStringAsync();
@@ -34,7 +44,7 @@ export default function RequestAccess() {
     setError(null);
     setBusy(true);
     try {
-      await accessApi.request(doctor.id, profileId.trim());
+      await accessApi.request(doctor.id, reference);
       setSuccess(true);
       setProfileId('');
       setTimeout(() => {
@@ -42,9 +52,14 @@ export default function RequestAccess() {
         router.push('/(doctor)/(tabs)');
       }, 1400);
     } catch (err) {
-      const response = (err as { response?: { status?: number; data?: { detail?: string } } })?.response;
+      const response = (
+        err as { response?: { status?: number; data?: { detail?: string; profile?: string[] } } }
+      )?.response;
       if (response?.data?.detail) {
         setError(response.data.detail);
+      } else if (response?.data?.profile?.[0]) {
+        // ProfileReferenceCodeField's message, e.g. "No patient found with that reference ID."
+        setError(response.data.profile[0]);
       } else if (response?.status === 400) {
         // The backend enforces one grant per doctor-patient pair.
         setError(
@@ -71,16 +86,16 @@ export default function RequestAccess() {
         </View>
 
         <Text style={[type.caption, { marginBottom: spacing.lg }]}>
-          Ask the patient to open Doctor Access in their app and read you their reference ID. Paste
-          it below. They receive your request and choose whether to approve it.
+          Ask the patient to open Doctor Access in their app and read you their 6-character
+          reference ID, e.g. AB1234. They receive your request and choose whether to approve it.
         </Text>
 
         <Input
           label="Patient reference ID"
           value={profileId}
           onChangeText={setProfileId}
-          placeholder="00000000-0000-0000-0000-000000000000"
-          autoCapitalize="none"
+          placeholder="AB1234"
+          autoCapitalize="characters"
           autoCorrect={false}
         />
 
@@ -95,7 +110,7 @@ export default function RequestAccess() {
 
         {!!profileId && !looksValid && (
           <Text style={styles.fieldError}>
-            That does not look like a reference ID. It should be 36 characters with dashes.
+            That does not look like a reference ID. It should be 6 characters, like AB1234.
           </Text>
         )}
 

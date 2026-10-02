@@ -9,6 +9,7 @@ import {
   ScrollText,
   LogOut,
   ShieldAlert,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/admin/patients', label: 'Patients', icon: UserRound },
   { to: '/admin/accounts', label: 'Users & Accounts', icon: Users },
   { to: '/admin/audit-log', label: 'Audit Log', icon: ScrollText },
+  { to: '/admin/otp-settings', label: 'OTP Settings', icon: KeyRound },
 ];
 
 export default function Sidebar() {

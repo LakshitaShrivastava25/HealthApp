@@ -154,6 +154,11 @@ TWOFACTOR_TEMPLATE_NAME = os.getenv('TWOFACTOR_TEMPLATE_NAME', 'CuraPathOTP')
 TWOFACTOR_DLT_PE_ID = os.getenv('TWOFACTOR_DLT_PE_ID', '')
 TWOFACTOR_DLT_TEMPLATE_ID = os.getenv('TWOFACTOR_DLT_TEMPLATE_ID', '')
 
+# Initial OTP mode ('sms' or 'master') used only when the OTPConfig row is
+# first created. After that, switch it from the admin portal (Settings → OTP),
+# Django admin, or `python manage.py otp_mode master|sms`.
+OTP_DEFAULT_MODE = os.getenv('OTP_DEFAULT_MODE', 'master')
+
 # Show the OTP flow's INFO logs ("Sending OTP via 2Factor SMS ...") in the
 # server console; Python's default root level (WARNING) would hide them.
 LOGGING = {

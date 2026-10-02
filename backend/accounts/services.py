@@ -1,8 +1,10 @@
 import hashlib
+import hmac
 import json
 import logging
 import random
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -11,7 +13,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 
-from .models import OTPRequest
+from .models import OTPConfig, OTPRequest
 
 OTP_TTL_MINUTES = 10  # the approved SMS text says "valid for 10 minutes"
 OTP_RATE_LIMIT_PER_HOUR = 5
@@ -29,7 +31,7 @@ def _mask_phone(phone: str) -> str:
     return f"{'*' * max(len(phone) - 4, 0)}{phone[-4:]}"
 
 
-def _send_via_2factor(phone_number: str, otp: str) -> bool:
+def _send_via_2factor(phone_number: str, otp: str) -> tuple[bool, str]:
     """
     Sends the OTP as a plain DLT transactional SMS through 2Factor.in
     ("Send Single SMS" in the current 2Factor API docs):
@@ -46,8 +48,9 @@ def _send_via_2factor(phone_number: str, otp: str) -> bool:
     templatename, and ("Incorrect sender id and templatename provided") unless
     the Sender ID + template are mapped under Transactional SMS in the 2Factor
     dashboard. The OTP fills the template's first variable. Verification stays local (hashed OTPRequest
-    rows). Returns True only on a "Success" response. Never logs the API
-    key, the request body (it contains the key and the OTP) or the OTP.
+    rows). Returns (True, details) only on a "Success" response, otherwise
+    (False, <2Factor's error text>). Never logs the API key, the request
+    body (it contains the key and the OTP) or the OTP.
     """
     phone = re.sub(r'\D', '', phone_number)  # "+91 98765 43210" -> "919876543210"
     payload = {
@@ -81,15 +84,15 @@ def _send_via_2factor(phone_number: str, otp: str) -> bool:
         except ValueError:
             body = {'Details': f'HTTP {exc.code}'}
         logger.error('2Factor SMS OTP send failed for %s: HTTP %s %s', _mask_phone(phone), exc.code, body.get('Details'))
-        return False
+        return False, f"HTTP {exc.code}: {body.get('Details')}"
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         logger.error('2Factor SMS OTP send failed for %s: %s', _mask_phone(phone), type(exc).__name__)
-        return False
+        return False, f'Could not reach 2Factor ({type(exc).__name__})'
     if body.get('Status') != 'Success':
         logger.error('2Factor SMS OTP send failed for %s: %s', _mask_phone(phone), body.get('Details'))
-        return False
+        return False, str(body.get('Details') or body)
     logger.info('2Factor SMS OTP accepted for %s', _mask_phone(phone))
-    return True
+    return True, str(body.get('Details') or 'Success')
 
 
 def request_otp(phone_number: str) -> dict:
@@ -109,6 +112,12 @@ def request_otp(phone_number: str) -> dict:
     if recent_count >= OTP_RATE_LIMIT_PER_HOUR:
         return {'ok': False, 'error': 'Too many OTP requests. Try again later.'}
 
+    if OTPConfig.load().mode == OTPConfig.Mode.MASTER:
+        # Master mode: nothing is sent, verify_otp accepts the master code.
+        # The code itself is never returned to the client.
+        logger.info('OTP master mode: skipping SMS for %s', _mask_phone(phone_number))
+        return {'ok': True}
+
     otp = f"{random.SystemRandom().randint(0, 999999):06d}"
     otp_request = OTPRequest.objects.create(
         phone_number=phone_number,
@@ -117,7 +126,8 @@ def request_otp(phone_number: str) -> dict:
     )
 
     if settings.TWOFACTOR_API_KEY:
-        if not _send_via_2factor(phone_number, otp):
+        sent, _details = _send_via_2factor(phone_number, otp)
+        if not sent:
             # Don't let a gateway failure eat into the user's hourly quota.
             otp_request.delete()
             return {'ok': False, 'error': "Couldn't send the OTP SMS. Please try again.", 'status': 502}
@@ -132,6 +142,10 @@ def request_otp(phone_number: str) -> dict:
 
 
 def verify_otp(phone_number: str, otp: str) -> bool:
+    config = OTPConfig.load()
+    if config.mode == OTPConfig.Mode.MASTER:
+        return hmac.compare_digest(otp, config.master_otp)
+
     candidate = (
         OTPRequest.objects.filter(phone_number=phone_number, is_used=False)
         .order_by('-created_at')
@@ -150,3 +164,69 @@ def verify_otp(phone_number: str, otp: str) -> bool:
     candidate.is_used = True
     candidate.save(update_fields=['is_used'])
     return True
+
+
+def twofactor_balance() -> str:
+    """
+    Remaining transactional-SMS credits on the 2Factor account, or a short
+    error string. Used by the admin OTP settings screen to diagnose delivery.
+    """
+    if not settings.TWOFACTOR_API_KEY:
+        return 'TWOFACTOR_API_KEY is not set'
+    url = (
+        f'https://2factor.in/API/V1/{urllib.parse.quote(settings.TWOFACTOR_API_KEY)}'
+        '/ADDON_SERVICES/BAL/TRANSACTIONAL_SMS'
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=TWOFACTOR_TIMEOUT_SECONDS) as resp:
+            body = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode())
+        except ValueError:
+            return f'HTTP {exc.code}'
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        return f'Could not reach 2Factor ({type(exc).__name__})'
+    return str(body.get('Details'))
+
+
+def twofactor_delivery_status(session_id: str) -> str:
+    """
+    Operator delivery status for a sent SMS ("DELIVERED", "DLT-CNT-REJECT", ...),
+    or '' while 2Factor has no status yet.
+
+    2Factor answers the send call with "Success" as soon as it queues the
+    message; DLT scrubbing happens afterwards, so a template/header mismatch
+    only ever shows up here (e.g. DLT-CNT-REJECT = content doesn't match the
+    DLT-approved template, or the header isn't linked to it).
+    """
+    url = (
+        f'https://2factor.in/API/V1/{urllib.parse.quote(settings.TWOFACTOR_API_KEY)}'
+        f'/ADDON_SERVICES/RPT/TSMS/{urllib.parse.quote(session_id)}'
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=TWOFACTOR_TIMEOUT_SECONDS) as resp:
+            xml = resp.read().decode()
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        return ''
+    match = re.search(r'<statusDesc>([^<]*)</statusDesc>', xml)
+    return match.group(1).strip() if match else ''
+
+
+def send_test_sms(phone_number: str) -> tuple[bool, str, str]:
+    """
+    Admin diagnostic: send a throwaway OTP SMS, then poll the delivery report
+    for a few seconds. Returns (accepted, 2Factor reply, delivery status).
+    """
+    if not settings.TWOFACTOR_API_KEY:
+        return False, 'TWOFACTOR_API_KEY is not set on the server', ''
+    otp = f"{random.SystemRandom().randint(0, 999999):06d}"
+    ok, details = _send_via_2factor(phone_number, otp)
+    status = ''
+    if ok:
+        for _ in range(4):
+            time.sleep(2)
+            status = twofactor_delivery_status(details)
+            if status:
+                break
+    return ok, details, status

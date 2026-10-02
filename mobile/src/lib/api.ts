@@ -150,6 +150,21 @@ export const documentsApi = {
       fileForm(file, { profile: profileId, category, title: file.name }),
       MULTIPART
     ),
+  // Review-screen edits, then an explicit confirm — the only transition to
+  // PROCESSED (same flow as the website's DocumentDetailModal).
+  update: (
+    id: string,
+    data: Partial<{
+      title: string;
+      category: string;
+      document_date: string | null;
+      hospital_name: string;
+      doctor_name: string;
+    }>
+  ) => api.patch(`/documents/${id}/`, data),
+  confirm: (id: string) => api.post(`/documents/${id}/confirm/`),
+  // Re-runs extraction on a document whose processing failed.
+  retryProcessing: (id: string) => api.post(`/documents/${id}/retry-processing/`),
   correct: (id: string, structured_data: Record<string, unknown>) =>
     api.patch(`/documents/${id}/correct/`, { structured_data }),
   delete: (id: string) => api.delete(`/documents/${id}/`),
@@ -268,6 +283,11 @@ export const adminApi = {
   rejectDoctor: (id: string) => api.post(`/admin/doctor-verification/${id}/reject/`),
   patients: (search?: string) => api.get('/admin/patients/', { params: { search } }),
   accounts: (search?: string) => api.get('/admin/accounts/', { params: { search } }),
+  // Login OTP mode switch: 'master' (fixed code, no SMS) or 'sms' (2Factor).
+  otpSettings: () => api.get('/admin/otp-settings/'),
+  updateOtpSettings: (data: { mode?: 'sms' | 'master'; master_otp?: string }) =>
+    api.patch('/admin/otp-settings/', data),
+  sendTestSms: (test_phone: string) => api.post('/admin/otp-settings/', { test_phone }),
   deactivateAccount: (id: string) => api.post(`/admin/accounts/${id}/deactivate/`),
   auditLog: () => api.get('/admin/audit-log/'),
 };

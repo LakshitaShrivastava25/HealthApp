@@ -35,6 +35,8 @@ export type Profile = {
   weight_kg?: number | null;
   preferred_language?: string;
   initials: string;
+  /** Short, sayable patient code (e.g. "AB1234") a doctor enters to request access. */
+  reference_code?: string;
 };
 
 export type DoctorRecord = {

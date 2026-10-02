@@ -105,30 +105,45 @@ export default function Medicines() {
     if (!activeProfile || !name.trim()) return;
     setFormError(null);
     setSaving(true);
+    let medication: Medication;
     try {
-      const { data: medication } = await medicinesApi.create({
+      ({ data: medication } = await medicinesApi.create({
         profile: activeProfile.id,
         name: name.trim(),
         dosage: dosage.trim(),
         instructions: instructions.trim(),
         frequency: frequency.trim() || 'daily',
-      });
+      }));
+    } catch {
+      setFormError("Couldn't save that medicine. Check your connection and try again.");
+      setSaving(false);
+      return;
+    }
+
+    // The medicine exists from here on. If only the reminder fails, say so
+    // and close the form — a retry would create the medicine a second time.
+    let reminderFailed = false;
+    try {
       const hh = String(reminderTime.getHours()).padStart(2, '0');
       const mm = String(reminderTime.getMinutes()).padStart(2, '0');
       await medicinesApi.addReminder(medication.id, `${hh}:${mm}`);
-
-      setName('');
-      setDosage('');
-      setInstructions('');
-      setFrequency('daily');
-      setShowForm(false);
-      await load();
-      void syncMedicineReminders(profiles);
     } catch {
-      setFormError("Couldn't save that medicine. Check your connection and try again.");
-    } finally {
-      setSaving(false);
+      reminderFailed = true;
     }
+
+    setName('');
+    setDosage('');
+    setInstructions('');
+    setFrequency('daily');
+    setShowForm(false);
+    setSaving(false);
+    await load();
+    if (reminderFailed) {
+      setError(
+        `${medication.name} was saved, but its reminder couldn't be set. Remove the medicine and add it again to get a reminder.`
+      );
+    }
+    void syncMedicineReminders(profiles);
   }
 
   async function handleDelete(id: string) {

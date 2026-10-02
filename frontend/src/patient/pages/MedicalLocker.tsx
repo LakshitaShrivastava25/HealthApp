@@ -12,6 +12,9 @@ const tabs = [
   { label: 'Prescriptions', value: 'prescription' },
   { label: 'Scans', value: 'scan' },
   { label: 'Discharge', value: 'discharge' },
+  // Uploads from "All" are filed as `other`; without this tab they could
+  // never be filtered to. Matches the mobile app's locker.
+  { label: 'Other', value: 'other' },
 ];
 
 const docBadgeTone: Record<string, 'info' | 'success' | 'warning' | 'neutral'> = {

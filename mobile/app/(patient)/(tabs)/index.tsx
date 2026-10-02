@@ -3,8 +3,10 @@ import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { NotificationRow } from '../../../src/components/NotificationBell';
 import { Badge, Card, ErrorNote, Row, Screen } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
+import { deriveNotifications, type AppNotification } from '../../../src/hooks/useNotifications';
 import {
   doctorAccessApi,
   documentsApi,
@@ -64,6 +66,8 @@ export default function Dashboard() {
   const [policyCount, setPolicyCount] = useState(0);
   const [grants, setGrants] = useState<Grant[]>([]);
   const [notifications, setNotifications] = useState<Notif[]>([]);
+  const [attention, setAttention] = useState<AppNotification[]>([]);
+  const [reminderError, setReminderError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -85,6 +89,10 @@ export default function Dashboard() {
       ]);
       const allDocs = unwrap<Doc>(docs.data);
       setDocuments(allDocs.slice(0, 4));
+      // Same items as the header bell, minus pending access requests: those
+      // already have their own banner above, so passing no grants here keeps
+      // them from showing twice. Derived from data already loaded — no extra fetch.
+      setAttention(deriveNotifications(allDocs, []));
       setDocumentCount(allDocs.length);
       setMedications(unwrap<Med>(meds.data));
       setPolicyCount(unwrap(policies.data).length);
@@ -322,16 +330,31 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {notifications.length > 0 && (
+      {(notifications.length > 0 || attention.length > 0) && (
         <>
           <SectionHeader title="Reminders" />
+          {!!reminderError && <ErrorNote message={reminderError} />}
           <Card style={styles.listCard}>
+            {attention.map((a, i) => (
+              <NotificationRow
+                key={a.id}
+                item={a}
+                last={i === attention.length - 1 && notifications.length === 0}
+                onPress={() => router.push(a.href)}
+              />
+            ))}
             {notifications.slice(0, 4).map((n, i) => (
               <Pressable
                 key={n.id}
                 onPress={async () => {
-                  await notificationsApi.markRead(n.id);
-                  setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                  setReminderError(null);
+                  try {
+                    await notificationsApi.markRead(n.id);
+                    setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                  } catch {
+                    // Leave the reminder in place so the tap can be retried.
+                    setReminderError("Couldn't mark that reminder as done. Please try again.");
+                  }
                 }}
                 style={[styles.listRow, i === Math.min(notifications.length, 4) - 1 && { borderBottomWidth: 0 }]}
               >

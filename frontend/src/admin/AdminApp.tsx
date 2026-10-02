@@ -9,6 +9,7 @@ import DoctorVerification from './pages/DoctorVerification';
 import Patients from './pages/Patients';
 import Accounts from './pages/Accounts';
 import AuditLog from './pages/AuditLog';
+import OtpSettings from './pages/OtpSettings';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -48,6 +49,7 @@ export default function adminRoutes() {
         <Route path="patients" element={<Patients />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="audit-log" element={<AuditLog />} />
+        <Route path="otp-settings" element={<OtpSettings />} />
       </Route>
     </Route>
   );

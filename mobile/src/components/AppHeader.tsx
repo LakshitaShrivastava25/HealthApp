@@ -1,17 +1,25 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '../context/AuthContext';
 import { colors, spacing } from '../theme';
 import BeatingHeart from './BeatingHeart';
+import NotificationBell from './NotificationBell';
 import ProfileSwitcher from './ProfileSwitcher';
 
 /**
  * Header for the patient tabs: beating brand mark, the screen's name under
  * a small "CuraPath" kicker, and the family-profile switcher as a pill.
  * Replaces the stock navigator header, which had no room for the brand.
+ *
+ * The notification bell is patient-only: it is on by default for a patient
+ * session and can be forced either way with `showBell`, so reusing this
+ * header elsewhere never shows a patient bell to a doctor or admin.
  */
-export default function AppHeader({ title }: { title: string }) {
+export default function AppHeader({ title, showBell }: { title: string; showBell?: boolean }) {
   const insets = useSafeAreaInsets();
+  const { portal } = useAuth();
+  const bell = showBell ?? portal === 'patient';
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + spacing.sm }]}>
@@ -25,7 +33,10 @@ export default function AppHeader({ title }: { title: string }) {
             </Text>
           </View>
         </View>
-        <ProfileSwitcher variant="pill" />
+        <View style={styles.right}>
+          {bell && <NotificationBell />}
+          <ProfileSwitcher variant="pill" />
+        </View>
       </View>
     </View>
   );
@@ -46,6 +57,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  right: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   left: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 1 },
   kicker: {
     fontSize: 11,

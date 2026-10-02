@@ -150,3 +150,68 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AuditLogSerializer
     permission_classes = [IsStaffAdmin]
     queryset = AuditLog.objects.all()
+
+
+class OTPSettingsView(APIView):
+    """
+    GET   /api/admin/otp-settings/  — current OTP mode + SMS gateway health.
+    PATCH /api/admin/otp-settings/  — {"mode": "master"|"sms", "master_otp"?: "555555"}
+    POST  /api/admin/otp-settings/  — {"test_phone": "+91..."} sends a test SMS
+                                      and returns 2Factor's reply verbatim.
+    """
+    permission_classes = [IsStaffAdmin]
+
+    def _payload(self, config, check_balance=True):
+        from django.conf import settings as dj_settings
+        from accounts.services import twofactor_balance
+        return {
+            'mode': config.mode,
+            'master_otp': config.master_otp,
+            'updated_at': config.updated_at,
+            'updated_by': config.updated_by.phone_number if config.updated_by else None,
+            'sms_configured': bool(dj_settings.TWOFACTOR_API_KEY),
+            'sms_sender_id': dj_settings.TWOFACTOR_SENDER_ID,
+            'sms_template_name': dj_settings.TWOFACTOR_TEMPLATE_NAME,
+            'sms_balance': twofactor_balance() if check_balance else None,
+        }
+
+    def get(self, request):
+        from accounts.models import OTPConfig
+        return Response(self._payload(OTPConfig.load()))
+
+    def patch(self, request):
+        from accounts.models import OTPConfig
+        config = OTPConfig.load()
+        mode = request.data.get('mode')
+        if mode is not None:
+            if mode not in OTPConfig.Mode.values:
+                return Response({'detail': 'mode must be "sms" or "master".'}, status=400)
+            config.mode = mode
+        master = request.data.get('master_otp')
+        if master is not None:
+            master = str(master).strip()
+            if not (master.isdigit() and len(master) == 6):
+                return Response({'detail': 'Master OTP must be exactly 6 digits.'}, status=400)
+            config.master_otp = master
+        config.updated_by = request.user
+        config.save()
+        AuditLog.objects.create(
+            staff=request.user, action=f'otp_mode_{config.mode}',
+            target_type='otp_settings', target_id='1',
+        )
+        return Response(self._payload(config, check_balance=False))
+
+    def post(self, request):
+        from accounts.services import send_test_sms
+        phone = str(request.data.get('test_phone') or '').strip()
+        if len(''.join(c for c in phone if c.isdigit())) < 10:
+            return Response({'detail': 'Enter a valid phone number.'}, status=400)
+        ok, details, delivery = send_test_sms(phone)
+        hint = ''
+        if 'DLT' in delivery.upper():
+            hint = (
+                'The operator rejected the SMS on DLT checks. Make sure the 2Factor template text matches the '
+                'DLT-approved template exactly, the header (sender ID) is linked to that template on the DLT portal, '
+                'and set TWOFACTOR_DLT_PE_ID / TWOFACTOR_DLT_TEMPLATE_ID on the server.'
+            )
+        return Response({'ok': ok, 'details': details, 'delivery_status': delivery or 'pending', 'hint': hint})

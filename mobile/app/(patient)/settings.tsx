@@ -1,23 +1,26 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import AddFamilyMemberForm, { serverMessage } from '../../src/components/AddFamilyMemberForm';
 import DateField, { formatIsoDate } from '../../src/components/DateField';
+import {
+  allergyKindLabel,
+  BLOOD_GROUPS,
+  ChipSelect,
+  genderLabel,
+  GENDERS,
+  LANGUAGES,
+  relationLabel,
+} from '../../src/components/profileOptions';
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
-import { authApi, profilesApi } from '../../src/lib/api';
+import { allergiesApi, authApi, profilesApi, unwrap } from '../../src/lib/api';
 import { colors, radius, spacing, type } from '../../src/theme';
 import NotificationSettingsCard from '../../src/components/NotificationSettingsCard';
 
-const RELATIONS = ['father', 'mother', 'spouse', 'son', 'daughter', 'other'];
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-const GENDERS = [
-  { label: 'Male', value: 'male' },
-  { label: 'Female', value: 'female' },
-  { label: 'Other', value: 'other' },
-  { label: 'Prefer not to say', value: 'prefer_not_to_say' },
-];
+type Allergy = { id: string; kind: string; substance: string; reaction: string };
 
 export default function Settings() {
   const { account, profiles, activeProfile, refreshProfiles, logout } = useAuth();
@@ -30,14 +33,48 @@ export default function Settings() {
   const [gender, setGender] = useState(activeProfile?.gender ?? '');
   const [heightCm, setHeightCm] = useState(activeProfile?.height_cm?.toString() ?? '');
   const [weightKg, setWeightKg] = useState(activeProfile?.weight_kg?.toString() ?? '');
+  const [language, setLanguage] = useState(activeProfile?.preferred_language || 'English');
   const [saving, setSaving] = useState(false);
 
   const [addingMember, setAddingMember] = useState(false);
-  const [memberName, setMemberName] = useState('');
-  const [memberRelation, setMemberRelation] = useState('other');
-  const [addingBusy, setAddingBusy] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Allergies live in their own table (AllergyRecord), so they need their own
+   * fetch, redone per profile: switching family members must never leave the
+   * previous person's allergies on screen. A failed fetch is its own state —
+   * on a medical record it must not read as "None recorded".
+   */
+  const [allergies, setAllergies] = useState<Allergy[]>([]);
+  const [allergyState, setAllergyState] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [allergyReload, setAllergyReload] = useState(0);
+  const activeProfileId = activeProfile?.id;
+
+  useEffect(() => {
+    if (!activeProfileId) return;
+    let cancelled = false;
+    setAllergies([]);
+    setAllergyState('loading');
+    allergiesApi
+      .list(activeProfileId)
+      .then((r) => {
+        if (cancelled) return;
+        setAllergies(unwrap<Allergy>(r.data));
+        setAllergyState('loaded');
+      })
+      .catch(() => {
+        if (!cancelled) setAllergyState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfileId, allergyReload]);
+
+  // An edit form opened for one profile must not be saved onto another.
+  useEffect(() => {
+    setEditing(false);
+  }, [activeProfileId]);
 
   function startEditing() {
     setFullName(activeProfile?.full_name ?? '');
@@ -46,6 +83,7 @@ export default function Settings() {
     setGender(activeProfile?.gender ?? '');
     setHeightCm(activeProfile?.height_cm?.toString() ?? '');
     setWeightKg(activeProfile?.weight_kg?.toString() ?? '');
+    setLanguage(activeProfile?.preferred_language || 'English');
     setEditing(true);
   }
 
@@ -60,34 +98,28 @@ export default function Settings() {
         // null clears a date the person removed; '' would fail date parsing.
         date_of_birth: dateOfBirth || null,
         gender,
-        // Numeric fields are omitted when blank — '' fails integer parsing
-        // server-side rather than clearing the value.
-        ...(heightCm ? { height_cm: Number(heightCm) } : {}),
-        ...(weightKg ? { weight_kg: Number(weightKg) } : {}),
+        // null clears a removed height/weight; '' would fail integer parsing
+        // and omitting the field would silently keep the old value.
+        height_cm: heightCm.trim() ? Number(heightCm) : null,
+        weight_kg: weightKg.trim() ? Number(weightKg) : null,
+        preferred_language: language,
       });
       await refreshProfiles();
       setEditing(false);
-    } catch {
-      setError("Couldn't save those changes. Check your connection and try again.");
+    } catch (err) {
+      setError(serverMessage(err, "Couldn't save those changes. Check your connection and try again."));
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleAddMember() {
-    if (!memberName.trim()) return;
-    setError(null);
-    setAddingBusy(true);
+  async function handleMemberAdded(warning?: string) {
+    setError(warning ?? null);
+    setAddingMember(false);
     try {
-      await profilesApi.create({ full_name: memberName.trim(), relation: memberRelation });
       await refreshProfiles();
-      setMemberName('');
-      setMemberRelation('other');
-      setAddingMember(false);
     } catch {
-      setError("Couldn't add that family member.");
-    } finally {
-      setAddingBusy(false);
+      // The member was created; the list will catch up on the next refresh.
     }
   }
 
@@ -125,18 +157,7 @@ export default function Settings() {
           <>
             <Input label="Full name" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
 
-            <Text style={[type.caption, { marginBottom: spacing.sm }]}>Blood group</Text>
-            <View style={styles.chipRow}>
-              {BLOOD_GROUPS.map((b) => (
-                <Pressable
-                  key={b}
-                  onPress={() => setBloodGroup((v) => (v === b ? '' : b))}
-                  style={[styles.chip, bloodGroup === b && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, bloodGroup === b && styles.chipTextActive]}>{b}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <ChipSelect label="Blood group" options={BLOOD_GROUPS} value={bloodGroup} onChange={setBloodGroup} allowClear />
 
             <DateField
               label="Date of birth"
@@ -147,18 +168,7 @@ export default function Settings() {
               minimumDate={new Date(1900, 0, 1)}
             />
 
-            <Text style={[type.caption, { marginBottom: spacing.sm }]}>Gender</Text>
-            <View style={styles.chipRow}>
-              {GENDERS.map((g) => (
-                <Pressable
-                  key={g.value}
-                  onPress={() => setGender((v) => (v === g.value ? '' : g.value))}
-                  style={[styles.chip, gender === g.value && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, gender === g.value && styles.chipTextActive]}>{g.label}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <ChipSelect label="Gender" options={GENDERS} value={gender} onChange={setGender} allowClear />
 
             <Row style={{ gap: spacing.md }}>
               <View style={{ flex: 1 }}>
@@ -168,6 +178,8 @@ export default function Settings() {
                 <Input label="Weight (kg)" value={weightKg} onChangeText={setWeightKg} keyboardType="numeric" />
               </View>
             </Row>
+
+            <ChipSelect label="Preferred language" options={LANGUAGES} value={language} onChange={setLanguage} />
 
             <Row style={{ gap: spacing.sm }}>
               <Button style={{ flex: 1 }} onPress={handleSave} disabled={!fullName.trim()} loading={saving}>
@@ -182,18 +194,49 @@ export default function Settings() {
           <>
             {[
               ['Name', activeProfile?.full_name],
-              ['Relation', activeProfile?.relation],
+              ['Relation', relationLabel(activeProfile?.relation)],
               ['Blood group', activeProfile?.blood_group || 'Not set'],
               ['Date of birth', formatIsoDate(activeProfile?.date_of_birth) ?? 'Not set'],
-              ['Gender', GENDERS.find((g) => g.value === activeProfile?.gender)?.label ?? 'Not set'],
+              // Sentence case from the choice list: "Prefer not to say".
+              ['Gender', genderLabel(activeProfile?.gender) ?? 'Not set'],
               ['Height', activeProfile?.height_cm ? `${activeProfile.height_cm} cm` : 'Not set'],
               ['Weight', activeProfile?.weight_kg ? `${activeProfile.weight_kg} kg` : 'Not set'],
+              ['Language', activeProfile?.preferred_language || 'English'],
             ].map(([label, value]) => (
               <Row key={label} style={styles.factRow}>
                 <Text style={[type.caption, { flex: 1 }]}>{label}</Text>
                 <Text style={[type.label, styles.factValue]}>{value}</Text>
               </Row>
             ))}
+
+            <View style={styles.allergySection}>
+              <Row style={{ gap: 6, marginBottom: spacing.xs }}>
+                <Feather name="alert-triangle" size={12} color={colors.warning} />
+                <Text style={type.caption}>Allergies</Text>
+              </Row>
+              {allergyState === 'loading' ? (
+                <Text style={type.micro}>Loading…</Text>
+              ) : allergyState === 'error' ? (
+                <Pressable onPress={() => setAllergyReload((n) => n + 1)} hitSlop={6}>
+                  <Text style={[type.caption, { color: colors.danger }]}>
+                    Couldn't load allergies. Tap to retry.
+                  </Text>
+                </Pressable>
+              ) : allergies.length === 0 ? (
+                <Text style={type.caption}>None recorded.</Text>
+              ) : (
+                allergies.map((a) => (
+                  <View key={a.id} style={styles.allergyRow}>
+                    <Text style={[type.label, { color: colors.ink900 }]}>{a.substance}</Text>
+                    <View style={styles.kindTag}>
+                      <Text style={styles.kindTagText}>{allergyKindLabel(a.kind)}</Text>
+                    </View>
+                    {!!a.reaction && <Text style={type.caption}>— {a.reaction}</Text>}
+                  </View>
+                ))
+              )}
+            </View>
+
             <Button variant="secondary" onPress={startEditing} style={{ marginTop: spacing.md }}>
               Edit profile
             </Button>
@@ -213,44 +256,14 @@ export default function Settings() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={type.label}>{p.full_name}</Text>
-              <Text style={type.micro}>{p.relation}</Text>
+              <Text style={type.micro}>{relationLabel(p.relation)}</Text>
             </View>
             {p.id === activeProfile?.id && <Badge tone="info">Viewing</Badge>}
           </Row>
         ))}
 
         {addingMember ? (
-          <View style={{ marginTop: spacing.md }}>
-            <Input
-              label="Full name"
-              value={memberName}
-              onChangeText={setMemberName}
-              placeholder="e.g. Ramesh Sharma"
-              autoCapitalize="words"
-            />
-            <Text style={[type.caption, { marginBottom: spacing.sm }]}>Relation</Text>
-            <View style={styles.chipRow}>
-              {RELATIONS.map((r) => (
-                <Pressable
-                  key={r}
-                  onPress={() => setMemberRelation(r)}
-                  style={[styles.chip, memberRelation === r && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, memberRelation === r && styles.chipTextActive]}>
-                    {r}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <Row style={{ gap: spacing.sm }}>
-              <Button style={{ flex: 1 }} onPress={handleAddMember} disabled={!memberName.trim()} loading={addingBusy}>
-                Add
-              </Button>
-              <Button variant="secondary" style={{ flex: 1 }} onPress={() => setAddingMember(false)}>
-                Cancel
-              </Button>
-            </Row>
-          </View>
+          <AddFamilyMemberForm onDone={handleMemberAdded} onCancel={() => setAddingMember(false)} />
         ) : (
           <Button variant="secondary" onPress={() => setAddingMember(true)} style={{ marginTop: spacing.md }}>
             Add a family member
@@ -301,18 +314,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
+  allergySection: { paddingVertical: spacing.sm, gap: spacing.xs },
+  allergyRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  kindTag: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
   },
-  chipActive: { backgroundColor: colors.brandPurple, borderColor: colors.brandPurple },
-  chipText: { fontSize: 13, fontWeight: '500', color: colors.ink700, textTransform: 'capitalize' },
-  chipTextActive: { color: colors.white },
+  kindTagText: { fontSize: 10, fontWeight: '600', color: colors.ink500 },
   avatar: {
     width: 34,
     height: 34,

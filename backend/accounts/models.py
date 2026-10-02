@@ -71,3 +71,49 @@ class OTPRequest(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class OTPConfig(models.Model):
+    """
+    Singleton (pk=1) switch for how login OTPs are delivered, flipped by an
+    admin from the web/mobile admin portal or Django admin — no redeploy.
+
+    SMS    — a random OTP is sent through 2Factor.in (see accounts/services.py).
+    MASTER — no SMS is sent; every phone number logs in with `master_otp`.
+             Meant for testing / while the SMS gateway is down. Anyone who
+             knows the code can sign in to ANY account, so keep it off in
+             production unless you need it.
+    """
+
+    class Mode(models.TextChoices):
+        SMS = 'sms', 'SMS (2Factor)'
+        MASTER = 'master', 'Master OTP'
+
+    mode = models.CharField(max_length=10, choices=Mode.choices, default=Mode.SMS)
+    master_otp = models.CharField(max_length=6, default='555555')
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        Account, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+
+    class Meta:
+        verbose_name = 'OTP setting'
+        verbose_name_plural = 'OTP settings'
+
+    def __str__(self):
+        return f'OTP mode: {self.get_mode_display()}'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        # First creation takes its mode from OTP_DEFAULT_MODE, so a fresh
+        # deploy can start in master mode before any admin is able to log in.
+        from django.conf import settings
+        default = getattr(settings, 'OTP_DEFAULT_MODE', cls.Mode.SMS)
+        if default not in cls.Mode.values:
+            default = cls.Mode.SMS
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={'mode': default})
+        return obj

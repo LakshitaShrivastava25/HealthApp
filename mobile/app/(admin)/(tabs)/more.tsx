@@ -28,6 +28,12 @@ const ITEMS: { icon: keyof typeof Feather.glyphMap; label: string; note: string;
     note: 'Every staff write action, with who and when',
     href: '/(admin)/audit-log',
   },
+  {
+    icon: 'shield' as const,
+    label: 'OTP settings',
+    note: 'Switch login between SMS OTP and master OTP',
+    href: '/(admin)/otp-settings',
+  },
 ];
 
 export default function AdminMore() {

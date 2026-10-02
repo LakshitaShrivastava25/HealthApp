@@ -34,6 +34,7 @@ const TABS = [
   { label: 'Prescriptions', value: 'prescription' },
   { label: 'Scans', value: 'scan' },
   { label: 'Discharge', value: 'discharge' },
+  { label: 'Other', value: 'other' },
 ];
 
 const categoryTone = {
@@ -44,7 +45,12 @@ const categoryTone = {
   other: 'neutral',
 } as const;
 
-const statusTone = { processed: 'success', needs_review: 'warning', failed: 'danger' } as const;
+const statusTone = {
+  processed: 'success',
+  needs_review: 'warning',
+  processing: 'info',
+  failed: 'danger',
+} as const;
 
 export default function Locker() {
   const { activeProfile } = useAuth();
@@ -105,7 +111,7 @@ export default function Locker() {
       const status = (err as { response?: { status?: number } })?.response?.status;
       setUploadError(
         status === 500
-          ? 'The server could not process that document. This backend cannot structure documents while a Claude API key is configured — see the known issue in the project notes.'
+          ? 'Upload failed on the server. Please try again.'
           : "Upload failed. Check your connection and try again."
       );
     } finally {
@@ -184,7 +190,7 @@ export default function Locker() {
                     {d.category}
                   </Badge>
                   <Badge tone={statusTone[d.status as keyof typeof statusTone] ?? 'neutral'}>
-                    {d.status.replace('_', ' ')}
+                    {d.status.replace(/_/g, ' ')}
                   </Badge>
                 </Row>
               </View>

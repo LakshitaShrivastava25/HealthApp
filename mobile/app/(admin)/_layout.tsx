@@ -19,6 +19,7 @@ export default function AdminLayout() {
       <Stack.Screen name="patients" options={{ title: 'Patients' }} />
       <Stack.Screen name="accounts" options={{ title: 'Accounts' }} />
       <Stack.Screen name="audit-log" options={{ title: 'Audit log' }} />
+      <Stack.Screen name="otp-settings" options={{ title: 'OTP settings' }} />
     </Stack>
   );
 }

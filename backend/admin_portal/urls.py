@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AdminAccountViewSet, AdminDoctorVerificationViewSet, AdminDocumentViewSet,
     AdminInsurancePolicyViewSet, AdminPatientProfileViewSet, AuditLogViewSet,
-    DashboardSummaryView,
+    DashboardSummaryView, OTPSettingsView,
 )
 
 router = DefaultRouter()
@@ -16,5 +16,6 @@ router.register('patients', AdminPatientProfileViewSet, basename='admin-patient'
 router.register('audit-log', AuditLogViewSet, basename='admin-audit-log')
 
 urlpatterns = router.urls + [
+    path('otp-settings/', OTPSettingsView.as_view(), name='admin-otp-settings'),
     path('dashboard/summary/', DashboardSummaryView.as_view(), name='admin-dashboard-summary'),
 ]

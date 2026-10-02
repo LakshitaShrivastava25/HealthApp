@@ -134,4 +134,10 @@ export const adminApi = {
   deactivateAccount: (id: string) => api.post(`/admin/accounts/${id}/deactivate/`),
 
   auditLog: () => api.get('/admin/audit-log/'),
+
+  // Login OTP mode switch: 'master' (fixed code, no SMS) or 'sms' (2Factor).
+  otpSettings: () => api.get('/admin/otp-settings/'),
+  updateOtpSettings: (data: { mode?: 'sms' | 'master'; master_otp?: string }) =>
+    api.patch('/admin/otp-settings/', data),
+  sendTestSms: (test_phone: string) => api.post('/admin/otp-settings/', { test_phone }),
 };

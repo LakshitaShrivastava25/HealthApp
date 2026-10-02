@@ -70,6 +70,10 @@ export default function DoctorAccess() {
     );
   }
 
+  // The short code (e.g. AB1234) is what the backend matches on and what a
+  // patient can read aloud; the UUID is only a fallback for older records.
+  const referenceId = activeProfile?.reference_code || activeProfile?.id || '';
+
   const pending = grants.filter((g) => g.status === 'pending');
   const approved = grants.filter((g) => g.status === 'approved');
   const past = grants.filter((g) => ['denied', 'revoked', 'expired'].includes(g.status));
@@ -84,15 +88,15 @@ export default function DoctorAccess() {
           subtitle="Give this to a doctor so they can request access. They see nothing until you approve."
         />
         <View style={styles.idBox}>
-          <Text style={styles.idText} selectable numberOfLines={2}>
-            {activeProfile?.id}
+          <Text style={[styles.idText, !!activeProfile?.reference_code && styles.codeText]} selectable numberOfLines={2}>
+            {referenceId}
           </Text>
         </View>
         <Button
           variant="secondary"
           onPress={async () => {
-            if (!activeProfile) return;
-            await Clipboard.setStringAsync(activeProfile.id);
+            if (!referenceId) return;
+            await Clipboard.setStringAsync(referenceId);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
           }}
@@ -195,6 +199,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   idText: { fontSize: 12, color: colors.ink900, fontFamily: undefined },
+  codeText: { fontSize: 24, fontWeight: '800', letterSpacing: 3, textAlign: 'center' },
   grantRow: {
     borderWidth: 1,
     borderColor: colors.border,

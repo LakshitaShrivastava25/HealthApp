@@ -3,6 +3,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { fromIsoDate } from '../../src/components/DateField';
+import { genderLabel, relationLabel } from '../../src/components/profileOptions';
 import { Screen } from '../../src/components/ui';
 import { useAuth, type Profile } from '../../src/context/AuthContext';
 import { colors, radius, shadow, spacing, type } from '../../src/theme';
@@ -10,9 +12,10 @@ import { colors, radius, shadow, spacing, type } from '../../src/theme';
 type FeatherName = keyof typeof Feather.glyphMap;
 
 function ageFrom(dob?: string | null) {
-  if (!dob) return null;
-  const born = new Date(dob);
-  if (Number.isNaN(born.getTime())) return null;
+  // Local date parts: new Date('YYYY-MM-DD') is UTC midnight, which can land
+  // on the previous day west of Greenwich and make a birthday a day late.
+  const born = fromIsoDate(dob);
+  if (!born || Number.isNaN(born.getTime())) return null;
   const now = new Date();
   let age = now.getFullYear() - born.getFullYear();
   const m = now.getMonth() - born.getMonth();
@@ -37,9 +40,10 @@ export default function ProfileScreen() {
     { label: 'Height', value: activeProfile.height_cm ? `${activeProfile.height_cm} cm` : '—', icon: 'maximize-2' },
     { label: 'Weight', value: activeProfile.weight_kg ? `${activeProfile.weight_kg} kg` : '—', icon: 'activity' },
   ];
+  const gender = genderLabel(activeProfile.gender);
 
   const menu: { icon: FeatherName; label: string; note: string; href: Href }[] = [
-    { icon: 'edit-3', label: 'Edit profile', note: 'Name, blood group, height and weight', href: '/(patient)/settings' },
+    { icon: 'edit-3', label: 'Edit profile', note: 'Name, date of birth, gender, blood group, height, weight and language', href: '/(patient)/settings' },
     { icon: 'alert-triangle', label: 'Emergency card', note: 'QR card for paramedics', href: '/(patient)/emergency' },
     { icon: 'user-check', label: 'Doctor access', note: 'Who can see these records', href: '/(patient)/doctor-access' },
     { icon: 'settings', label: 'Settings', note: 'Family members and account', href: '/(patient)/settings' },
@@ -72,7 +76,10 @@ export default function ProfileScreen() {
         </View>
         <Text style={styles.name}>{activeProfile.full_name}</Text>
         <View style={styles.relationPill}>
-          <Text style={styles.relationText}>{activeProfile.relation}</Text>
+          <Text style={styles.relationText}>
+            {relationLabel(activeProfile.relation)}
+            {gender ? ` · ${gender}` : ''}
+          </Text>
         </View>
         {!!account?.phone_number && (
           <View style={styles.phoneRow}>
@@ -114,7 +121,7 @@ export default function ProfileScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{p.full_name}</Text>
-                <Text style={[type.micro, { textTransform: 'capitalize' }]}>{p.relation}</Text>
+                <Text style={type.micro}>{relationLabel(p.relation)}</Text>
               </View>
               {isActive ? (
                 <View style={styles.viewingPill}>
@@ -197,7 +204,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.pill,
   },
-  relationText: { color: colors.white, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  relationText: { color: colors.white, fontSize: 12, fontWeight: '700' },
   phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
   phoneText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
 

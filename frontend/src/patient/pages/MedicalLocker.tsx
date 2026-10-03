@@ -81,8 +81,8 @@ export default function MedicalLocker() {
         action={
           <>
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChosen} accept=".pdf,.jpg,.jpeg,.png" />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              <UploadCloud size={16} /> {uploading ? 'Uploading...' : 'Upload Document'}
+            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} ariaLabel={uploading ? 'Uploading...' : 'Upload Document'}>
+              <UploadCloud size={16} /> <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload Document'}</span>
             </Button>
           </>
         }

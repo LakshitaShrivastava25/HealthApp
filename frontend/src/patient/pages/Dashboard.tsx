@@ -89,8 +89,8 @@ export default function Dashboard() {
         title={`Welcome back, ${firstName || '...'} 👋`}
         subtitle="Here's your health summary for today"
         action={
-          <Button onClick={() => window.location.assign('/patient/locker')}>
-            <Plus size={16} /> Add Record
+          <Button onClick={() => window.location.assign('/patient/locker')} ariaLabel="Add Record">
+            <Plus size={16} /> <span className="hidden sm:inline">Add Record</span>
           </Button>
         }
       />

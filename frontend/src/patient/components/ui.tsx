@@ -80,6 +80,7 @@ export function Button({
   onClick,
   type = 'button',
   disabled = false,
+  ariaLabel,
 }: {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -87,6 +88,9 @@ export function Button({
   onClick?: () => void;
   type?: 'button' | 'submit';
   disabled?: boolean;
+  /** Needed where the visible label is hidden on small screens — without it
+   *  the button reaches a screen reader as an unnamed icon. */
+  ariaLabel?: string;
 }) {
   const base = 'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium px-4 py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
   const variants: Record<string, string> = {
@@ -96,7 +100,7 @@ export function Button({
     danger: 'bg-danger-bg text-danger hover:bg-danger/10',
   };
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>
+    <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel} className={`${base} ${variants[variant]} ${className}`}>
       {children}
     </button>
   );

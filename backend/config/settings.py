@@ -183,6 +183,20 @@ TWOFACTOR_TEMPLATE_NAME = os.getenv('TWOFACTOR_TEMPLATE_NAME', 'CuraPathOTP')
 TWOFACTOR_DLT_PE_ID = os.getenv('TWOFACTOR_DLT_PE_ID', '')
 TWOFACTOR_DLT_TEMPLATE_ID = os.getenv('TWOFACTOR_DLT_TEMPLATE_ID', '')
 
+# Which gateway sends OTP SMS: true -> 2Factor (above), false -> Twilio Verify
+# (below). Master OTP mode overrides both — nothing is sent at all.
+USE_TWOFACTOR = os.getenv('USE_TWOFACTOR', 'false').strip().lower() in ('true', '1', 'yes', 'on')
+
+# Twilio Verify OTP (see accounts/services.py). Verify generates, sends and
+# checks the code itself, through Twilio's own DLT registration for India.
+# Authenticate with EITHER an API key (SK... + secret) OR the account's
+# Auth Token; the API key wins when both are set.
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN', '')
+TWILIO_API_KEY_SID = os.getenv('TWILIO_API_KEY_SID', '')
+TWILIO_API_KEY_SECRET = os.getenv('TWILIO_API_KEY_SECRET', '')
+TWILIO_VERIFY_SERVICE_SID = os.getenv('TWILIO_VERIFY_SERVICE_SID', '')
+
 # Initial OTP mode ('sms' or 'master') used only when the OTPConfig row is
 # first created. After that, switch it from the admin portal (Settings → OTP),
 # Django admin, or `python manage.py otp_mode master|sms`.

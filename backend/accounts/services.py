@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import json
@@ -19,6 +20,8 @@ OTP_TTL_MINUTES = 10  # the approved SMS text says "valid for 10 minutes"
 OTP_RATE_LIMIT_PER_HOUR = 5
 TWOFACTOR_TIMEOUT_SECONDS = 10
 TWOFACTOR_SMS_URL = 'https://2factor.in/API/R1/'
+TWILIO_TIMEOUT_SECONDS = 10
+TWILIO_VERIFY_URL = 'https://verify.twilio.com/v2'
 
 logger = logging.getLogger(__name__)
 
@@ -95,15 +98,102 @@ def _send_via_2factor(phone_number: str, otp: str) -> tuple[bool, str]:
     return True, str(body.get('Details') or 'Success')
 
 
+def _twilio_credentials() -> tuple[str, str] | None:
+    """
+    Basic-auth pair for the Twilio API, or None when Twilio Verify isn't fully
+    configured. An API key (SK... + secret) wins over the Account SID + Auth
+    Token when both are set.
+    """
+    if not settings.TWILIO_VERIFY_SERVICE_SID:
+        return None
+    if settings.TWILIO_API_KEY_SID and settings.TWILIO_API_KEY_SECRET:
+        return settings.TWILIO_API_KEY_SID, settings.TWILIO_API_KEY_SECRET
+    if settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN:
+        return settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN
+    return None
+
+
+def _uses_twilio() -> bool:
+    return not settings.USE_TWOFACTOR and _twilio_credentials() is not None
+
+
+def _twilio_verify_post(endpoint: str, payload: dict) -> tuple[int, dict]:
+    """
+    POST to the Twilio Verify service, returning (HTTP status, JSON body).
+    Status 0 means Twilio couldn't be reached at all. Never logs the
+    credentials or the payload (VerificationCheck carries the code).
+    """
+    user, password = _twilio_credentials()
+    url = (
+        f'{TWILIO_VERIFY_URL}/Services/'
+        f'{urllib.parse.quote(settings.TWILIO_VERIFY_SERVICE_SID)}/{endpoint}'
+    )
+    token = base64.b64encode(f'{user}:{password}'.encode()).decode()
+    request = urllib.request.Request(
+        url,
+        data=urllib.parse.urlencode(payload).encode(),
+        method='POST',
+        headers={'Authorization': f'Basic {token}'},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TWILIO_TIMEOUT_SECONDS) as resp:
+            return resp.status, json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        # Twilio returns 4xx with a JSON body: {"code": 60200, "message": ...}
+        try:
+            return exc.code, json.loads(exc.read().decode())
+        except ValueError:
+            return exc.code, {}
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        return 0, {'message': f'Could not reach Twilio ({type(exc).__name__})'}
+
+
+def _send_via_twilio(phone_number: str) -> tuple[bool, str]:
+    """
+    Starts a Twilio Verify SMS verification. Twilio generates the code and
+    sends it, so there's no OTP here to send or store. Returns (True, status)
+    on success, otherwise (False, <Twilio's error text>).
+    """
+    logger.info('Sending OTP via Twilio Verify to %s', _mask_phone(phone_number))
+    status, body = _twilio_verify_post('Verifications', {'To': phone_number, 'Channel': 'sms'})
+    if status not in (200, 201):
+        logger.error(
+            'Twilio Verify send failed for %s: HTTP %s %s %s',
+            _mask_phone(phone_number), status, body.get('code'), body.get('message'),
+        )
+        return False, f"HTTP {status}: {body.get('message')}"
+    logger.info('Twilio Verify accepted OTP for %s', _mask_phone(phone_number))
+    return True, str(body.get('status') or 'pending')
+
+
+def _check_via_twilio(phone_number: str, otp: str) -> bool:
+    """
+    True only when Twilio approves the code. A wrong code is 200 with status
+    "pending"; an expired/used/never-sent verification is 404.
+    """
+    status, body = _twilio_verify_post('VerificationCheck', {'To': phone_number, 'Code': otp})
+    if status != 200:
+        if status != 404:
+            logger.error(
+                'Twilio Verify check failed for %s: HTTP %s %s %s',
+                _mask_phone(phone_number), status, body.get('code'), body.get('message'),
+            )
+        return False
+    return body.get('status') == 'approved'
+
+
 def request_otp(phone_number: str) -> dict:
     """
     Generates and stores a hashed OTP. Rate-limits to OTP_RATE_LIMIT_PER_HOUR
     per phone number to prevent SMS-bombing abuse (per the TDD's edge case).
 
-    SMS delivery goes through 2Factor.in's transactional SMS API when
-    TWOFACTOR_API_KEY is set.
-    Without a key, the OTP is only printed to the server log — and returned
-    in the response when DEBUG=True — so the flow stays testable locally.
+    The SMS gateway is picked by settings.USE_TWOFACTOR:
+      - false: Twilio Verify, when its credentials are set. Twilio owns the
+        code; the OTPRequest row only backs the rate limit and attempt count.
+      - true: 2Factor.in's transactional SMS API, when TWOFACTOR_API_KEY is set.
+    With the chosen gateway unconfigured, the OTP is only printed to the server
+    log — and returned in the response when DEBUG=True — so the flow stays
+    testable locally.
     """
     window_start = timezone.now() - timedelta(hours=1)
     recent_count = OTPRequest.objects.filter(
@@ -118,6 +208,8 @@ def request_otp(phone_number: str) -> dict:
         logger.info('OTP master mode: skipping SMS for %s', _mask_phone(phone_number))
         return {'ok': True}
 
+    # With Twilio this code is never sent; it only fills otp_hash with
+    # something unguessable, so a local check could never match the row.
     otp = f"{random.SystemRandom().randint(0, 999999):06d}"
     otp_request = OTPRequest.objects.create(
         phone_number=phone_number,
@@ -125,7 +217,14 @@ def request_otp(phone_number: str) -> dict:
         expires_at=timezone.now() + timedelta(minutes=OTP_TTL_MINUTES),
     )
 
-    if settings.TWOFACTOR_API_KEY:
+    if _uses_twilio():
+        sent, _details = _send_via_twilio(phone_number)
+        if not sent:
+            otp_request.delete()
+            return {'ok': False, 'error': "Couldn't send the OTP SMS. Please try again.", 'status': 502}
+        return {'ok': True}
+
+    if settings.USE_TWOFACTOR and settings.TWOFACTOR_API_KEY:
         sent, _details = _send_via_2factor(phone_number, otp)
         if not sent:
             # Don't let a gateway failure eat into the user's hourly quota.
@@ -159,7 +258,10 @@ def verify_otp(phone_number: str, otp: str) -> bool:
     candidate.save(update_fields=['attempt_count'])
     if candidate.attempt_count > 5:
         return False
-    if candidate.otp_hash != _hash_otp(otp, phone_number):
+    if _uses_twilio():
+        if not _check_via_twilio(phone_number, otp):
+            return False
+    elif candidate.otp_hash != _hash_otp(otp, phone_number):
         return False
     candidate.is_used = True
     candidate.save(update_fields=['is_used'])
@@ -216,8 +318,17 @@ def twofactor_delivery_status(session_id: str) -> str:
 def send_test_sms(phone_number: str) -> tuple[bool, str, str]:
     """
     Admin diagnostic: send a throwaway OTP SMS, then poll the delivery report
-    for a few seconds. Returns (accepted, 2Factor reply, delivery status).
+    for a few seconds. Returns (accepted, gateway reply, delivery status).
+
+    With Twilio Verify active it starts a real verification instead (Twilio
+    picks the code); Verify has no delivery-report lookup, so the status
+    stays ''.
     """
+    if not settings.USE_TWOFACTOR:
+        if _twilio_credentials() is None:
+            return False, 'Twilio Verify is not configured on the server', ''
+        ok, details = _send_via_twilio(phone_number)
+        return ok, details, ''
     if not settings.TWOFACTOR_API_KEY:
         return False, 'TWOFACTOR_API_KEY is not set on the server', ''
     otp = f"{random.SystemRandom().randint(0, 999999):06d}"

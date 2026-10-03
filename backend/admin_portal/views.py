@@ -163,16 +163,20 @@ class OTPSettingsView(APIView):
 
     def _payload(self, config, check_balance=True):
         from django.conf import settings as dj_settings
-        from accounts.services import twofactor_balance
+        from accounts.services import _twilio_credentials, twofactor_balance
+        use_twofactor = dj_settings.USE_TWOFACTOR
         return {
             'mode': config.mode,
             'master_otp': config.master_otp,
             'updated_at': config.updated_at,
             'updated_by': config.updated_by.phone_number if config.updated_by else None,
-            'sms_configured': bool(dj_settings.TWOFACTOR_API_KEY),
+            'sms_provider': '2factor' if use_twofactor else 'twilio',
+            'sms_configured': bool(dj_settings.TWOFACTOR_API_KEY) if use_twofactor
+            else _twilio_credentials() is not None,
             'sms_sender_id': dj_settings.TWOFACTOR_SENDER_ID,
             'sms_template_name': dj_settings.TWOFACTOR_TEMPLATE_NAME,
-            'sms_balance': twofactor_balance() if check_balance else None,
+            # 2Factor only; Twilio Verify has no SMS credit balance to show.
+            'sms_balance': twofactor_balance() if check_balance and use_twofactor else None,
         }
 
     def get(self, request):

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, MessageSquareText, AlertTriangle, Check } from 'lucide-react';
+import { KeyRound, MessageSquareText, AlertTriangle, Check, Lock } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, CardHeader, Badge, Button } from '../components/ui';
 import { adminApi } from '../lib/api';
@@ -7,9 +7,13 @@ import { adminApi } from '../lib/api';
 type OtpSettingsData = {
   mode: 'sms' | 'master';
   master_otp: string;
+  // USE_MASTER_OTP in the server .env overrides the toggle below.
+  mode_locked_by_env: boolean;
   updated_at: string;
   updated_by: string | null;
+  sms_provider: 'twilio' | '2factor';
   sms_configured: boolean;
+  // Sender / template / balance only apply to 2Factor.
   sms_sender_id: string;
   sms_template_name: string;
   sms_balance: string | null;
@@ -19,7 +23,8 @@ type TestResult = { ok: boolean; details: string; delivery_status: string; hint:
 
 /**
  * The login OTP switch. MASTER: nobody gets an SMS and every phone number
- * signs in with the master code. SMS: a random code goes out through 2Factor.
+ * signs in with the master code. SMS: a random code goes out through the
+ * configured provider — Twilio Verify, or 2Factor as the legacy fallback.
  * Takes effect on the very next send-otp / verify-otp — for the website and
  * the mobile app alike, since both call the same endpoints.
  */
@@ -77,6 +82,9 @@ export default function OtpSettings() {
   }
 
   const isMaster = data?.mode === 'master';
+  const isTwilio = data?.sms_provider === 'twilio';
+  const providerLabel = isTwilio ? 'Twilio Verify' : '2Factor';
+  const locked = !!data?.mode_locked_by_env;
 
   return (
     <>
@@ -97,23 +105,29 @@ export default function OtpSettings() {
                 }
                 action={<Badge tone={isMaster ? 'warning' : 'success'}>{isMaster ? 'Master OTP' : 'SMS OTP'}</Badge>}
               />
+              {locked && (
+                <p className="mx-5 mt-4 flex items-start gap-2 rounded-lg bg-warning-bg px-3 py-2 text-xs text-warning">
+                  <Lock size={14} className="mt-0.5 shrink-0" />
+                  Locked by USE_MASTER_OTP in the server .env. Remove it there to switch modes from this page.
+                </p>
+              )}
               <div className="p-5 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  disabled={saving || !isMaster}
+                  disabled={saving || locked || !isMaster}
                   onClick={() => save({ mode: 'sms' })}
                   className={`text-left rounded-xl border p-4 transition-colors ${
                     !isMaster ? 'border-accent bg-accent-soft' : 'border-border hover:bg-surface'
                   } disabled:cursor-default`}
                 >
                   <p className="flex items-center gap-2 font-semibold text-ink-900 text-sm">
-                    <MessageSquareText size={16} /> SMS OTP (2Factor)
+                    <MessageSquareText size={16} /> SMS OTP ({providerLabel})
                   </p>
                   <p className="text-xs text-ink-500 mt-1">A fresh random code is texted to the user's phone.</p>
                 </button>
                 <button
                   type="button"
-                  disabled={saving || isMaster}
+                  disabled={saving || locked || isMaster}
                   onClick={() => save({ mode: 'master' })}
                   className={`text-left rounded-xl border p-4 transition-colors ${
                     isMaster ? 'border-warning bg-warning-bg' : 'border-border hover:bg-surface'
@@ -163,22 +177,43 @@ export default function OtpSettings() {
             </Card>
 
             <Card>
-              <CardHeader title="SMS gateway health" subtitle="2Factor.in transactional SMS" />
+              <CardHeader
+                title="SMS gateway health"
+                subtitle={isTwilio ? 'Twilio Verify (SMS channel)' : '2Factor.in transactional SMS (legacy fallback)'}
+              />
+              {!data.sms_configured && (
+                <p className="mx-5 mt-4 flex items-start gap-2 rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  {providerLabel} credentials are missing on the server, so SMS OTPs cannot be sent. Use Master OTP
+                  until they are set.
+                </p>
+              )}
               <div className="p-5 grid grid-cols-2 gap-y-2 text-sm">
-                <span className="text-ink-500">API key</span>
+                <span className="text-ink-500">{isTwilio ? 'Credentials' : 'API key'}</span>
                 <span>{data.sms_configured ? <Badge tone="success">Configured</Badge> : <Badge tone="danger">Missing</Badge>}</span>
-                <span className="text-ink-500">Sender ID</span>
-                <span className="font-mono">{data.sms_sender_id}</span>
-                <span className="text-ink-500">Template</span>
-                <span className="font-mono">{data.sms_template_name}</span>
-                <span className="text-ink-500">SMS balance</span>
-                <span>{data.sms_balance ?? '—'}</span>
+                {!isTwilio && (
+                  <>
+                    <span className="text-ink-500">Sender ID</span>
+                    <span className="font-mono">{data.sms_sender_id}</span>
+                    <span className="text-ink-500">Template</span>
+                    <span className="font-mono">{data.sms_template_name}</span>
+                    <span className="text-ink-500">SMS balance</span>
+                    <span>{data.sms_balance ?? '—'}</span>
+                  </>
+                )}
               </div>
               <div className="px-5 pb-5 border-t border-border pt-4">
-                <p className="text-xs text-ink-500 mb-2">
-                  Send a test SMS and read the operator's delivery status. "Success" from 2Factor alone does not mean
-                  the SMS arrived — DLT rejections only show up in the delivery status.
-                </p>
+                {isTwilio ? (
+                  <p className="text-xs text-ink-500 mb-2">
+                    Send a test verification. Twilio generates and sends the code itself; "pending" means Twilio accepted
+                    the request and is delivering it. Twilio exposes no delivery report here — confirm on the phone.
+                  </p>
+                ) : (
+                  <p className="text-xs text-ink-500 mb-2">
+                    Send a test SMS and read the operator's delivery status. "Success" from 2Factor alone does not mean
+                    the SMS arrived — DLT rejections only show up in the delivery status.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <input
                     value={testPhone}
@@ -193,10 +228,11 @@ export default function OtpSettings() {
                 {testResult && (
                   <div className="mt-3 rounded-lg bg-surface px-3 py-2 text-xs space-y-1">
                     <p>
-                      2Factor: <Badge tone={testResult.ok ? 'success' : 'danger'}>{testResult.ok ? 'Accepted' : 'Rejected'}</Badge>{' '}
+                      {providerLabel}: <Badge tone={testResult.ok ? 'success' : 'danger'}>{testResult.ok ? 'Accepted' : 'Rejected'}</Badge>{' '}
                       <span className="font-mono text-ink-500">{testResult.details}</span>
                     </p>
-                    {testResult.ok && (
+                    {/* Twilio has no delivery-report lookup; its status is always "pending". */}
+                    {testResult.ok && !isTwilio && (
                       <p>
                         Delivery:{' '}
                         <Badge tone={/deliver/i.test(testResult.delivery_status) ? 'success' : testResult.delivery_status === 'pending' ? 'neutral' : 'danger'}>

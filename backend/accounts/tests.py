@@ -53,7 +53,7 @@ class MasterOTPTests(TestCase):
         self.assertEqual(OTPConfig.load().mode, OTPConfig.Mode.MASTER)
 
 
-@override_settings(USE_TWOFACTOR=True, TWOFACTOR_API_KEY='', OTP_DEFAULT_MODE='sms')
+@override_settings(USE_TWOFACTOR=True, TWOFACTOR_API_KEY='', OTP_DEFAULT_MODE='sms', USE_MASTER_OTP=None, MASTER_OTP='')
 class OTPSettingsAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()

@@ -157,9 +157,28 @@ class OTPSettingsView(APIView):
     GET   /api/admin/otp-settings/  — current OTP mode + SMS gateway health.
     PATCH /api/admin/otp-settings/  — {"mode": "master"|"sms", "master_otp"?: "555555"}
     POST  /api/admin/otp-settings/  — {"test_phone": "+91..."} sends a test SMS
-                                      and returns 2Factor's reply verbatim.
+                                      through the active gateway (Twilio Verify
+                                      or 2Factor) and returns its reply verbatim.
     """
     permission_classes = [IsStaffAdmin]
+
+    # Common Twilio Verify send failures -> what the admin should do. Matched
+    # on the error code or, since details carry only Twilio's message, on a
+    # fragment of that message (lowercase). First match wins.
+    TWILIO_HINTS = (
+        (('60200', 'invalid parameter'),
+         'Twilio rejected the number. Enter it in full international format, e.g. +919876543210.'),
+        (('60203', 'max send attempts'),
+         'Too many codes were sent to this number. Wait about 10 minutes and try again.'),
+        (('60205', 'landline'),
+         'This number is a landline and cannot receive SMS. Use a mobile number.'),
+        (('60410', '60605', 'blocked', 'geo'),
+         "Twilio blocked SMS to this number's country. Enable the country under Verify > Geo permissions "
+         'in the Twilio Console (and check Fraud Guard).'),
+        (('20003', 'http 401', 'authenticat'),
+         'Twilio rejected the credentials. Check TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN (or the API key) '
+         'in the server .env.'),
+    )
 
     def _payload(self, config, check_balance=True):
         from django.conf import settings as dj_settings
@@ -172,6 +191,8 @@ class OTPSettingsView(APIView):
             'master_otp': master_code,
             # True when USE_MASTER_OTP in env overrides the toggle here.
             'mode_locked_by_env': dj_settings.USE_MASTER_OTP is not None,
+            # True when MASTER_OTP in env overrides the code saved here.
+            'master_otp_locked_by_env': bool(dj_settings.MASTER_OTP),
             'updated_at': config.updated_at,
             'updated_by': config.updated_by.phone_number if config.updated_by else None,
             'sms_provider': '2factor' if use_twofactor else 'twilio',
@@ -188,10 +209,16 @@ class OTPSettingsView(APIView):
         return Response(self._payload(OTPConfig.load()))
 
     def patch(self, request):
+        from django.conf import settings as dj_settings
         from accounts.models import OTPConfig
         config = OTPConfig.load()
         mode = request.data.get('mode')
         if mode is not None:
+            # Saving a mode the env overrides would silently do nothing.
+            if dj_settings.USE_MASTER_OTP is not None:
+                return Response({
+                    'detail': 'OTP mode is locked by USE_MASTER_OTP in the server .env; remove it to use this switch.',
+                }, status=409)
             if mode not in OTPConfig.Mode.values:
                 return Response({'detail': 'mode must be "sms" or "master".'}, status=400)
             config.mode = mode
@@ -210,13 +237,17 @@ class OTPSettingsView(APIView):
         return Response(self._payload(config, check_balance=False))
 
     def post(self, request):
+        from django.conf import settings as dj_settings
         from accounts.services import send_test_sms
         phone = str(request.data.get('test_phone') or '').strip()
         if len(''.join(c for c in phone if c.isdigit())) < 10:
             return Response({'detail': 'Enter a valid phone number.'}, status=400)
         ok, details, delivery = send_test_sms(phone)
         hint = ''
-        if 'DLT' in delivery.upper():
+        if not ok and not dj_settings.USE_TWOFACTOR:
+            text = str(details).lower()
+            hint = next((h for keys, h in self.TWILIO_HINTS if any(k in text for k in keys)), '')
+        elif 'DLT' in delivery.upper():
             hint = (
                 'The operator rejected the SMS on DLT checks. Make sure the 2Factor template text matches the '
                 'DLT-approved template exactly, the header (sender ID) is linked to that template on the DLT portal, '

@@ -58,8 +58,10 @@ class Account(AbstractBaseUser, PermissionsMixin):
 class OTPRequest(models.Model):
     """
     Hashed, short-TTL OTP per phone number. Never store OTPs in plain text.
-    SMS delivery goes through 2Factor.in (`request_otp` in accounts/services.py) —
-    until TWOFACTOR_API_KEY is set, OTPs are logged server-side only.
+    SMS delivery goes through Twilio Verify or 2Factor.in, picked by
+    USE_TWOFACTOR (`request_otp` in accounts/services.py). With Twilio the code
+    lives at Twilio and this row only backs the rate limit and attempt count.
+    Until the chosen gateway is configured, OTPs are logged server-side only.
     """
 
     phone_number = models.CharField(max_length=15, db_index=True)
@@ -78,7 +80,8 @@ class OTPConfig(models.Model):
     Singleton (pk=1) switch for how login OTPs are delivered, flipped by an
     admin from the web/mobile admin portal or Django admin — no redeploy.
 
-    SMS    — a random OTP is sent through 2Factor.in (see accounts/services.py).
+    SMS    — a random OTP is sent through Twilio Verify, or 2Factor.in when
+             USE_TWOFACTOR=true (see accounts/services.py).
     MASTER — no SMS is sent; every phone number logs in with `master_otp`.
              Meant for testing / while the SMS gateway is down. Anyone who
              knows the code can sign in to ANY account, so keep it off in
@@ -86,7 +89,7 @@ class OTPConfig(models.Model):
     """
 
     class Mode(models.TextChoices):
-        SMS = 'sms', 'SMS (2Factor)'
+        SMS = 'sms', 'SMS'
         MASTER = 'master', 'Master OTP'
 
     mode = models.CharField(max_length=10, choices=Mode.choices, default=Mode.SMS)
@@ -109,8 +112,8 @@ class OTPConfig(models.Model):
 
     @classmethod
     def load(cls):
-        # First creation takes its mode from OTP_DEFAULT_MODE, so a fresh
-        # deploy can start in master mode before any admin is able to log in.
+        # First creation takes its mode from OTP_DEFAULT_MODE (default 'sms'),
+        # so a fresh deploy can opt into master mode before any admin can log in.
         from django.conf import settings
         default = getattr(settings, 'OTP_DEFAULT_MODE', cls.Mode.SMS)
         if default not in cls.Mode.values:

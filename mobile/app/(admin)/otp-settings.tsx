@@ -9,9 +9,13 @@ import { colors, radius, spacing, type } from '../../src/theme';
 type OtpSettings = {
   mode: 'sms' | 'master';
   master_otp: string;
+  // True when USE_MASTER_OTP in the server env overrides the toggle.
+  mode_locked_by_env: boolean;
   updated_at: string;
   updated_by: string | null;
+  sms_provider: 'twilio' | '2factor';
   sms_configured: boolean;
+  // Sender, template and balance only apply to 2Factor.
   sms_sender_id: string;
   sms_template_name: string;
   sms_balance: string | null;
@@ -28,7 +32,8 @@ function errorDetail(err: unknown, fallback: string) {
 /**
  * The login OTP switch — same endpoint as the website's admin OTP Settings
  * page. MASTER: no SMS, every number signs in with the master code.
- * SMS: a random code goes out through 2Factor. Applies to web and app at once.
+ * SMS: a random code goes out through Twilio Verify (or 2Factor, the legacy
+ * fallback, per sms_provider). Applies to web and app at once.
  */
 export default function AdminOtpSettings() {
   const [data, setData] = useState<OtpSettings | null>(null);
@@ -98,6 +103,9 @@ export default function AdminOtpSettings() {
   }
 
   const isMaster = data.mode === 'master';
+  const isTwilio = data.sms_provider === 'twilio';
+  const providerName = isTwilio ? 'Twilio Verify' : '2Factor';
+  const locked = data.mode_locked_by_env;
   const deliveryTone = /deliver/i.test(testResult?.delivery_status ?? '')
     ? 'success'
     : testResult?.delivery_status === 'pending'
@@ -125,10 +133,10 @@ export default function AdminOtpSettings() {
 
         <ModeOption
           icon="message-square"
-          title="SMS OTP (2Factor)"
+          title={`SMS OTP (${providerName})`}
           note="A fresh random code is texted to the user's phone."
           selected={!isMaster}
-          disabled={saving}
+          disabled={saving || locked}
           onPress={() => !isMaster || save({ mode: 'sms' })}
         />
         <ModeOption
@@ -137,9 +145,15 @@ export default function AdminOtpSettings() {
           note={`No SMS. Every number logs in with ${data.master_otp}.`}
           selected={isMaster}
           warning
-          disabled={saving}
+          disabled={saving || locked}
           onPress={() => isMaster || save({ mode: 'master' })}
         />
+        {locked && (
+          <Text style={[type.caption, styles.warning]}>
+            USE_MASTER_OTP is set in the server environment, so it decides the mode and this toggle has no effect.
+            Remove it from the server env to switch from here.
+          </Text>
+        )}
         {isMaster && (
           <Text style={[type.caption, styles.warning]}>
             Anyone who knows the master code can sign in to any account. Switch back to SMS once delivery works.
@@ -165,26 +179,40 @@ export default function AdminOtpSettings() {
       </Card>
 
       <Card>
-        <CardHeader title="SMS gateway health" subtitle="2Factor.in transactional SMS" />
-        <InfoRow label="API key">
+        <CardHeader
+          title={isTwilio ? 'Twilio Verify health' : 'SMS gateway health'}
+          subtitle={isTwilio ? 'Twilio Verify SMS codes' : '2Factor.in transactional SMS (legacy fallback)'}
+        />
+        <InfoRow label={isTwilio ? 'Credentials' : 'API key'}>
           <Badge tone={data.sms_configured ? 'success' : 'danger'}>
             {data.sms_configured ? 'Configured' : 'Missing'}
           </Badge>
         </InfoRow>
-        <InfoRow label="Sender ID">
-          <Text style={type.label}>{data.sms_sender_id}</Text>
-        </InfoRow>
-        <InfoRow label="Template">
-          <Text style={type.label}>{data.sms_template_name}</Text>
-        </InfoRow>
-        <InfoRow label="SMS balance">
-          <Text style={type.label}>{data.sms_balance ?? '—'}</Text>
-        </InfoRow>
+        {!data.sms_configured && (
+          <Text style={[type.caption, styles.warning]}>
+            {providerName} isn't configured on the server, so SMS OTPs can't be sent. Use master OTP until it's set
+            up.
+          </Text>
+        )}
+        {!isTwilio && (
+          <>
+            <InfoRow label="Sender ID">
+              <Text style={type.label}>{data.sms_sender_id}</Text>
+            </InfoRow>
+            <InfoRow label="Template">
+              <Text style={type.label}>{data.sms_template_name}</Text>
+            </InfoRow>
+            <InfoRow label="SMS balance">
+              <Text style={type.label}>{data.sms_balance ?? '—'}</Text>
+            </InfoRow>
+          </>
+        )}
 
         <View style={styles.divider} />
         <Text style={[type.caption, { marginBottom: spacing.sm }]}>
-          Send a test SMS and read the operator's delivery status. "Accepted" alone doesn't mean it arrived — DLT
-          rejections only show up in the delivery status.
+          {isTwilio
+            ? 'Send a test code through Twilio Verify. "pending" means Twilio accepted it and is delivering it — there is no delivery report here, so confirm the code arrives on the phone.'
+            : 'Send a test SMS and read the operator\'s delivery status. "Accepted" alone doesn\'t mean it arrived — DLT rejections only show up in the delivery status.'}
         </Text>
         <Input
           label="Test phone number"
@@ -199,11 +227,17 @@ export default function AdminOtpSettings() {
         {testResult && (
           <View style={styles.result}>
             <Row style={{ gap: spacing.sm, flexWrap: 'wrap' }}>
-              <Text style={type.caption}>2Factor:</Text>
+              <Text style={type.caption}>{providerName}:</Text>
               <Badge tone={testResult.ok ? 'success' : 'danger'}>{testResult.ok ? 'Accepted' : 'Rejected'}</Badge>
             </Row>
             <Text style={[type.micro, { marginTop: 4 }]}>{testResult.details}</Text>
-            {testResult.ok && (
+            {/* Twilio has no delivery-report lookup, so its status is always "pending". */}
+            {testResult.ok && isTwilio && (
+              <Text style={[type.caption, { marginTop: spacing.sm }]}>
+                "pending" = accepted by Twilio and on its way. Check the phone to confirm it arrived.
+              </Text>
+            )}
+            {testResult.ok && !isTwilio && (
               <Row style={{ gap: spacing.sm, marginTop: spacing.sm }}>
                 <Text style={type.caption}>Delivery:</Text>
                 <Badge tone={deliveryTone}>{testResult.delivery_status}</Badge>

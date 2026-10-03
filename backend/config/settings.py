@@ -210,8 +210,9 @@ MASTER_OTP = os.getenv('MASTER_OTP', '').strip()
 
 # Initial OTP mode ('sms' or 'master') used only when the OTPConfig row is
 # first created. After that, switch it from the admin portal (Settings → OTP),
-# Django admin, or `python manage.py otp_mode master|sms`.
-OTP_DEFAULT_MODE = os.getenv('OTP_DEFAULT_MODE', 'master')
+# Django admin, or `python manage.py otp_mode master|sms`. Defaults to real SMS;
+# set OTP_DEFAULT_MODE=master only for a deploy whose SMS gateway isn't ready.
+OTP_DEFAULT_MODE = os.getenv('OTP_DEFAULT_MODE', 'sms')
 
 # Show the OTP flow's INFO logs ("Sending OTP via 2Factor SMS ...") in the
 # server console; Python's default root level (WARNING) would hide them.

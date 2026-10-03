@@ -231,6 +231,7 @@ function AddFamilyMemberModal({
   const [fullName, setFullName] = useState('');
   const [relation, setRelation] = useState('father');
   const [dob, setDob] = useState('');
+  const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [bloodGroup, setBloodGroup] = useState('');
   const [heightCm, setHeightCm] = useState('');
@@ -245,8 +246,21 @@ function AddFamilyMemberModal({
     setAllergies((list) => list.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
   }
 
+  // Age is an alternative to date of birth for when the exact date isn't
+  // known (common for older family members). The model only has a real
+  // date_of_birth column, so this is stored as Jan 1 of the matching
+  // birth year — an approximation, not a real date.
+  function ageToDob(ageYears: number): string {
+    const year = new Date().getFullYear() - ageYears;
+    return `${year}-01-01`;
+  }
+
   async function handleSave() {
     if (!fullName.trim()) return;
+    if (age && (!/^\d+$/.test(age) || Number(age) <= 0)) {
+      setError('Age must be a positive whole number.');
+      return;
+    }
     setError('');
     setSaving(true);
     try {
@@ -255,7 +269,7 @@ function AddFamilyMemberModal({
         relation,
         // Omitted rather than sent empty: the serializer treats a missing
         // optional field as "not provided", but '' as a value to store.
-        ...(dob ? { date_of_birth: dob } : {}),
+        ...(dob ? { date_of_birth: dob } : age ? { date_of_birth: ageToDob(Number(age)) } : {}),
         ...(gender ? { gender } : {}),
         ...(bloodGroup ? { blood_group: bloodGroup } : {}),
         ...(heightCm ? { height_cm: Number(heightCm) } : {}),
@@ -331,9 +345,27 @@ function AddFamilyMemberModal({
             </div>
 
             <div>
-              <label htmlFor="fm-dob" className="mb-1 block text-[11px] font-semibold text-ink-700">Date of birth</label>
+              <label htmlFor="fm-dob" className="mb-1 block text-[11px] font-semibold text-ink-700">Date of birth (or enter age below)</label>
               {/* Capped at today, and the server rejects a future date too. */}
               <input id="fm-dob" type="date" max={todayIso()} value={dob} onChange={(e) => setDob(e.target.value)} className={FIELD} />
+            </div>
+
+            <div>
+              <label htmlFor="fm-age" className="mb-1 block text-[11px] font-semibold text-ink-700">
+                Age (years)
+              </label>
+              {/* Alternative to date of birth, for when the exact date isn't known.
+                  Ignored if date of birth is also filled in. */}
+              <input
+                id="fm-age"
+                type="number"
+                min={0}
+                max={130}
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                placeholder="e.g. 45"
+                className={FIELD}
+              />
             </div>
 
             <div>

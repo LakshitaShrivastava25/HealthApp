@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from accounts import services
 from accounts.models import Account, OTPConfig
+from admin_portal.models import AuditLog
 
 PHONE = '+919876500001'
 
@@ -84,6 +85,43 @@ class OTPSettingsAPITests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(r.data['ok'])
 
+    def test_env_flags_off_unlock_settings(self):
+        self.client.force_authenticate(self.admin)
+        r = self.client.get('/api/admin/otp-settings/')
+        self.assertFalse(r.data['mode_locked_by_env'])
+        self.assertFalse(r.data['master_otp_locked_by_env'])
+
+    @override_settings(USE_MASTER_OTP=True, MASTER_OTP='424242')
+    def test_mode_change_rejected_while_env_locks_it(self):
+        self.client.force_authenticate(self.admin)
+        r = self.client.patch('/api/admin/otp-settings/', {'mode': 'sms'}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('USE_MASTER_OTP', r.data['detail'])
+        self.assertEqual(OTPConfig.load().mode, 'sms')
+        self.assertFalse(AuditLog.objects.exists())
+        # The master code can still be edited; the env one wins and is reported.
+        r = self.client.patch('/api/admin/otp-settings/', {'master_otp': '123456'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(OTPConfig.load().master_otp, '123456')
+        self.assertEqual(r.data['mode'], 'master')
+        self.assertEqual(r.data['master_otp'], '424242')
+        self.assertTrue(r.data['mode_locked_by_env'])
+        self.assertTrue(r.data['master_otp_locked_by_env'])
+
+    @override_settings(USE_MASTER_OTP=False)
+    def test_env_false_also_locks_mode(self):
+        self.client.force_authenticate(self.admin)
+        r = self.client.patch('/api/admin/otp-settings/', {'mode': 'master'}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(OTPConfig.load().mode, 'sms')
+
+    def test_twofactor_dlt_hint_kept(self):
+        self.client.force_authenticate(self.admin)
+        with mock.patch.object(services, 'send_test_sms', return_value=(True, 'sid', 'DLT-CNT-REJECT')):
+            r = self.client.post('/api/admin/otp-settings/', {'test_phone': '+919876543210'}, format='json')
+        self.assertIn('DLT', r.data['hint'])
+        self.assertEqual(r.data['delivery_status'], 'DLT-CNT-REJECT')
+
 
 TWILIO_SETTINGS = dict(
     USE_TWOFACTOR=False,
@@ -91,6 +129,51 @@ TWILIO_SETTINGS = dict(
     TWILIO_API_KEY_SID='', TWILIO_API_KEY_SECRET='',
     TWILIO_VERIFY_SERVICE_SID='VAtest',
 )
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+class TwilioTestSMSHintTests(TestCase):
+    """POST /api/admin/otp-settings/ turns common Twilio Verify errors into a hint."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(Account.objects.create_user('+919000000001', role=Account.Role.ADMIN))
+
+    def _test_sms(self, status, body):
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(status, body)):
+            return self.client.post('/api/admin/otp-settings/', {'test_phone': '+919876543210'}, format='json')
+
+    def test_known_errors_get_hints(self):
+        cases = [
+            ({'code': 60200, 'message': 'Invalid parameter `To`: +91987654321'}, 'international format'),
+            ({'code': 60203, 'message': 'Max send attempts reached'}, 'Wait about 10 minutes'),
+            ({'code': 60205, 'message': 'SMS is not supported by landline phone number'}, 'landline'),
+            ({'code': 60410, 'message': 'Verification delivery attempt blocked'}, 'Geo permissions'),
+            ({'code': 60605, 'message': 'Verification delivery attempt blocked'}, 'Geo permissions'),
+        ]
+        for body, expected in cases:
+            with self.subTest(code=body['code']):
+                r = self._test_sms(400, body)
+                self.assertFalse(r.data['ok'])
+                self.assertIn(expected, r.data['hint'])
+        r = self._test_sms(401, {'code': 20003, 'message': 'Authenticate'})
+        self.assertIn('TWILIO_AUTH_TOKEN', r.data['hint'])
+
+    def test_success_and_unknown_error_have_no_hint(self):
+        r = self._test_sms(201, {'status': 'pending'})
+        self.assertTrue(r.data['ok'])
+        self.assertEqual(r.data['details'], 'pending')
+        self.assertEqual(r.data['delivery_status'], 'pending')
+        self.assertEqual(r.data['hint'], '')
+        r = self._test_sms(500, {'code': 20500, 'message': 'Internal Server Error'})
+        self.assertFalse(r.data['ok'])
+        self.assertEqual(r.data['hint'], '')
+
+    def test_payload_reports_twilio(self):
+        r = self.client.get('/api/admin/otp-settings/')
+        self.assertEqual(r.data['sms_provider'], 'twilio')
+        self.assertTrue(r.data['sms_configured'])
+        self.assertIsNone(r.data['sms_balance'])
 
 
 @override_settings(**TWILIO_SETTINGS)

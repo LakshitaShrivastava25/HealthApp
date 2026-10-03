@@ -63,7 +63,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Doctors cannot edit a patient's documents.")
         if 'profile' in serializer.validated_data:
             assert_owns_profile(self.request.user, serializer.validated_data['profile'])
-        serializer.save()
+        document = serializer.save()
+        rebuild_derived_records(document)
 
     def perform_destroy(self, instance):
         if hasattr(self.request.user, 'doctor_profile'):

@@ -115,8 +115,13 @@ class ClaudeService:
                 "The AI service could not be reached right now."
             )
         except anthropic.APIStatusError as exc:
+            detail = exc.message
+            if isinstance(exc.body, dict):
+                error = exc.body.get('error')
+                if isinstance(error, dict) and error.get('message'):
+                    detail = error['message']
             raise ClaudeUnavailable(
-                f"The AI service returned an error (HTTP {exc.status_code})."
+                f"The AI service returned an error: {detail}"
             )
         return "".join(block.text for block in response.content if block.type == "text")
 

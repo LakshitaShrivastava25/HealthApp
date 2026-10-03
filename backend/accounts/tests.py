@@ -166,3 +166,35 @@ class TwilioOTPTests(TestCase):
             self.assertEqual(self._send().status_code, 200)
         twofactor.assert_called_once()
         post.assert_not_called()
+
+
+@override_settings(**TWILIO_SETTINGS)
+class OTPEnvSwitchTests(TestCase):
+    """USE_MASTER_OTP / USE_TWOFACTOR pick the gateway: master > Twilio > 2Factor."""
+
+    PHONE = '+919876543210'
+
+    @override_settings(USE_MASTER_OTP=True, MASTER_OTP='424242')
+    def test_master_on_sends_nothing_and_accepts_master_code(self):
+        with mock.patch('accounts.services._twilio_verify_post') as post:
+            self.assertTrue(services.request_otp(self.PHONE)['ok'])
+            post.assert_not_called()
+        self.assertTrue(services.verify_otp(self.PHONE, '424242'))
+        self.assertFalse(services.verify_otp(self.PHONE, '555555'))
+
+    @override_settings(USE_MASTER_OTP=False, MASTER_OTP='424242')
+    def test_master_off_twofactor_off_uses_twilio_not_master_code(self):
+        with mock.patch('accounts.services._twilio_verify_post', return_value=(201, {'status': 'pending'})) as post:
+            self.assertTrue(services.request_otp(self.PHONE)['ok'])
+            post.assert_called_once()
+        with mock.patch('accounts.services._twilio_verify_post', return_value=(200, {'status': 'approved'})):
+            self.assertTrue(services.verify_otp(self.PHONE, '123456'))
+        self.assertFalse(services.verify_otp(self.PHONE, '424242'))
+
+    @override_settings(USE_MASTER_OTP=False, USE_TWOFACTOR=True, TWOFACTOR_API_KEY='k')
+    def test_master_off_twofactor_on_uses_2factor(self):
+        with mock.patch('accounts.services._twilio_verify_post') as twilio, \
+                mock.patch('accounts.services._send_via_2factor', return_value=(True, 'sid')) as tf:
+            self.assertTrue(services.request_otp(self.PHONE)['ok'])
+            tf.assert_called_once()
+            twilio.assert_not_called()

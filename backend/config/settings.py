@@ -197,6 +197,17 @@ TWILIO_API_KEY_SID = os.getenv('TWILIO_API_KEY_SID', '')
 TWILIO_API_KEY_SECRET = os.getenv('TWILIO_API_KEY_SECRET', '')
 TWILIO_VERIFY_SERVICE_SID = os.getenv('TWILIO_VERIFY_SERVICE_SID', '')
 
+# Master OTP, controlled from env. USE_MASTER_OTP=true -> nothing is sent and
+# every phone logs in with MASTER_OTP. USE_MASTER_OTP=false -> a real SMS goes
+# out via the gateway chosen by USE_TWOFACTOR (false = Twilio, true = 2Factor).
+# Leave either unset to fall back to the admin-portal / DB OTPConfig value.
+_master_flag = os.getenv('USE_MASTER_OTP', '').strip().lower()
+USE_MASTER_OTP = (
+    None if _master_flag == ''
+    else _master_flag in ('true', '1', 'yes', 'on')
+)
+MASTER_OTP = os.getenv('MASTER_OTP', '').strip()
+
 # Initial OTP mode ('sms' or 'master') used only when the OTPConfig row is
 # first created. After that, switch it from the admin portal (Settings → OTP),
 # Django admin, or `python manage.py otp_mode master|sms`.

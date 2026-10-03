@@ -182,6 +182,18 @@ def _check_via_twilio(phone_number: str, otp: str) -> bool:
     return body.get('status') == 'approved'
 
 
+def master_otp_mode() -> tuple[bool, str]:
+    """
+    (is master mode on, master code). USE_MASTER_OTP / MASTER_OTP from env win
+    when set; otherwise the admin-portal OTPConfig row decides.
+    """
+    config = OTPConfig.load()
+    on = settings.USE_MASTER_OTP
+    if on is None:
+        on = config.mode == OTPConfig.Mode.MASTER
+    return on, settings.MASTER_OTP or config.master_otp
+
+
 def request_otp(phone_number: str) -> dict:
     """
     Generates and stores a hashed OTP. Rate-limits to OTP_RATE_LIMIT_PER_HOUR
@@ -202,7 +214,7 @@ def request_otp(phone_number: str) -> dict:
     if recent_count >= OTP_RATE_LIMIT_PER_HOUR:
         return {'ok': False, 'error': 'Too many OTP requests. Try again later.'}
 
-    if OTPConfig.load().mode == OTPConfig.Mode.MASTER:
+    if master_otp_mode()[0]:
         # Master mode: nothing is sent, verify_otp accepts the master code.
         # The code itself is never returned to the client.
         logger.info('OTP master mode: skipping SMS for %s', _mask_phone(phone_number))
@@ -241,9 +253,9 @@ def request_otp(phone_number: str) -> dict:
 
 
 def verify_otp(phone_number: str, otp: str) -> bool:
-    config = OTPConfig.load()
-    if config.mode == OTPConfig.Mode.MASTER:
-        return hmac.compare_digest(otp, config.master_otp)
+    master_on, master_code = master_otp_mode()
+    if master_on:
+        return hmac.compare_digest(otp, master_code)
 
     candidate = (
         OTPRequest.objects.filter(phone_number=phone_number, is_used=False)

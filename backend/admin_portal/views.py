@@ -163,11 +163,15 @@ class OTPSettingsView(APIView):
 
     def _payload(self, config, check_balance=True):
         from django.conf import settings as dj_settings
-        from accounts.services import _twilio_credentials, twofactor_balance
+        from accounts.models import OTPConfig
+        from accounts.services import _twilio_credentials, master_otp_mode, twofactor_balance
         use_twofactor = dj_settings.USE_TWOFACTOR
+        master_on, master_code = master_otp_mode()
         return {
-            'mode': config.mode,
-            'master_otp': config.master_otp,
+            'mode': OTPConfig.Mode.MASTER if master_on else OTPConfig.Mode.SMS,
+            'master_otp': master_code,
+            # True when USE_MASTER_OTP in env overrides the toggle here.
+            'mode_locked_by_env': dj_settings.USE_MASTER_OTP is not None,
             'updated_at': config.updated_at,
             'updated_by': config.updated_by.phone_number if config.updated_by else None,
             'sms_provider': '2factor' if use_twofactor else 'twilio',

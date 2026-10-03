@@ -59,7 +59,7 @@ class TimelineEvent(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='timeline_events')
-    source_document = models.ForeignKey(Document, on_delete=models.SET_NULL, null=True, blank=True, related_name='timeline_events')
+    source_document = models.ForeignKey(Document, on_delete=models.CASCADE, null=True, blank=True, related_name='timeline_events')
     event_date = models.DateField()
     event_type = models.CharField(max_length=30)
     title = models.CharField(max_length=255)

@@ -257,8 +257,8 @@ function AddFamilyMemberModal({
 
   async function handleSave() {
     if (!fullName.trim()) return;
-    if (age && (!/^\d+$/.test(age) || Number(age) <= 0)) {
-      setError('Age must be a positive whole number.');
+    if (age && (!/^\d+$/.test(age) || Number(age) > 130)) {
+      setError('Age must be a whole number between 0 and 130.');
       return;
     }
     setError('');

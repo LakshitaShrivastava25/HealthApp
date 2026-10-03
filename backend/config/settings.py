@@ -8,7 +8,9 @@ so the project runs out of the box before that link is provided.
 """
 
 import os
+import sys
 from datetime import timedelta
+from urllib.parse import urlparse
 from pathlib import Path
 
 import dj_database_url
@@ -107,6 +109,33 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Uploaded files must survive Render's ephemeral disk — see
+# documents/storage.py. Cloudinary in production: set either CLOUDINARY_URL
+# (cloudinary://<api_key>:<api_secret>@<cloud_name>, as shown on the
+# Cloudinary dashboard) or CLOUDINARY_CLOUD_NAME + _API_KEY + _API_SECRET.
+# Without them — and always under `manage.py test`, so the suite never
+# uploads to the real account — files go into the database instead.
+CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', '')
+CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY', '')
+CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET', '')
+if os.getenv('CLOUDINARY_URL') and not CLOUDINARY_CLOUD_NAME:
+    _cld = urlparse(os.getenv('CLOUDINARY_URL'))
+    CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET = _cld.hostname, _cld.username, _cld.password
+USE_CLOUDINARY = (
+    all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET])
+    and sys.argv[1:2] != ['test']
+)
+STORAGES = {
+    'default': {
+        'BACKEND': 'documents.storage.CloudinaryStorage' if USE_CLOUDINARY else 'documents.storage.DatabaseStorage',
+    },
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+
+# Render terminates HTTPS at its proxy; without this, absolute file URLs
+# built from the request come back as http:// and get blocked as mixed content.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

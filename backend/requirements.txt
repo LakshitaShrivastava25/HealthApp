@@ -13,3 +13,4 @@ python-dotenv==1.2.2
 sqlparse==0.5.5
 gunicorn
 whitenoise
+cloudinary==1.46.2

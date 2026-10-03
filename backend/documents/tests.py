@@ -253,3 +253,105 @@ class DocumentPipelineTests(TestCase):
         response = self.client_api.get('/api/timeline/', {'profile_id': str(self.profile.id)})
         self.assertEqual(response.status_code, 200)
         self.assertGreater(len(response.data['results']), 0)
+
+
+@patch.object(ClaudeService, 'process_document', lambda self, document: None)
+class StoredFileTests(TestCase):
+    """
+    "View original file" used to 404 in production: files were written to
+    Render's ephemeral disk and /media/ was only routed with DEBUG on. Files
+    now live in the database behind a signed, expiring link.
+    """
+
+    def setUp(self):
+        self.account = Account.objects.create_user(phone_number='+919000002222')
+        self.profile = Profile.objects.create(
+            account=self.account, full_name='Test Patient', relation='self'
+        )
+        self.client_api = APIClient()
+        self.client_api.credentials(
+            HTTP_AUTHORIZATION='Bearer ' + str(RefreshToken.for_user(self.account).access_token)
+        )
+        self.pdf = text_pdf()
+
+    def upload(self):
+        response = self.client_api.post(
+            '/api/documents/',
+            {'profile': str(self.profile.id),
+             'file': SimpleUploadedFile('rx.pdf', self.pdf, content_type='application/pdf'),
+             'category': 'prescription', 'title': 'Rx'},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.data['file']
+
+    @override_settings(DEBUG=False)
+    def test_uploaded_file_opens_from_returned_link_without_auth(self):
+        url = self.upload()
+        self.assertIn('/api/files/?t=', url)
+        # Opened in a browser tab / Linking.openURL — no JWT header.
+        response = APIClient().get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, self.pdf)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
+    def test_link_from_detail_endpoint_also_opens(self):
+        self.upload()
+        doc = Document.objects.get(profile=self.profile)
+        url = self.client_api.get(f'/api/documents/{doc.id}/').data['file']
+        self.assertEqual(APIClient().get(url).content, self.pdf)
+
+    def test_tampered_or_missing_token_is_rejected(self):
+        url = self.upload()
+        self.assertEqual(APIClient().get(url[:-2] + 'xx').status_code, 404)
+        self.assertEqual(APIClient().get('/api/files/').status_code, 404)
+
+    def test_expired_link_is_rejected(self):
+        url = self.upload()
+        with patch('documents.files.FILE_URL_MAX_AGE', -1):
+            self.assertEqual(APIClient().get(url).status_code, 404)
+
+    def test_https_scheme_behind_proxy(self):
+        response = self.client_api.post(
+            '/api/documents/',
+            {'profile': str(self.profile.id),
+             'file': SimpleUploadedFile('rx.pdf', self.pdf, content_type='application/pdf'),
+             'category': 'prescription'},
+            format='multipart', HTTP_X_FORWARDED_PROTO='https',
+        )
+        self.assertTrue(response.data['file'].startswith('https://'))
+
+
+@override_settings(CLOUDINARY_CLOUD_NAME='demo', CLOUDINARY_API_KEY='k', CLOUDINARY_API_SECRET='s')
+class CloudinaryStorageTests(TestCase):
+    """The production backend, with the SDK mocked so no real upload happens."""
+
+    def setUp(self):
+        from documents.storage import CloudinaryStorage
+        self.storage = CloudinaryStorage()
+
+    @patch('cloudinary.uploader.upload')
+    def test_upload_is_private_raw_and_name_is_unique(self, upload):
+        upload.side_effect = lambda data, public_id, **kw: {'public_id': public_id}
+        name = self.storage.save('documents/2026/10/rx.pdf', SimpleUploadedFile('rx.pdf', b'%PDF'))
+        kwargs = upload.call_args.kwargs
+        self.assertEqual((kwargs['resource_type'], kwargs['type']), ('raw', 'authenticated'))
+        self.assertEqual(upload.call_args.args[0], b'%PDF')
+        self.assertRegex(name, r'^documents/2026/10/rx_[0-9a-f]{8}\.pdf$')
+        self.assertNotEqual(name, self.storage.save('documents/2026/10/rx.pdf', SimpleUploadedFile('rx.pdf', b'%PDF')))
+
+    def test_long_names_fit_the_field(self):
+        self.assertLessEqual(len(self.storage.get_available_name('documents/' + 'a' * 200 + '.pdf', 100)), 100)
+
+    @patch('urllib.request.urlopen')
+    def test_open_fetches_through_signed_expiring_download_link(self, urlopen):
+        urlopen.return_value.__enter__.return_value.read.return_value = b'%PDF'
+        self.assertEqual(self.storage.open('documents/rx_1.pdf').read(), b'%PDF')
+        url = urlopen.call_args.args[0]
+        self.assertIn('/raw/download?', url)
+        self.assertIn('type=authenticated', url)
+        self.assertIn('expires_at=', url)
+        self.assertIn('signature=', url)
+
+    def test_url_points_at_our_signed_endpoint_not_cloudinary(self):
+        self.assertTrue(self.storage.url('documents/rx_1.pdf').startswith('/api/files/?t='))

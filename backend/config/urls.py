@@ -3,6 +3,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
 
+from documents.files import serve_stored_file
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 
@@ -15,6 +17,7 @@ urlpatterns = [
     path('api/', include('emergency.urls')),  # also exposes /api/public/emergency/<token>/ (mounted under this same api/ prefix — not a bare /public/... path)
     path('api/', include('doctors.urls')),
     path('api/admin/', include('admin_portal.urls')),
+    path('api/files/', serve_stored_file, name='stored-file'),
 ]
 
 if settings.DEBUG:

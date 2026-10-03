@@ -70,3 +70,20 @@ class TimelineEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_date} — {self.title}"
+
+
+class StoredFile(models.Model):
+    """
+    The bytes behind every FileField in the project (documents, insurance
+    policies, doctor licences) — see documents/storage.py for why they live
+    in the database rather than on disk.
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+    content = models.BinaryField()
+    content_type = models.CharField(max_length=100, blank=True)
+    size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name

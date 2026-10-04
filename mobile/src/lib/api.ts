@@ -128,6 +128,10 @@ export const authApi = {
     api.post('/auth/verify-otp/', { phone_number, otp }),
   me: () => api.get('/auth/me/'),
   deleteAccount: () => api.delete('/auth/me/'),
+  // Blacklists the refresh token server-side. Plain axios: a 401 here must
+  // not kick off a refresh of the session being ended.
+  logout: (refresh: string) =>
+    axios.post(`${getApiBaseUrl()}/auth/logout/`, { refresh }, { timeout: 5000 }),
 };
 
 // -- patient -------------------------------------------------------------

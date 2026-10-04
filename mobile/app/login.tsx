@@ -26,27 +26,39 @@ import { colors, radius, spacing, type } from '../src/theme';
 import { useConfirmExit } from '../src/lib/useBackHandler';
 
 const OTP_LENGTH = 6;
-const RESEND_SECONDS = 30;
-
-/** Mirrors the backend's OTP_TTL_MINUTES in accounts/services.py. */
-const OTP_TTL_SECONDS = 10 * 60;
+const RESEND_SECONDS = 60;
 
 /** After this long, say the server is waking up rather than look frozen. */
 const SLOW_REQUEST_MS = 6000;
 
-function describeError(err: unknown, fallback: string) {
-  const e = err as { response?: { status?: number; data?: Record<string, unknown> }; message?: string };
+type ApiError = { response?: { status?: number; data?: Record<string, unknown> }; message?: string };
+
+/** True when the code itself was judged — not when the server or network failed. */
+function isCodeRejected(err: unknown) {
+  const status = (err as ApiError)?.response?.status;
+  return status === 400 || status === 429;
+}
+
+// The backend's `detail` is written for people and wins; the rest only
+// covers responses that arrive without one.
+function describeError(err: unknown, action: 'send' | 'verify') {
+  const e = err as ApiError;
   const status = e?.response?.status;
   const detail = e?.response?.data?.detail;
   if (typeof detail === 'string') return detail;
-  if (status === 429) return 'Too many OTP requests. Try again in a little while.';
-  if (status === 400) return 'That code was not right. Check it and try again.';
   if (!e?.response) {
     return IS_PRODUCTION
       ? "Couldn't reach CuraPath. Check your internet connection and try again."
       : "Couldn't reach the server. Check that the backend is running and that this phone is on the same network.";
   }
-  return fallback;
+  if (action === 'send') {
+    if (status === 429) return 'Too many OTP requests. Try again in a little while.';
+    if (status === 400) return 'Check the mobile number and try again.';
+    return "Couldn't send the code. Please try again.";
+  }
+  if (status === 429) return 'Too many wrong attempts. Tap Resend to get a new code.';
+  if (status === 400) return "That code isn't right. Check it and try again.";
+  return "Couldn't check the code right now. Please try again.";
 }
 
 export default function Login() {
@@ -68,8 +80,10 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // A timestamp rather than a counter: timers pause while the app is in the
+  // background (the user reading the SMS), and the clock does not.
+  const [resendAt, setResendAt] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const [expiresIn, setExpiresIn] = useState(0);
 
   const [showConnection, setShowConnection] = useState(false);
   const [baseUrlDraft, setBaseUrlDraft] = useState(getApiBaseUrl());
@@ -94,17 +108,13 @@ export default function Login() {
     return () => clearTimeout(id);
   }, [busy]);
 
-  // One ticker drives both the resend cooldown and the code's real expiry,
-  // so the screen can never claim a code is still valid after the backend
-  // has stopped accepting it.
   useEffect(() => {
     if (step !== 'otp') return;
-    const id = setInterval(() => {
-      setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
-      setExpiresIn((s) => (s > 0 ? s - 1 : 0));
-    }, 1000);
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((resendAt - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [step]);
+  }, [step, resendAt]);
 
   const fullNumber = toE164(phone);
 
@@ -117,12 +127,12 @@ export default function Login() {
       const result = await sendOtp(fullNumber);
       setDebugOtp(result.debug_otp ?? null);
       setOtp('');
+      setResendAt(Date.now() + RESEND_SECONDS * 1000);
       setSecondsLeft(RESEND_SECONDS);
-      setExpiresIn(OTP_TTL_SECONDS);
       if (!isResend) setStep('otp');
       setTimeout(() => otpInputRef.current?.focus(), 250);
     } catch (err) {
-      setError(describeError(err, "Couldn't send the code. Please try again."));
+      setError(describeError(err, 'send'));
     } finally {
       setBusy(false);
     }
@@ -139,8 +149,10 @@ export default function Login() {
       // duplicate that decision.
       router.replace('/');
     } catch (err) {
-      setError(describeError(err, 'That code did not work. Please try again.'));
-      setOtp('');
+      setError(describeError(err, 'verify'));
+      // A server or network failure says nothing about the code, so keep it
+      // in the boxes for another tap on Verify.
+      if (isCodeRejected(err)) setOtp('');
     } finally {
       setBusy(false);
     }
@@ -235,9 +247,7 @@ export default function Login() {
 
                   <Text style={type.h2}>Enter the code</Text>
                   <Text style={[type.caption, styles.stepNote]}>
-                    {expiresIn > 0
-                      ? `This code expires in ${Math.floor(expiresIn / 60)}:${String(expiresIn % 60).padStart(2, '0')}.`
-                      : 'That code has expired — send a new one.'}
+                    Enter the 6-digit code we texted you.
                   </Text>
 
                   <Pressable onPress={() => otpInputRef.current?.focus()}>

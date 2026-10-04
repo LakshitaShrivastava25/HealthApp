@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { authApi, clearTokens, getAccessToken, setTokens, doctorApi } from '../lib/api';
+import { authApi, clearTokens, getAccessToken, getRefreshToken, setTokens, doctorApi } from '../lib/api';
 
 export type DoctorRecord = {
   id: string;
@@ -62,6 +62,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // End the session on the server too; fire-and-forget so signing out
+    // never waits on the network.
+    const refresh = getRefreshToken();
+    if (refresh) authApi.logout(refresh).catch(() => undefined);
     clearTokens();
     // Clear the doctor record too — not just the flag — so nothing can
     // render the previous doctor's name or verification state afterwards.

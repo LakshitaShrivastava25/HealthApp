@@ -4,12 +4,13 @@ import { SquareTerminal } from 'lucide-react';
 /**
  * The development-only code hint.
  *
- * SMS delivery is not wired up yet — accounts/services.py prints the code
- * to the server console and returns it in the response only when Django
- * runs with DEBUG=True. Without this chip, signing in locally means
- * alt-tabbing to the backend terminal to read a six-digit number, so it
- * earns its place; it simply cannot appear in production, because the
- * field it renders is absent from the response there.
+ * Real codes go out by SMS (Twilio Verify). Only when no SMS gateway is
+ * configured and Django runs with DEBUG=True does accounts/services.py
+ * fall back to printing the code to the server console and returning it
+ * as `debug_otp`. Without this chip, signing in locally means alt-tabbing
+ * to the backend terminal to read a six-digit number, so it earns its
+ * place; it simply cannot appear in production, because the field it
+ * renders is absent from the response there.
  *
  * Clicking it fills the boxes, which is the whole point of having it.
  */

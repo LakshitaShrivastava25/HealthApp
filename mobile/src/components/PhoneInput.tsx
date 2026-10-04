@@ -11,11 +11,23 @@ export const PHONE_DIGITS = 10;
  * Pull the ten local digits out of whatever was typed or pasted —
  * "+91 98765 43210", "09876543210", "919876543210" and "98765-43210" all
  * come out as "9876543210".
+ *
+ * `previous` is the field's value before this change. With it, a single
+ * keystroke is told apart from a paste/autofill: only a paste has its +91
+ * stripped, and a key pressed on an already-full number is ignored rather
+ * than shifting its first digits away. Without it, `raw` is read as a paste.
  */
-export function localDigits(raw: string): string {
+export function localDigits(raw: string, previous?: string): string {
   let digits = raw.replace(/\D/g, '');
-  if (digits.length > PHONE_DIGITS && digits.startsWith('91')) digits = digits.slice(2);
-  if (digits.length > PHONE_DIGITS && digits.startsWith('0')) digits = digits.slice(1);
+  const prev = previous === undefined ? undefined : previous.replace(/\D/g, '');
+  const pasted = prev === undefined || raw.includes('+') || digits.length - prev.length > 1;
+  if (pasted && digits.length > PHONE_DIGITS && digits.startsWith('91')) digits = digits.slice(2);
+  // No Indian mobile number starts with 0, so a leading trunk zero is always
+  // dropped — even mid-typing, before the number is long enough to tell.
+  // Dropped BEFORE the full-number check (as on the web), so replacing a
+  // full number with "09876543210" takes the new number.
+  digits = digits.replace(/^0+/, '');
+  if (!pasted && digits.length > PHONE_DIGITS) return prev.slice(0, PHONE_DIGITS);
   return digits.slice(0, PHONE_DIGITS);
 }
 
@@ -77,7 +89,7 @@ const PhoneInput = forwardRef<TextInput, Props>(function PhoneInput(
           ref={ref}
           {...rest}
           value={formatForDisplay(digits)}
-          onChangeText={(text) => onChangeText(localDigits(text))}
+          onChangeText={(text) => onChangeText(localDigits(text, digits))}
           keyboardType="number-pad"
           inputMode="numeric"
           textContentType="telephoneNumber"

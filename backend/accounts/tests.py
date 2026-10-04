@@ -1,6 +1,9 @@
+from datetime import timedelta
 from unittest import mock
 
+from django.db.models import F
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts import services
@@ -208,21 +211,38 @@ class TwilioOTPTests(TestCase):
         post.assert_called_once_with('VerificationCheck', {'To': PHONE, 'Code': '123456'})
 
     def test_twilio_send_failure_returns_502_and_frees_quota(self):
-        with mock.patch.object(services, '_twilio_verify_post', return_value=(400, {'code': 60200, 'message': 'Invalid parameter'})):
-            r = self._send()
-        self.assertEqual(r.status_code, 502)
+        for status, body in ((429, {'code': 60203, 'message': 'Max send attempts reached'}),
+                             (500, {'code': 20500, 'message': 'Internal Server Error'}),
+                             (0, {'message': 'Could not reach Twilio (URLError)'})):
+            with self.subTest(status=status), mock.patch.object(services, '_twilio_verify_post', return_value=(status, body)):
+                r = self._send()
+                self.assertEqual(r.status_code, 502)
+                self.assertEqual(r.data, {'detail': "Couldn't send the OTP SMS. Please try again."})
+        self.assertFalse(services.OTPRequest.objects.exists())
+
+    def test_twilio_bad_number_returns_400_and_frees_quota(self):
+        for code in (60200, 60205, 21211, 21614):
+            with self.subTest(code=code), \
+                    mock.patch.object(services, '_twilio_verify_post', return_value=(400, {'code': code, 'message': 'x'})):
+                r = self._send()
+                self.assertEqual(r.status_code, 400)
+                self.assertEqual(r.data, {'detail': 'Check the mobile number and try again.'})
         self.assertFalse(services.OTPRequest.objects.exists())
 
     def test_verify_without_send_never_calls_twilio(self):
         with mock.patch.object(services, '_twilio_verify_post') as post:
-            self.assertEqual(self._verify('123456').status_code, 400)
+            r = self._verify('123456')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['detail'], 'This code has expired. Tap Resend to get a new one.')
         post.assert_not_called()
 
     def test_expired_verification_rejected(self):
         with mock.patch.object(services, '_twilio_verify_post', return_value=(201, {'status': 'pending'})):
             self._send()
         with mock.patch.object(services, '_twilio_verify_post', return_value=(404, {'code': 20404})):
-            self.assertEqual(self._verify('123456').status_code, 400)
+            r = self._verify('123456')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['detail'], 'This code has expired. Tap Resend to get a new one.')
 
     def test_master_mode_still_overrides_twilio(self):
         OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
@@ -262,8 +282,8 @@ class OTPEnvSwitchTests(TestCase):
         with mock.patch('accounts.services._twilio_verify_post') as post:
             self.assertTrue(services.request_otp(self.PHONE)['ok'])
             post.assert_not_called()
-        self.assertTrue(services.verify_otp(self.PHONE, '424242'))
-        self.assertFalse(services.verify_otp(self.PHONE, '555555'))
+        self.assertEqual(services.verify_otp(self.PHONE, '424242'), services.VERIFY_OK)
+        self.assertEqual(services.verify_otp(self.PHONE, '555555'), services.VERIFY_WRONG)
 
     @override_settings(USE_MASTER_OTP=False, MASTER_OTP='424242')
     def test_master_off_twofactor_off_uses_twilio_not_master_code(self):
@@ -271,8 +291,8 @@ class OTPEnvSwitchTests(TestCase):
             self.assertTrue(services.request_otp(self.PHONE)['ok'])
             post.assert_called_once()
         with mock.patch('accounts.services._twilio_verify_post', return_value=(200, {'status': 'approved'})):
-            self.assertTrue(services.verify_otp(self.PHONE, '123456'))
-        self.assertFalse(services.verify_otp(self.PHONE, '424242'))
+            self.assertEqual(services.verify_otp(self.PHONE, '123456'), services.VERIFY_OK)
+        self.assertNotEqual(services.verify_otp(self.PHONE, '424242'), services.VERIFY_OK)
 
     @override_settings(USE_MASTER_OTP=False, USE_TWOFACTOR=True, TWOFACTOR_API_KEY='k')
     def test_master_off_twofactor_on_uses_2factor(self):
@@ -281,3 +301,425 @@ class OTPEnvSwitchTests(TestCase):
             self.assertTrue(services.request_otp(self.PHONE)['ok'])
             tf.assert_called_once()
             twilio.assert_not_called()
+
+
+WRONG = "That code isn't right. Check it and try again."
+EXPIRED = 'This code has expired. Tap Resend to get a new one.'
+LOCKED = 'Too many wrong attempts. Tap Resend to get a new code.'
+UNAVAILABLE = "Couldn't check the code right now. Please try again."
+
+
+def _skip_cooldown():
+    """Back-date every OTPRequest past the resend cooldown instead of sleeping."""
+    services.OTPRequest.objects.update(
+        created_at=F('created_at') - timedelta(seconds=services.OTP_RESEND_COOLDOWN_SECONDS)
+    )
+
+
+class OTPAPIMixin:
+    def _send(self, phone=PHONE):
+        return self.client.post('/api/auth/send-otp/', {'phone_number': phone}, format='json')
+
+    def _verify(self, otp):
+        return self.client.post('/api/auth/verify-otp/', {'phone_number': PHONE, 'otp': otp}, format='json')
+
+    def _assert_error(self, r, status, detail):
+        self.assertEqual(r.status_code, status)
+        self.assertEqual(r.data, {'detail': detail})
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+class SendOTPErrorTests(OTPAPIMixin, TestCase):
+    """send-otp error contract: bad number 400, hourly limit 429, gateway/config 502."""
+
+    def setUp(self):
+        self.client = APIClient()
+        OTPConfig.objects.create(mode=OTPConfig.Mode.SMS)
+
+    def test_non_e164_phone_rejected_before_any_send(self):
+        for phone in ('9876543210', '919876543210', '+0123456789', '+91 98765 43210', '+12345', 'abc', '',
+                      '+123456789012345'):  # 15 digits: too long for the 15-char column with its '+'
+            with self.subTest(phone=phone), mock.patch.object(services, '_twilio_verify_post') as post:
+                self._assert_error(self._send(phone), 400, 'Enter a valid mobile number.')
+                post.assert_not_called()
+        self.assertFalse(services.OTPRequest.objects.exists())
+
+    def test_hourly_limit_returns_429(self):
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(201, {'status': 'pending'})) as post:
+            for _ in range(services.OTP_RATE_LIMIT_PER_HOUR):
+                self.assertEqual(self._send().status_code, 200)
+                _skip_cooldown()
+            r = self._send()
+        self._assert_error(r, 429, 'Too many OTP requests. Try again later.')
+        self.assertEqual(post.call_count, services.OTP_RATE_LIMIT_PER_HOUR)
+
+    def test_longest_e164_number_accepted(self):
+        phone = '+12345678901234'  # 14 digits + '+' = 15 chars, the column's max
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(201, {'status': 'pending'})) as post:
+            self.assertEqual(self._send(phone).status_code, 200)
+        post.assert_called_once_with('Verifications', {'To': phone, 'Channel': 'sms'})
+
+    @override_settings(TWILIO_VERIFY_SERVICE_SID='', DEBUG=False)
+    def test_unconfigured_twilio_in_production_returns_502(self):
+        with self.assertLogs('accounts.services', level='ERROR') as logs, \
+                mock.patch.object(services, '_twilio_verify_post') as post:
+            r = self._send()
+        self._assert_error(r, 502, "Couldn't send the OTP SMS. Please try again.")
+        post.assert_not_called()
+        self.assertFalse(services.OTPRequest.objects.exists())
+        log = '\n'.join(logs.output)
+        self.assertIn('TWILIO_VERIFY_SERVICE_SID', log)
+        self.assertNotIn('ACtest', log)  # names only, never values
+
+    @override_settings(TWILIO_ACCOUNT_SID='', TWILIO_AUTH_TOKEN='', DEBUG=False)
+    def test_missing_twilio_credentials_named_in_log(self):
+        with self.assertLogs('accounts.services', level='ERROR') as logs:
+            self.assertEqual(self._send().status_code, 502)
+        log = '\n'.join(logs.output)
+        self.assertIn('TWILIO_AUTH_TOKEN', log)
+        self.assertNotIn('VAtest', log)
+
+    @override_settings(USE_TWOFACTOR=True, TWOFACTOR_API_KEY='', DEBUG=False)
+    def test_unconfigured_twofactor_in_production_returns_502(self):
+        with self.assertLogs('accounts.services', level='ERROR') as logs, \
+                mock.patch.object(services, '_send_via_2factor') as twofactor:
+            self.assertEqual(self._send().status_code, 502)
+        twofactor.assert_not_called()
+        self.assertIn('TWOFACTOR_API_KEY', '\n'.join(logs.output))
+
+    @override_settings(TWILIO_VERIFY_SERVICE_SID='', DEBUG=False)
+    def test_master_mode_needs_no_gateway(self):
+        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
+        self.assertEqual(self._send().status_code, 200)
+        self.assertEqual(self._verify('555555').status_code, 200)
+
+    def test_twilio_error_code_in_details(self):
+        with mock.patch.object(services, '_twilio_verify_post',
+                               return_value=(400, {'code': 60200, 'message': 'Invalid parameter `To`'})):
+            self.assertEqual(services._send_via_twilio(PHONE),
+                             (False, 'HTTP 400 (60200): Invalid parameter `To`', 60200))
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(0, {'message': 'Could not reach Twilio'})):
+            self.assertEqual(services._send_via_twilio(PHONE), (False, 'HTTP 0: Could not reach Twilio', None))
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+class TwilioVerifyErrorTests(OTPAPIMixin, TestCase):
+    """verify-otp through Twilio: wrong / expired / locked / unavailable."""
+
+    def setUp(self):
+        self.client = APIClient()
+        OTPConfig.objects.create(mode=OTPConfig.Mode.SMS)
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(201, {'status': 'pending'})):
+            self.assertEqual(self._send().status_code, 200)
+
+    def _check(self, status, body, otp='123456'):
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(status, body)) as post:
+            r = self._verify(otp)
+        return r, post
+
+    def _attempts(self):
+        return services.OTPRequest.objects.get().attempt_count
+
+    def test_wrong_code(self):
+        r, _ = self._check(200, {'status': 'pending'})
+        self._assert_error(r, 400, WRONG)
+        self.assertEqual(self._attempts(), 1)
+
+    def test_malformed_code_rejected_by_twilio_is_wrong(self):
+        r, _ = self._check(400, {'code': 60200, 'message': 'Invalid parameter: Code'})
+        self._assert_error(r, 400, WRONG)
+
+    def test_expired_at_twilio(self):
+        r, _ = self._check(404, {'code': 20404})
+        self._assert_error(r, 400, EXPIRED)
+        r, _ = self._check(200, {'status': 'canceled'})
+        self._assert_error(r, 400, EXPIRED)
+
+    def test_expired_locally_skips_twilio(self):
+        services.OTPRequest.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
+        r, post = self._check(200, {'status': 'approved'})
+        self._assert_error(r, 400, EXPIRED)
+        post.assert_not_called()
+
+    def test_locked_by_twilio(self):
+        r, _ = self._check(429, {'code': 60202, 'message': 'Max check attempts reached'})
+        self._assert_error(r, 429, LOCKED)
+        r, _ = self._check(400, {'code': 60202})
+        self._assert_error(r, 429, LOCKED)
+        r, _ = self._check(200, {'status': 'max_attempts_reached'})
+        self._assert_error(r, 429, LOCKED)
+
+    def test_locked_locally_after_five_attempts(self):
+        for _ in range(services.OTP_MAX_ATTEMPTS):
+            r, _ = self._check(200, {'status': 'pending'})
+            self._assert_error(r, 400, WRONG)
+        r, post = self._check(200, {'status': 'approved'})
+        self._assert_error(r, 429, LOCKED)
+        post.assert_not_called()
+
+    def test_unavailable_does_not_consume_attempt(self):
+        for status, body in ((0, {'message': 'Could not reach Twilio (URLError)'}),
+                             (500, {'code': 20500}), (503, {}), (401, {'code': 20003})):
+            with self.subTest(status=status):
+                r, post = self._check(status, body)
+                self._assert_error(r, 502, UNAVAILABLE)
+                post.assert_called_once()
+                self.assertEqual(self._attempts(), 0)
+        # The same code still works once Twilio is back.
+        r, _ = self._check(200, {'status': 'approved'})
+        self.assertEqual(r.status_code, 200)
+
+    def test_master_mode_wrong_code(self):
+        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
+        r, post = self._check(200, {'status': 'approved'}, otp='111111')
+        self._assert_error(r, 400, WRONG)
+        post.assert_not_called()
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+class TwilioResendTests(OTPAPIMixin, TestCase):
+    """A resend inside Twilio's window keeps the first send's expiry and attempt count."""
+
+    def setUp(self):
+        self.client = APIClient()
+        OTPConfig.objects.create(mode=OTPConfig.Mode.SMS)
+        patcher = mock.patch.object(services, '_twilio_verify_post', return_value=(201, {'status': 'pending'}))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _rows(self):
+        return list(services.OTPRequest.objects.order_by('created_at', 'id'))
+
+    def _wrong(self):
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(200, {'status': 'pending'})):
+            self._assert_error(self._verify('000000'), 400, WRONG)
+
+    def test_resend_carries_expiry_and_attempts(self):
+        self._send()
+        self._wrong()
+        self._wrong()
+        _skip_cooldown()
+        self.assertEqual(self._send().status_code, 200)
+        first, second = self._rows()
+        self.assertEqual(second.expires_at, first.expires_at)
+        self.assertEqual(second.attempt_count, 2)
+        # Three more wrong checks reach Twilio's 5; the sixth is locked locally.
+        for _ in range(3):
+            self._wrong()
+        with mock.patch.object(services, '_twilio_verify_post') as post:
+            self._assert_error(self._verify('000000'), 429, LOCKED)
+        post.assert_not_called()
+
+    def test_resend_after_expiry_starts_fresh(self):
+        self._send()
+        self._wrong()
+        services.OTPRequest.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
+        _skip_cooldown()
+        self._send()
+        new = self._rows()[1]
+        self.assertGreater(new.expires_at, timezone.now())
+        self.assertEqual(new.attempt_count, 0)
+
+    def test_resend_after_exhausted_row_starts_fresh(self):
+        self._send()
+        services.OTPRequest.objects.update(attempt_count=services.OTP_MAX_ATTEMPTS)
+        _skip_cooldown()
+        self._send()
+        self.assertEqual(self._rows()[1].attempt_count, 0)
+
+    def test_resend_after_used_code_starts_fresh(self):
+        self._send()
+        services.OTPRequest.objects.update(is_used=True, attempt_count=2)
+        _skip_cooldown()
+        self._send()
+        self.assertEqual(self._rows()[1].attempt_count, 0)
+
+    def test_failed_resend_keeps_live_row(self):
+        self._send()
+        _skip_cooldown()
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(500, {})):
+            self.assertEqual(self._send().status_code, 502)
+        self.assertEqual(len(self._rows()), 1)
+
+    def test_rate_limit_counts_resends(self):
+        for _ in range(services.OTP_RATE_LIMIT_PER_HOUR):
+            self.assertEqual(self._send().status_code, 200)
+            _skip_cooldown()
+        self._assert_error(self._send(), 429, 'Too many OTP requests. Try again later.')
+
+
+@override_settings(USE_TWOFACTOR=True, TWOFACTOR_API_KEY='k', USE_MASTER_OTP=None, MASTER_OTP='')
+class TwoFactorVerifyTests(OTPAPIMixin, TestCase):
+    """The 2Factor (local hash) path: wrong / expired / locked, fresh code per send."""
+
+    def setUp(self):
+        self.client = APIClient()
+        OTPConfig.objects.create(mode=OTPConfig.Mode.SMS)
+        self.sent = []
+
+        def fake_send(phone, otp):
+            self.sent.append(otp)
+            return True, 'sid'
+
+        patcher = mock.patch.object(services, '_send_via_2factor', side_effect=fake_send)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.assertEqual(self._send().status_code, 200)
+
+    def _wrong_code(self):
+        return '000000' if self.sent[-1] != '000000' else '111111'
+
+    def test_wrong_then_right(self):
+        self._assert_error(self._verify(self._wrong_code()), 400, WRONG)
+        self.assertEqual(self._verify(self.sent[-1]).status_code, 200)
+
+    def test_expired(self):
+        services.OTPRequest.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
+        self._assert_error(self._verify(self.sent[-1]), 400, EXPIRED)
+
+    def test_locked_after_five_wrong(self):
+        for _ in range(services.OTP_MAX_ATTEMPTS):
+            self._assert_error(self._verify(self._wrong_code()), 400, WRONG)
+        self._assert_error(self._verify(self.sent[-1]), 429, LOCKED)
+
+    def test_resend_gets_fresh_expiry_and_attempts(self):
+        self._verify(self._wrong_code())
+        services.OTPRequest.objects.update(expires_at=timezone.now() + timedelta(minutes=1))
+        _skip_cooldown()
+        self._send()
+        new = services.OTPRequest.objects.order_by('-created_at', '-id').first()
+        self.assertEqual(new.attempt_count, 0)
+        self.assertGreater(new.expires_at, timezone.now() + timedelta(minutes=services.OTP_TTL_MINUTES - 1))
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+class TwilioHintMatchingTests(TestCase):
+    """Admin test-SMS hints match on Twilio's error code, not digits in the message."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(Account.objects.create_user('+919000000001', role=Account.Role.ADMIN))
+
+    def _test_sms(self, status, body):
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(status, body)):
+            return self.client.post('/api/admin/otp-settings/', {'test_phone': '+919876543210'}, format='json').data
+
+    def test_details_carry_code(self):
+        data = self._test_sms(400, {'code': 60200, 'message': 'Invalid parameter `To`'})
+        self.assertEqual(data['details'], 'HTTP 400 (60200): Invalid parameter `To`')
+
+    def test_code_wins_over_message(self):
+        self.assertIn('Wait about 10 minutes', self._test_sms(429, {'code': 60203, 'message': 'landline blocked'})['hint'])
+        # Digits of a hinted code inside the message (e.g. a phone number) don't match.
+        self.assertEqual(self._test_sms(400, {'code': 21608, 'message': 'Number +9160200 is unverified'})['hint'], '')
+
+    def test_more_bad_number_codes(self):
+        self.assertIn('international format', self._test_sms(400, {'code': 21211, 'message': 'x'})['hint'])
+        self.assertIn('landline', self._test_sms(400, {'code': 21614, 'message': 'x'})['hint'])
+
+    def test_message_fallback_without_code(self):
+        self.assertIn('TWILIO_AUTH_TOKEN', self._test_sms(401, {})['hint'])
+        self.assertIn('Geo permissions', self._test_sms(403, {'message': 'Delivery blocked'})['hint'])
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+class VerifyInputTests(OTPAPIMixin, TestCase):
+    """Malformed verify-otp input gets one {"detail"} and never touches the attempt count."""
+
+    def setUp(self):
+        self.client = APIClient()
+        OTPConfig.objects.create(mode=OTPConfig.Mode.SMS)
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(201, {'status': 'pending'})):
+            self.assertEqual(self._send().status_code, 200)
+
+    def _post(self, data):
+        with mock.patch.object(services, '_twilio_verify_post') as post:
+            r = self.client.post('/api/auth/verify-otp/', data, format='json')
+        post.assert_not_called()
+        return r
+
+    def test_bad_otp(self):
+        for otp in ('12345', '1234567', 'abcdef', '12 345', '', None):
+            with self.subTest(otp=otp):
+                data = {'phone_number': PHONE} if otp is None else {'phone_number': PHONE, 'otp': otp}
+                self._assert_error(self._post(data), 400, 'Enter the 6-digit code we texted you.')
+        self.assertEqual(services.OTPRequest.objects.get().attempt_count, 0)
+
+    def test_bad_phone(self):
+        for phone in ('9876543210', '+91 98765 43210', '+123456789012345', '', None):
+            with self.subTest(phone=phone):
+                data = {'otp': '123456'} if phone is None else {'phone_number': phone, 'otp': '123456'}
+                self._assert_error(self._post(data), 400, 'Enter a valid mobile number.')
+        # Both bad: the number is reported first.
+        self._assert_error(self._post({'phone_number': 'x', 'otp': 'y'}), 400, 'Enter a valid mobile number.')
+        self.assertEqual(services.OTPRequest.objects.get().attempt_count, 0)
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+class ResendCooldownTests(OTPAPIMixin, TestCase):
+    """One send per number per OTP_RESEND_COOLDOWN_SECONDS; 429 + retry_after otherwise."""
+
+    def setUp(self):
+        self.client = APIClient()
+        OTPConfig.objects.create(mode=OTPConfig.Mode.SMS)
+        patcher = mock.patch.object(services, '_twilio_verify_post', return_value=(201, {'status': 'pending'}))
+        self.post = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _age_rows(self, seconds):
+        services.OTPRequest.objects.update(created_at=timezone.now() - timedelta(seconds=seconds))
+
+    def test_immediate_resend_is_429_with_retry_after(self):
+        self.assertEqual(self._send().status_code, 200)
+        r = self._send()
+        self.assertEqual(r.status_code, 429)
+        wait = r.data['retry_after']
+        self.assertTrue(services.OTP_RESEND_COOLDOWN_SECONDS - 2 <= wait <= services.OTP_RESEND_COOLDOWN_SECONDS)
+        self.assertEqual(r.data, {
+            'detail': f'Please wait {wait} seconds before requesting another code.',
+            'retry_after': wait,
+        })
+        self.assertEqual(r['Retry-After'], str(wait))
+        # Nothing sent, no row created.
+        self.assertEqual(self.post.call_count, 1)
+        self.assertEqual(services.OTPRequest.objects.count(), 1)
+
+    def test_retry_after_counts_down_and_is_at_least_one(self):
+        self._send()
+        self._age_rows(45)
+        self.assertEqual(self._send().data['retry_after'], 15)
+        self._age_rows(services.OTP_RESEND_COOLDOWN_SECONDS - 0.2)
+        r = self._send()
+        self.assertEqual(r.data['retry_after'], 1)
+        self.assertEqual(r.data['detail'], 'Please wait 1 seconds before requesting another code.')
+
+    def test_send_allowed_once_cooldown_has_passed(self):
+        self._send()
+        self._age_rows(services.OTP_RESEND_COOLDOWN_SECONDS)
+        self.assertEqual(self._send().status_code, 200)
+        self.assertEqual(self.post.call_count, 2)
+
+    def test_cooldown_is_per_number(self):
+        self._send()
+        self.assertEqual(self._send('+919876500002').status_code, 200)
+
+    def test_failed_send_starts_no_cooldown(self):
+        with mock.patch.object(services, '_twilio_verify_post', return_value=(500, {})):
+            self.assertEqual(self._send().status_code, 502)
+        self.assertEqual(self._send().status_code, 200)
+
+    def test_master_mode_skips_cooldown(self):
+        self._send()
+        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
+        self.assertEqual(self._send().status_code, 200)
+        self.assertEqual(self._send().status_code, 200)
+        self.assertEqual(self.post.call_count, 1)
+
+    def test_hourly_limit_reported_before_cooldown(self):
+        for _ in range(services.OTP_RATE_LIMIT_PER_HOUR):
+            self._send()
+            _skip_cooldown()
+        # Make the newest row fall inside the cooldown as well.
+        newest = services.OTPRequest.objects.order_by('-created_at', '-id').first()
+        services.OTPRequest.objects.filter(pk=newest.pk).update(created_at=timezone.now())
+        self._assert_error(self._send(), 429, 'Too many OTP requests. Try again later.')

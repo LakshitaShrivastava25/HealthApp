@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Phone } from 'lucide-react';
 import { COUNTRIES, type Country } from '@shared/data/countries';
+import { normalisePhoneDigits } from '@shared/phoneDigits';
 
 /**
  * Country selector + national number, styled for the auth card.
@@ -75,7 +76,11 @@ export default function PhoneField({
           id={id}
           value={digits}
           disabled={disabled}
-          onChange={(e) => onDigitsChange(e.target.value.replace(/\D/g, '').slice(0, country.digits))}
+          // Strips a pasted dial code and the domestic trunk "0", and ignores
+          // keystrokes past a full number — see normalisePhoneDigits.
+          onChange={(e) =>
+            onDigitsChange(normalisePhoneDigits(e.target.value, digits, country.dialCode, country.digits))
+          }
           onKeyDown={(e) => {
             if (e.key === 'Enter' && onSubmit) onSubmit();
           }}

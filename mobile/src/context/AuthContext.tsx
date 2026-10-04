@@ -10,7 +10,7 @@ import {
 import { setApiBaseUrl } from '../lib/config';
 import { clearLocalNotifications, unregisterForPush } from '../lib/notifications';
 import { clearSessionCache, readSessionCache, writeSessionCache } from '../lib/sessionCache';
-import { clearTokens, getAccessToken, getStoredApiBaseUrl, setTokens } from '../lib/tokens';
+import { clearTokens, getAccessToken, getRefreshToken, getStoredApiBaseUrl, setTokens } from '../lib/tokens';
 
 export type Role = 'patient' | 'doctor' | 'admin' | 'ocr_reviewer' | 'claims_ops';
 
@@ -160,6 +160,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await unregisterForPush();
     await clearLocalNotifications();
     clearSessionCache();
+    // End the session on the server too. Best effort: offline, the phone
+    // still signs out and the token simply lapses after 30 days unused. Not
+    // awaited: the request already carries the token, so signing out never
+    // waits on a slow network.
+    const refresh = await getRefreshToken();
+    if (refresh) void authApi.logout(refresh).catch(() => undefined);
     await clearTokens();
     setAccount(null);
     setProfiles([]);

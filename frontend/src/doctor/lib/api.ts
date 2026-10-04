@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 import { API_BASE_URL } from '../../shared/apiConfig';
+import { withRefreshLock } from '../../shared/refreshLock';
 
 const BASE_URL = API_BASE_URL;
 
@@ -11,7 +12,19 @@ const REFRESH_KEY = 'healthnow_doctor_refresh_token';
 
 // Shared by clearTokens() and the 401 interceptor below.
 let isRefreshing = false;
-let pendingQueue: (() => void)[] = [];
+// Requests that hit a 401 while a refresh was already running. Each one is
+// settled exactly once — replayed when the refresh lands, rejected with its
+// own 401 when it fails or the session ends — so no screen waits forever.
+type QueuedRequest = { replay: () => void; fail: () => void };
+let pendingQueue: QueuedRequest[] = [];
+
+function settleQueue(refreshed: boolean) {
+  // Swap before running: a replay that 401s again must not land in the
+  // list being walked.
+  const waiters = pendingQueue;
+  pendingQueue = [];
+  waiters.forEach((w) => (refreshed ? w.replay() : w.fail()));
+}
 
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY);
@@ -43,9 +56,10 @@ export function clearTokens() {
   sessionGeneration += 1;
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
-  // Drop queued replays and release the refresh lock — a queued request
-  // resuming after logout would re-authenticate as the previous person.
-  pendingQueue = [];
+  // Reject queued replays and release the refresh lock — a queued request
+  // resuming after logout would re-authenticate as the previous person, and
+  // one silently dropped would leave its caller waiting forever.
+  settleQueue(false);
   isRefreshing = false;
 }
 
@@ -68,31 +82,54 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          pendingQueue.push(() => resolve(api(original)));
+        return new Promise((resolve, reject) => {
+          pendingQueue.push({
+            replay: () => resolve(api(original)),
+            fail: () => reject(error),
+          });
         });
       }
       isRefreshing = true;
       // Captured BEFORE the await: if a logout happens while this request is
       // in flight, the generation moves on and the result below is discarded.
       const generationAtRefresh = sessionGeneration;
+      const sentWith = original.headers?.Authorization;
       try {
-        const { data } = await axios.post(`${BASE_URL}/auth/refresh/`, { refresh });
-        if (generationAtRefresh !== sessionGeneration) {
+        const refreshed = await withRefreshLock(REFRESH_KEY, async () => {
+          // Logged out while waiting for the lock: any tokens in storage now
+          // belong to whoever signed in next, not to this request.
+          if (generationAtRefresh !== sessionGeneration) return false;
+          // Another tab may have refreshed while this one waited for the
+          // lock; its new tokens are in storage, and the refresh token read
+          // above is now blacklisted. Reuse theirs instead.
+          const stored = getAccessToken();
+          if (stored && `Bearer ${stored}` !== sentWith) return true;
+          const { data } = await axios.post(`${BASE_URL}/auth/refresh/`, { refresh: getRefreshToken() });
           // Logged out mid-refresh. Writing these tokens would resurrect the
           // previous person's session on a shared machine.
-          return Promise.reject(error);
-        }
-        setTokens(data.access, refresh);
-        pendingQueue.forEach((cb) => cb());
-        pendingQueue = [];
+          if (generationAtRefresh !== sessionGeneration) return false;
+          // The old refresh token was just blacklisted — keep the rotated one.
+          setTokens(data.access, data.refresh);
+          return true;
+        });
+        // Logged out mid-refresh: clearTokens() has already rejected
+        // everything queued behind this refresh. Settling the queue again
+        // here could reject a newer session's waiters.
+        if (!refreshed) return Promise.reject(error);
+        settleQueue(true);
         return api(original);
       } catch (refreshError) {
+        // Logged out mid-refresh (which can itself make the refresh fail):
+        // that logout already cleaned up, and clearing again here could end
+        // the next person's session.
+        if (generationAtRefresh !== sessionGeneration) return Promise.reject(error);
         clearTokens();
         window.location.href = '/doctor/login';
         return Promise.reject(refreshError);
       } finally {
-        isRefreshing = false;
+        // After a logout clearTokens() already released the lock, and a newer
+        // session's refresh may hold it by now.
+        if (generationAtRefresh === sessionGeneration) isRefreshing = false;
       }
     }
     return Promise.reject(error);
@@ -106,6 +143,9 @@ export const authApi = {
   // profile page. Deliberately not folded into DoctorSerializer: that one is
   // patient-facing, and the login number must never reach Find Care.
   me: () => api.get('/auth/me/'),
+  // Blacklists the refresh token server-side. Plain axios: a 401 here must
+  // not kick off a refresh of the session being ended.
+  logout: (refresh: string) => axios.post(`${BASE_URL}/auth/logout/`, { refresh }),
 };
 
 export const doctorApi = {

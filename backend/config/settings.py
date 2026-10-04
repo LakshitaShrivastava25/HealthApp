@@ -33,6 +33,7 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
 
     'accounts',
@@ -151,10 +152,16 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
+# Sessions end after 30 days of inactivity: every refresh hands out a new
+# 30-day refresh token and blacklists the one it replaced, so a client that
+# keeps using the app stays signed in, and a copied old token stops working.
+# POST /api/auth/logout/ blacklists the current one. Clients must store the
+# rotated token. Run `manage.py flushexpiredtokens` now and then to prune.
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=12),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 # --- CORS -------------------------------------------------------

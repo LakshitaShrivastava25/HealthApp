@@ -15,9 +15,9 @@ import {
   Step,
   StepHeading,
   SuccessOverlay,
+  consumedVerifyAttempt,
   describeSendOtpError,
   describeVerifyOtpError,
-  formatMmSs,
   useOtpTimers,
 } from '@shared/auth';
 import { useAuth } from '../context/AuthContext';
@@ -53,7 +53,9 @@ export default function Login() {
       const result = await sendOtp(fullNumber);
       setDebugOtp(result.debug_otp ?? null);
       setOtp('');
-      setRejectedAttempts(0);
+      // Attempts are NOT reset here: a resend inside the code's lifetime
+      // re-sends the same code, and the backend carries its attempt count
+      // over. Only a new phone number (backToPhone) starts afresh.
       timers.startCycle();
       if (!isResend) setStep('otp');
     } catch (err) {
@@ -72,14 +74,14 @@ export default function Login() {
         await verifyOtp(fullNumber, code);
         setVerified(true);
       } catch (err) {
-        setError(describeVerifyOtpError(err, { expired: timers.isExpired, rejectedAttempts }));
-        setRejectedAttempts((n) => n + 1);
+        setError(describeVerifyOtpError(err, { rejectedAttempts }));
+        if (consumedVerifyAttempt(err)) setRejectedAttempts((n) => n + 1);
         setOtp('');
       } finally {
         setVerifying(false);
       }
     },
-    [fullNumber, rejectedAttempts, timers.isExpired, verifyOtp, verifying]
+    [fullNumber, rejectedAttempts, verifyOtp, verifying]
   );
 
   // Land on "/" and let the Gate in App.tsx decide where this doctor
@@ -182,16 +184,12 @@ export default function Login() {
                   if (error) setError(null);
                 }}
                 onComplete={handleVerifyOtp}
-                disabled={verifying || timers.sendsExhausted}
+                disabled={verifying}
                 invalid={!!error}
                 autoFocus
               />
 
-              <div className="mt-3 flex items-center justify-between text-[11.5px]">
-                <span className={timers.expiresIn === 0 ? 'text-danger' : 'text-ink-500'}>
-                  {timers.expiresIn === 0 ? 'Code expired' : `Expires in ${formatMmSs(timers.expiresIn)}`}
-                </span>
-
+              <div className="mt-3 flex items-center justify-end text-[11.5px]">
                 {timers.sendsExhausted ? (
                   <span className="text-ink-300">No codes left this hour</span>
                 ) : timers.canResend ? (
@@ -205,7 +203,7 @@ export default function Login() {
                     Resend code
                   </button>
                 ) : (
-                  <span className="text-ink-300">Resend in {timers.resendIn}s</span>
+                  <span className="text-ink-300">Resend code in {timers.resendIn}s</span>
                 )}
               </div>
 

@@ -1,3 +1,5 @@
+import re
+
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import viewsets
@@ -162,23 +164,33 @@ class OTPSettingsView(APIView):
     """
     permission_classes = [IsStaffAdmin]
 
-    # Common Twilio Verify send failures -> what the admin should do. Matched
-    # on the error code or, since details carry only Twilio's message, on a
-    # fragment of that message (lowercase). First match wins.
+    # Common Twilio Verify send failures -> what the admin should do, as
+    # (error codes, lowercase message fragments, hint). Details look like
+    # "HTTP 400 (60200): <message>"; the code decides when present, the
+    # message fragments only when Twilio sent no code.
     TWILIO_HINTS = (
-        (('60200', 'invalid parameter'),
+        ((60200, 21211), ('invalid parameter',),
          'Twilio rejected the number. Enter it in full international format, e.g. +919876543210.'),
-        (('60203', 'max send attempts'),
+        ((60203,), ('max send attempts',),
          'Too many codes were sent to this number. Wait about 10 minutes and try again.'),
-        (('60205', 'landline'),
+        ((60205, 21614), ('landline',),
          'This number is a landline and cannot receive SMS. Use a mobile number.'),
-        (('60410', '60605', 'blocked', 'geo'),
+        ((60410, 60605), ('blocked', 'geo'),
          "Twilio blocked SMS to this number's country. Enable the country under Verify > Geo permissions "
          'in the Twilio Console (and check Fraud Guard).'),
-        (('20003', 'http 401', 'authenticat'),
+        ((20003,), ('http 401', 'authenticat'),
          'Twilio rejected the credentials. Check TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN (or the API key) '
          'in the server .env.'),
     )
+
+    @classmethod
+    def _twilio_hint(cls, details):
+        match = re.match(r'HTTP \d+ \((\d+)\):', str(details))
+        if match:
+            code = int(match.group(1))
+            return next((hint for codes, _, hint in cls.TWILIO_HINTS if code in codes), '')
+        text = str(details).lower()
+        return next((hint for _, fragments, hint in cls.TWILIO_HINTS if any(f in text for f in fragments)), '')
 
     def _payload(self, config, check_balance=True):
         from django.conf import settings as dj_settings
@@ -245,8 +257,7 @@ class OTPSettingsView(APIView):
         ok, details, delivery = send_test_sms(phone)
         hint = ''
         if not ok and not dj_settings.USE_TWOFACTOR:
-            text = str(details).lower()
-            hint = next((h for keys, h in self.TWILIO_HINTS if any(k in text for k in keys)), '')
+            hint = self._twilio_hint(details)
         elif 'DLT' in delivery.upper():
             hint = (
                 'The operator rejected the SMS on DLT checks. Make sure the 2Factor template text matches the '

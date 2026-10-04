@@ -23,9 +23,9 @@ import {
   Step,
   StepHeading,
   SuccessOverlay,
+  consumedVerifyAttempt,
   describeSendOtpError,
   describeVerifyOtpError,
-  formatMmSs,
   useOtpTimers,
 } from '@shared/auth';
 import { useAuth } from '../context/AuthContext';
@@ -115,7 +115,9 @@ export default function Login() {
       // Only present when the backend runs with DEBUG=True.
       setDebugOtp(result.debug_otp ?? null);
       setOtp('');
-      setRejectedAttempts(0);
+      // Attempts are NOT reset here: a resend inside the code's lifetime
+      // re-sends the same code, and the backend carries its attempt count
+      // over. Only a new phone number (backToPhone) starts afresh.
       timers.startCycle();
       if (!isResend) setStep('otp');
     } catch (err) {
@@ -170,14 +172,14 @@ export default function Login() {
           setSuccess('welcome');
         }
       } catch (err) {
-        setError(describeVerifyOtpError(err, { expired: timers.isExpired, rejectedAttempts }));
-        setRejectedAttempts((n) => n + 1);
+        setError(describeVerifyOtpError(err, { rejectedAttempts }));
+        if (consumedVerifyAttempt(err)) setRejectedAttempts((n) => n + 1);
         setOtp('');
       } finally {
         setVerifying(false);
       }
     },
-    [fullNumber, logout, refreshProfiles, rejectedAttempts, timers.isExpired, verifyOtp, verifying]
+    [fullNumber, logout, navigate, refreshProfiles, rejectedAttempts, verifyOtp, verifying]
   );
 
   async function handleProfileSetup() {
@@ -306,18 +308,12 @@ export default function Login() {
                   if (error) setError(null);
                 }}
                 onComplete={handleVerifyOtp}
-                disabled={verifying || timers.sendsExhausted}
+                disabled={verifying}
                 invalid={!!error}
                 autoFocus
               />
 
-              <div className="mt-3 flex items-center justify-between text-[11.5px]">
-                <span className={timers.expiresIn === 0 ? 'text-danger' : 'text-ink-500'}>
-                  {timers.expiresIn === 0
-                    ? 'Code expired'
-                    : `Expires in ${formatMmSs(timers.expiresIn)}`}
-                </span>
-
+              <div className="mt-3 flex items-center justify-end text-[11.5px]">
                 <ResendButton
                   canResend={timers.canResend}
                   resendIn={timers.resendIn}
@@ -501,7 +497,7 @@ function SelectField({
 
 /**
  * Resend, with the backend's two limits made visible rather than
- * discovered by hitting them: a 30-second cooldown between sends, and a
+ * discovered by hitting them: a 60-second cooldown between sends, and a
  * hard stop at five codes an hour.
  */
 function ResendButton({
@@ -521,7 +517,7 @@ function ResendButton({
     return <span className="text-ink-300">No codes left this hour</span>;
   }
   if (!canResend) {
-    return <span className="text-ink-300">Resend in {resendIn}s</span>;
+    return <span className="text-ink-300">Resend code in {resendIn}s</span>;
   }
   return (
     <button

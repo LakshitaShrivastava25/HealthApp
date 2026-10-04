@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { authApi, clearTokens, getAccessToken, profilesApi, setTokens } from '../lib/api';
+import { authApi, clearTokens, getAccessToken, getRefreshToken, profilesApi, setTokens } from '../lib/api';
 
 export type Profile = {
   id: string;
@@ -72,6 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // End the session on the server too; fire-and-forget so signing out
+    // never waits on the network.
+    const refresh = getRefreshToken();
+    if (refresh) authApi.logout(refresh).catch(() => undefined);
     clearTokens();
     // Every piece of session state, not just the flag. Leaving profiles or
     // activeProfile behind means a component that renders before the

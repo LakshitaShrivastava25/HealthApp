@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { COUNTRIES, DEFAULT_COUNTRY, type Country } from '../data/countries';
+import { normalisePhoneDigits } from '../phoneDigits';
 
 export function usePhoneInput() {
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
@@ -35,9 +36,9 @@ export default function PhoneInput({
   }
 
   function handleDigitsInput(e: React.ChangeEvent<HTMLInputElement>) {
-    // Digits only, capped at what the selected country actually expects.
-    const cleaned = e.target.value.replace(/\D/g, '').slice(0, country.digits);
-    onDigitsChange(cleaned);
+    // Digits only, without a pasted dial code or the domestic trunk "0",
+    // capped at what the selected country actually expects.
+    onDigitsChange(normalisePhoneDigits(e.target.value, digits, country.dialCode, country.digits));
   }
 
   return (

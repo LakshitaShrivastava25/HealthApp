@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { authApi, clearTokens, getAccessToken, setTokens } from '../lib/api';
+import { authApi, clearTokens, getAccessToken, getRefreshToken, setTokens } from '../lib/api';
 
 export type StaffAccount = {
   id: string;
@@ -63,6 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // End the session on the server too; fire-and-forget so signing out
+    // never waits on the network.
+    const refresh = getRefreshToken();
+    if (refresh) authApi.logout(refresh).catch(() => undefined);
     clearTokens();
     // Clear the staff record too, so no stale phone number or role survives.
     setIsAuthenticated(false);

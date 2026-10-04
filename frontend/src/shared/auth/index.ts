@@ -24,7 +24,7 @@ export { default as AnimatedMedicalBackground } from './AnimatedMedicalBackgroun
 // page using it outside <AuthShell> has to inject these keyframes too.
 export { default as AuthKeyframes } from './AuthKeyframes';
 
-export { describeSendOtpError, describeVerifyOtpError, MAX_VERIFY_ATTEMPTS } from './authErrors';
-export { useOtpTimers, formatMmSs, OTP_TTL_SECONDS, MAX_SENDS_PER_HOUR } from './useOtpTimers';
+export { describeSendOtpError, describeVerifyOtpError, consumedVerifyAttempt, MAX_VERIFY_ATTEMPTS } from './authErrors';
+export { useOtpTimers, RESEND_COOLDOWN_SECONDS, MAX_SENDS_PER_HOUR } from './useOtpTimers';
 export { useReducedMotion } from './useReducedMotion';
 export { C, EASE_OUT, EASE_IN_OUT } from './tokens';

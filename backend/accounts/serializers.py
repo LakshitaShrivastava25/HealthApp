@@ -5,8 +5,9 @@ from .models import Account
 
 # E.164: "+", a non-zero country code digit, 7-14 digits in all, so the whole
 # string fits Account.phone_number / OTPRequest.phone_number (max_length=15).
-E164_PHONE = RegexValidator(r'^\+[1-9]\d{6,13}$', 'Enter a valid mobile number.')
-OTP_CODE = RegexValidator(r'^\d{6}$', 'Enter the 6-digit code we texted you.')
+# [0-9], not \d: \d also matches non-ASCII digits such as "٩".
+E164_PHONE = RegexValidator(r'^\+[1-9][0-9]{6,13}$', 'Enter a valid mobile number.')
+OTP_CODE = RegexValidator(r'^[0-9]{6}$', 'Enter the 6-digit code we texted you.')
 
 
 class SendOTPSerializer(serializers.Serializer):

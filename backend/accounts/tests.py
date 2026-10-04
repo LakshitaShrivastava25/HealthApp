@@ -691,7 +691,7 @@ class ResendCooldownTests(OTPAPIMixin, TestCase):
         self._age_rows(services.OTP_RESEND_COOLDOWN_SECONDS - 0.2)
         r = self._send()
         self.assertEqual(r.data['retry_after'], 1)
-        self.assertEqual(r.data['detail'], 'Please wait 1 seconds before requesting another code.')
+        self.assertEqual(r.data['detail'], 'Please wait 1 second before requesting another code.')
 
     def test_send_allowed_once_cooldown_has_passed(self):
         self._send()

@@ -21,6 +21,9 @@ export function normalisePhoneDigits(
   const isPaste = raw.includes('+') || digits.length - previous.length > 1;
 
   if (isPaste) {
+    // Zeros first, so the "00" international prefix ("0091 98765 43210")
+    // exposes the dial code to the check below.
+    digits = digits.replace(/^0+/, '');
     const dial = dialCode.replace(/\D/g, '');
     if (dial && digits.length > maxLength && digits.startsWith(dial)) {
       digits = digits.slice(dial.length);

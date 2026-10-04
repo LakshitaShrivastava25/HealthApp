@@ -240,7 +240,13 @@ def master_otp_mode() -> tuple[bool, str]:
     on = settings.USE_MASTER_OTP
     if on is None:
         on = config.mode == OTPConfig.Mode.MASTER
-    return on, settings.MASTER_OTP or config.master_otp
+    code = settings.MASTER_OTP
+    # verify-otp only accepts 6 digits, so any other env value could never
+    # match — ignore it rather than lock everyone out.
+    if code and not (code.isdigit() and len(code) == 6):
+        logger.error('MASTER_OTP in env is not 6 digits; using the admin-portal master code instead')
+        code = ''
+    return on, code or config.master_otp
 
 
 def request_otp(phone_number: str) -> dict:
@@ -289,7 +295,7 @@ def request_otp(phone_number: str) -> dict:
             wait = max(1, math.ceil(remaining))
             return {
                 'ok': False,
-                'error': f'Please wait {wait} seconds before requesting another code.',
+                'error': f"Please wait {wait} second{'' if wait == 1 else 's'} before requesting another code.",
                 'status': 429,
                 'retry_after': wait,
             }

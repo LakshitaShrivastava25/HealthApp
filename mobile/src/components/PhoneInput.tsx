@@ -21,6 +21,9 @@ export function localDigits(raw: string, previous?: string): string {
   let digits = raw.replace(/\D/g, '');
   const prev = previous === undefined ? undefined : previous.replace(/\D/g, '');
   const pasted = prev === undefined || raw.includes('+') || digits.length - prev.length > 1;
+  // Zeros first, so the "00" international prefix ("0091 98765 43210")
+  // exposes the 91 to the check below.
+  if (pasted) digits = digits.replace(/^0+/, '');
   if (pasted && digits.length > PHONE_DIGITS && digits.startsWith('91')) digits = digits.slice(2);
   // No Indian mobile number starts with 0, so a leading trunk zero is always
   // dropped — even mid-typing, before the number is long enough to tell.
@@ -89,7 +92,17 @@ const PhoneInput = forwardRef<TextInput, Props>(function PhoneInput(
           ref={ref}
           {...rest}
           value={formatForDisplay(digits)}
-          onChangeText={(text) => onChangeText(localDigits(text, digits))}
+          onChangeText={(text) => {
+            // Backspace right after the display-only space deletes just the
+            // space, leaving the digits unchanged — so the key seemed dead.
+            // Treat it as deleting the digit before the space.
+            const shown = formatForDisplay(digits);
+            if (shown.includes(' ') && text.length === shown.length - 1 && text.replace(/\D/g, '') === digits) {
+              onChangeText(digits.slice(0, 4) + digits.slice(5));
+              return;
+            }
+            onChangeText(localDigits(text, digits));
+          }}
           keyboardType="number-pad"
           inputMode="numeric"
           textContentType="telephoneNumber"

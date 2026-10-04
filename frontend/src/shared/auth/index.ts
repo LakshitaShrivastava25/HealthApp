@@ -7,8 +7,8 @@
  */
 export { default as AuthShell } from './AuthShell';
 export { default as AuthCard } from './AuthCard';
-export { default as HealthNowLogo } from './HealthNowLogo';
-export type { Portal } from './HealthNowLogo';
+export { default as CuraPathLogo } from './CuraPathLogo';
+export type { Portal } from './CuraPathLogo';
 export { default as Step, StepHeading } from './Step';
 export { default as Field } from './Field';
 export { default as PhoneField } from './PhoneField';

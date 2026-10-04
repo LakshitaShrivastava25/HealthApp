@@ -22,7 +22,7 @@ import {
   AuthShell,
   Field,
   FormError,
-  HealthNowLogo,
+  CuraPathLogo,
   PrimaryButton,
   SecurityBadge,
   StepHeading,
@@ -162,7 +162,7 @@ export default function Register() {
     <AuthShell>
       <AuthCard>
         <div className="mb-6">
-          <HealthNowLogo portal="doctor" />
+          <CuraPathLogo portal="doctor" />
         </div>
 
         <StepHeading

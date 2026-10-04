@@ -24,7 +24,7 @@ const MARKS = {
   admin: { Icon: ShieldCheck, label: 'CuraPath', sub: 'Admin Portal' },
 } as const;
 
-export default function HealthNowLogo({
+export default function CuraPathLogo({
   portal = 'patient',
   showTagline = true,
 }: {

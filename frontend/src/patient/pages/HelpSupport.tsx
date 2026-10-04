@@ -3,7 +3,7 @@ import { Mail, ChevronDown, LifeBuoy } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card } from '../components/ui';
 
-const SUPPORT_EMAIL = 'support@healthnow.app';
+const SUPPORT_EMAIL = 'hello@curapath.in';
 
 const FAQS = [
   {

@@ -1,10 +1,10 @@
-# HealthNow — AI Healthcare Platform
+# CuraPath — AI Healthcare Platform
 
 One repo, two projects: the User Portal (React frontend) and its Django
 backend, meant to be run side by side during development.
 
 ```
-healthnow-platform/
+HealthApp/
  ├── frontend/     React + TypeScript + Vite + Tailwind — the User Portal UI
  └── backend/      Django + DRF — auth, records, insurance, AI service layer
 ```
@@ -52,7 +52,7 @@ confusing setup.
 
 | Piece | Status |
 |---|---|
-| Frontend UI | Built, matches the HealthNow mockup, running on mock data |
+| Frontend UI | Built, matches the CuraPath mockup, running on mock data |
 | Backend API | Built and tested (auth, records, insurance claim estimator, emergency QR all verified with real requests) |
 | Database | SQLite locally; `DATABASE_URL` in `backend/.env` ready for the Neon connection string when provided |
 | AI (Claude) | Service layer built (`backend/ai/claude_service.py`); returns clearly-marked mock responses until `ANTHROPIC_API_KEY` is set |

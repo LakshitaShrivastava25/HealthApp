@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Clock3, LogOut, RefreshCw, UserCog } from 'lucide-react';
-import { AuthCard, AuthShell, HealthNowLogo, SecurityBadge } from '@shared/auth';
+import { AuthCard, AuthShell, CuraPathLogo, SecurityBadge } from '@shared/auth';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -22,7 +22,7 @@ export default function PendingVerification() {
     <AuthShell>
       <AuthCard className="text-center">
         <div className="mb-6">
-          <HealthNowLogo portal="doctor" />
+          <CuraPathLogo portal="doctor" />
         </div>
 
         <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">

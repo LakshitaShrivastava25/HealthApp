@@ -75,13 +75,13 @@ export default function HelpSupport() {
       <SectionTitle>Still need help?</SectionTitle>
       <Card>
         <Pressable
-          onPress={() => Linking.openURL('mailto:support@healthnow.example')}
+          onPress={() => Linking.openURL('mailto:hello@curapath.in')}
           style={styles.actionRow}
         >
           <Feather name="mail" size={16} color={colors.brandPurple} />
           <View style={{ flex: 1 }}>
             <Text style={type.label}>Email support</Text>
-            <Text style={type.micro}>support@healthnow.example</Text>
+            <Text style={type.micro}>hello@curapath.in</Text>
           </View>
           <Feather name="external-link" size={15} color={colors.ink300} />
         </Pressable>

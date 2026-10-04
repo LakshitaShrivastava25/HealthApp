@@ -1,4 +1,4 @@
-# HealthNow Backend (Django + DRF)
+# CuraPath Backend (Django + DRF)
 
 The backend for the AI Healthcare Platform's User Portal (and the shared
 foundation for the Admin/Doctor portals to come). Matches the architecture
@@ -162,7 +162,7 @@ GET        /api/admin/audit-log/
 
 ## Project layout
 ```
-healthnow_backend/
+backend/
   config/            settings, root urls
   accounts/          Account model (custom user), OTP auth
   family/            Profile (family members), allergies

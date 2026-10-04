@@ -15,7 +15,7 @@ import {
   DevOtpChip,
   Field,
   FormError,
-  HealthNowLogo,
+  CuraPathLogo,
   OTPInput,
   PhoneField,
   PrimaryButton,
@@ -231,7 +231,7 @@ export default function Login() {
         </AnimatePresence>
 
         <div className="mb-6">
-          <HealthNowLogo portal="patient" />
+          <CuraPathLogo portal="patient" />
         </div>
 
         <AnimatePresence mode="wait" initial={false}>

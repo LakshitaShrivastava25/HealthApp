@@ -7,7 +7,7 @@ import {
   AuthShell,
   DevOtpChip,
   FormError,
-  HealthNowLogo,
+  CuraPathLogo,
   OTPInput,
   PhoneField,
   PrimaryButton,
@@ -116,7 +116,7 @@ export default function Login() {
         </AnimatePresence>
 
         <div className="mb-6">
-          <HealthNowLogo portal="admin" />
+          <CuraPathLogo portal="admin" />
         </div>
 
         <AnimatePresence mode="wait" initial={false}>

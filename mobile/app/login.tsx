@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BeatingHeart from '../src/components/BeatingHeart';
@@ -76,17 +78,10 @@ export default function Login() {
   const phoneInputRef = useRef<TextInput>(null);
 
   const { width, height } = useWindowDimensions();
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  // Flips on keyboardWillShow (Android included), so the compact layout
+  // below lands while the keyboard is still sliding in, not after it.
+  const keyboardOpen = useKeyboardState((state) => state.isVisible);
   const [slow, setSlow] = useState(false);
-
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
 
   // A free-tier server sleeps when idle and takes a while to answer the
   // first request; say so instead of leaving a spinner that looks stuck.
@@ -161,216 +156,228 @@ export default function Login() {
 
   const phoneReady = isValidPhone(phone);
 
-  // The illustration is decoration: drop it while typing, and on short
-  // screens, so the field and its button always fit above the keyboard.
-  const showHero = step === 'phone' && !keyboardOpen && height >= 640;
-  const heroWidth = Math.min(200, width * 0.5);
-  const compact = keyboardOpen || height < 640;
+  // The illustration and tagline are decoration: drop them while typing and
+  // on short screens, so the heading, field and button all fit above the
+  // keyboard. While typing the logo collapses to a single row.
+  const showHero = step === 'phone' && !keyboardOpen && height >= 700;
+  const heroWidth = Math.min(200, width * 0.5, height * 0.22);
+  const compact = keyboardOpen || height < 560;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAwareScrollView
-        contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]}
-        keyboardShouldPersistTaps="handled"
-        // Room for the button under the focused field, not just the field.
-        bottomOffset={96}
-      >
-        <View style={styles.inner}>
-          <View style={[styles.brandBlock, compact && styles.brandBlockCompact]}>
-            {showHero && (
-              <View style={styles.hero}>
-                <RecordsArt width={heroWidth} />
-              </View>
-            )}
-            <BeatingHeart size={compact ? 40 : 56} halo={!compact} />
-            <Text style={[styles.brandName, compact && styles.brandNameCompact]}>CuraPath</Text>
-            {!compact && (
-              <Text style={styles.brandTag}>
-                Your family's health records, insurance and medicines in one place.
-              </Text>
-            )}
-          </View>
+      {/* The view shrinks to the space above the keyboard and the centred
+          content re-centres in it. A KeyboardAwareScrollView here scrolled to
+          the field before the compact layout took effect, so the shorter page
+          stayed scrolled past its top — heading cut off, a gap above the keys. */}
+      <KeyboardAvoidingView behavior="padding" automaticOffset style={styles.flex}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.inner}>
+            <View style={[styles.brandBlock, compact && styles.brandBlockCompact]}>
+              {showHero && (
+                <Animated.View entering={FadeIn.duration(220)} style={styles.hero}>
+                  <RecordsArt width={heroWidth} />
+                </Animated.View>
+              )}
+              <BeatingHeart size={compact ? 32 : 56} halo={!compact} />
+              <Text style={[styles.brandName, compact && styles.brandNameCompact]}>CuraPath</Text>
+              {!compact && (
+                <Animated.Text entering={FadeIn.duration(220)} style={styles.brandTag}>
+                  Your family's health records, insurance and medicines in one place.
+                </Animated.Text>
+              )}
+            </View>
 
-          <Card>
-            {step === 'phone' ? (
-              <>
-                <Text style={type.h2}>Sign in</Text>
-                <Text style={[type.caption, styles.stepNote]}>
-                  We'll text you a 6-digit code. The same number works for patients, doctors and
-                  staff — your account decides what you see.
-                </Text>
-                <PhoneInput
-                  ref={phoneInputRef}
-                  label="Mobile number"
-                  value={phone}
-                  onChangeText={(digits) => {
-                    setPhone(digits);
-                    if (error) setError(null);
-                  }}
-                  returnKeyType="go"
-                  onSubmitEditing={() => phoneReady && handleSendOtp()}
-                />
-                <Button onPress={() => handleSendOtp()} disabled={!phoneReady} loading={busy}>
-                  Send code
-                </Button>
-              </>
-            ) : (
-              <>
-                <Pressable
-                  onPress={() => {
-                    setStep('phone');
-                    setError(null);
-                    setTimeout(() => phoneInputRef.current?.focus(), 250);
-                  }}
-                  style={styles.backRow}
-                  hitSlop={12}
-                >
-                  <Feather name="arrow-left" size={15} color={colors.ink500} />
-                  <Text style={type.caption}>
-                    {fullNumber.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')}
-                  </Text>
-                  <Text style={styles.changeLink}>Change</Text>
-                </Pressable>
-
-                <Text style={type.h2}>Enter the code</Text>
-                <Text style={[type.caption, styles.stepNote]}>
-                  {expiresIn > 0
-                    ? `This code expires in ${Math.floor(expiresIn / 60)}:${String(expiresIn % 60).padStart(2, '0')}.`
-                    : 'That code has expired — send a new one.'}
-                </Text>
-
-                <Pressable onPress={() => otpInputRef.current?.focus()}>
-                  <View style={styles.otpRow}>
-                    {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-                      <View
-                        key={i}
-                        style={[
-                          styles.otpCell,
-                          !!otp[i] && styles.otpCellFilled,
-                          otp.length === i && styles.otpCellActive,
-                        ]}
-                      >
-                        <Text style={styles.otpDigit}>{otp[i] ?? ''}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </Pressable>
-
-                {/* One hidden field backs all six boxes — native keyboards
-                    handle SMS autofill and backspace correctly on a single
-                    input, and fight six separate ones. */}
-                <TextInput
-                  ref={otpInputRef}
-                  value={otp}
-                  onChangeText={(text) => {
-                    const digits = text.replace(/\D/g, '').slice(0, OTP_LENGTH);
-                    setOtp(digits);
-                    if (error) setError(null);
-                    if (digits.length === OTP_LENGTH) handleVerify(digits);
-                  }}
-                  keyboardType="number-pad"
-                  textContentType="oneTimeCode"
-                  autoComplete="sms-otp"
-                  // No maxLength: an SMS autofill or paste can carry extra
-                  // characters, and onChangeText trims to six digits.
-                  style={styles.hiddenInput}
-                  autoFocus
-                />
-
-                {!!debugOtp && (
-                  <View style={styles.debugChip}>
-                    <Feather name="info" size={13} color={colors.info} />
-                    <Text style={styles.debugText}>
-                      Development code: <Text style={{ fontWeight: '700' }}>{debugOtp}</Text>
-                    </Text>
-                  </View>
-                )}
-
-                <Button onPress={() => handleVerify(otp)} disabled={otp.length !== OTP_LENGTH} loading={busy}>
-                  Verify
-                </Button>
-
-                <Pressable
-                  onPress={() => secondsLeft === 0 && handleSendOtp(true)}
-                  disabled={secondsLeft > 0 || busy}
-                  style={styles.resend}
-                  hitSlop={12}
-                >
-                  <Text style={[type.caption, secondsLeft === 0 && styles.resendActive]}>
-                    {secondsLeft > 0 ? `Resend code in ${secondsLeft}s` : 'Resend code'}
-                  </Text>
-                </Pressable>
-              </>
-            )}
-
-            {busy && slow && (
-              <Text style={[type.caption, styles.slowNote]}>
-                Waking up the server — this can take up to a minute the first time.
-              </Text>
-            )}
-
-            {!!error && (
-              <View style={{ marginTop: spacing.md }}>
-                <ErrorNote message={error} />
-              </View>
-            )}
-          </Card>
-
-          {/* The server-address panel is a development aid; someone using
-              the release build has no address to type in. */}
-          {!IS_PRODUCTION && (
-            <Pressable onPress={() => setShowConnection((v) => !v)} style={styles.connToggle}>
-              <Feather name="wifi" size={13} color={colors.ink500} />
-              <Text style={type.caption}>Can't connect?</Text>
-            </Pressable>
-          )}
-
-          {!IS_PRODUCTION && showConnection && (
             <Card>
-              <Text style={type.title}>Server address</Text>
-              <Text style={[type.caption, styles.stepNote]}>
-                This phone reaches the backend at the address below. If your computer and phone are
-                on different networks, or the Django server is bound to a different host, set it
-                here.
-              </Text>
-              <Input
-                value={baseUrlDraft}
-                onChangeText={setBaseUrlDraft}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                placeholder="http://192.168.1.7:8000/api"
-              />
-              <Button onPress={saveBaseUrl} variant="secondary">
-                Save address
-              </Button>
-              <Text style={[type.micro, { marginTop: spacing.sm }]}>
-                Start Django with: python manage.py runserver 0.0.0.0:8000
-              </Text>
-            </Card>
-          )}
+              {step === 'phone' ? (
+                <>
+                  <Text style={type.h2}>Sign in</Text>
+                  <Text style={[type.caption, styles.stepNote]}>
+                    We'll text you a 6-digit code. The same number works for patients, doctors and
+                    staff — your account decides what you see.
+                  </Text>
+                  <PhoneInput
+                    ref={phoneInputRef}
+                    label="Mobile number"
+                    value={phone}
+                    onChangeText={(digits) => {
+                      setPhone(digits);
+                      if (error) setError(null);
+                    }}
+                    returnKeyType="go"
+                    onSubmitEditing={() => phoneReady && handleSendOtp()}
+                  />
+                  <Button onPress={() => handleSendOtp()} disabled={!phoneReady} loading={busy}>
+                    Send code
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Pressable
+                    onPress={() => {
+                      setStep('phone');
+                      setError(null);
+                      setTimeout(() => phoneInputRef.current?.focus(), 250);
+                    }}
+                    style={styles.backRow}
+                    hitSlop={12}
+                  >
+                    <Feather name="arrow-left" size={15} color={colors.ink500} />
+                    <Text style={type.caption}>
+                      {fullNumber.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')}
+                    </Text>
+                    <Text style={styles.changeLink}>Change</Text>
+                  </Pressable>
 
-          <View style={styles.securityRow}>
-            <Feather name="shield" size={13} color={colors.ink300} />
-            <Text style={[type.micro, { flexShrink: 1, textAlign: 'center' }]}>
-              Your records are private and only visible to you.
-            </Text>
+                  <Text style={type.h2}>Enter the code</Text>
+                  <Text style={[type.caption, styles.stepNote]}>
+                    {expiresIn > 0
+                      ? `This code expires in ${Math.floor(expiresIn / 60)}:${String(expiresIn % 60).padStart(2, '0')}.`
+                      : 'That code has expired — send a new one.'}
+                  </Text>
+
+                  <Pressable onPress={() => otpInputRef.current?.focus()}>
+                    <View style={styles.otpRow}>
+                      {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.otpCell,
+                            !!otp[i] && styles.otpCellFilled,
+                            otp.length === i && styles.otpCellActive,
+                          ]}
+                        >
+                          <Text style={styles.otpDigit}>{otp[i] ?? ''}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </Pressable>
+
+                  {/* One hidden field backs all six boxes — native keyboards
+                      handle SMS autofill and backspace correctly on a single
+                      input, and fight six separate ones. */}
+                  <TextInput
+                    ref={otpInputRef}
+                    value={otp}
+                    onChangeText={(text) => {
+                      const digits = text.replace(/\D/g, '').slice(0, OTP_LENGTH);
+                      setOtp(digits);
+                      if (error) setError(null);
+                      if (digits.length === OTP_LENGTH) handleVerify(digits);
+                    }}
+                    keyboardType="number-pad"
+                    textContentType="oneTimeCode"
+                    autoComplete="sms-otp"
+                    // No maxLength: an SMS autofill or paste can carry extra
+                    // characters, and onChangeText trims to six digits.
+                    style={styles.hiddenInput}
+                    autoFocus
+                  />
+
+                  {!!debugOtp && (
+                    <View style={styles.debugChip}>
+                      <Feather name="info" size={13} color={colors.info} />
+                      <Text style={styles.debugText}>
+                        Development code: <Text style={{ fontWeight: '700' }}>{debugOtp}</Text>
+                      </Text>
+                    </View>
+                  )}
+
+                  <Button onPress={() => handleVerify(otp)} disabled={otp.length !== OTP_LENGTH} loading={busy}>
+                    Verify
+                  </Button>
+
+                  <Pressable
+                    onPress={() => secondsLeft === 0 && handleSendOtp(true)}
+                    disabled={secondsLeft > 0 || busy}
+                    style={styles.resend}
+                    hitSlop={12}
+                  >
+                    <Text style={[type.caption, secondsLeft === 0 && styles.resendActive]}>
+                      {secondsLeft > 0 ? `Resend code in ${secondsLeft}s` : 'Resend code'}
+                    </Text>
+                  </Pressable>
+                </>
+              )}
+
+              {busy && slow && (
+                <Text style={[type.caption, styles.slowNote]}>
+                  Waking up the server — this can take up to a minute the first time.
+                </Text>
+              )}
+
+              {!!error && (
+                <View style={{ marginTop: spacing.md }}>
+                  <ErrorNote message={error} />
+                </View>
+              )}
+            </Card>
+
+            {/* The server-address panel is a development aid; someone using
+                the release build has no address to type in. */}
+            {!IS_PRODUCTION && (
+              <Pressable onPress={() => setShowConnection((v) => !v)} style={styles.connToggle}>
+                <Feather name="wifi" size={13} color={colors.ink500} />
+                <Text style={type.caption}>Can't connect?</Text>
+              </Pressable>
+            )}
+
+            {!IS_PRODUCTION && showConnection && (
+              <Card>
+                <Text style={type.title}>Server address</Text>
+                <Text style={[type.caption, styles.stepNote]}>
+                  This phone reaches the backend at the address below. If your computer and phone are
+                  on different networks, or the Django server is bound to a different host, set it
+                  here.
+                </Text>
+                <Input
+                  value={baseUrlDraft}
+                  onChangeText={setBaseUrlDraft}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="http://192.168.1.7:8000/api"
+                />
+                <Button onPress={saveBaseUrl} variant="secondary">
+                  Save address
+                </Button>
+                <Text style={[type.micro, { marginTop: spacing.sm }]}>
+                  Start Django with: python manage.py runserver 0.0.0.0:8000
+                </Text>
+              </Card>
+            )}
+
+            <View style={styles.securityRow}>
+              <Feather name="shield" size={13} color={colors.ink300} />
+              <Text style={[type.micro, { flexShrink: 1, textAlign: 'center' }]}>
+                Your records are private and only visible to you.
+              </Text>
+            </View>
           </View>
-        </View>
-      </KeyboardAwareScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+  flex: { flex: 1 },
   scroll: { padding: spacing.lg, flexGrow: 1, justifyContent: 'center' },
-  scrollCompact: { justifyContent: 'flex-start', paddingTop: spacing.xl },
   // Caps the form's width on tablets and landscape so it doesn't stretch edge to edge.
   inner: { width: '100%', maxWidth: 440, alignSelf: 'center', gap: spacing.md },
   brandBlock: { alignItems: 'center', marginBottom: spacing.lg },
-  brandBlockCompact: { marginBottom: spacing.xs },
-  brandNameCompact: { fontSize: 22, marginTop: spacing.sm },
+  brandBlockCompact: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  brandNameCompact: { fontSize: 22, marginTop: 0 },
   hero: { marginBottom: spacing.sm },
   brandName: { ...type.h1, marginTop: spacing.md },
   brandTag: {

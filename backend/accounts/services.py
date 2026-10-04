@@ -339,7 +339,8 @@ def send_test_sms(phone_number: str) -> tuple[bool, str, str]:
     if not settings.USE_TWOFACTOR:
         if _twilio_credentials() is None:
             return False, 'Twilio Verify is not configured on the server', ''
-        ok, details = _send_via_twilio(phone_number)
+        # Twilio wants E.164; the admin may type "+91 98765 43210".
+        ok, details = _send_via_twilio(re.sub(r'[^\d+]', '', phone_number))
         return ok, details, ''
     if not settings.TWOFACTOR_API_KEY:
         return False, 'TWOFACTOR_API_KEY is not set on the server', ''

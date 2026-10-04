@@ -2,7 +2,7 @@
   "expo": {
     "name": "CuraPath",
     "slug": "healthnow-mobile",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "scheme": "healthnow",
     "userInterfaceStyle": "automatic",
@@ -18,13 +18,25 @@
         "backgroundColor": "#6D5BD0"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 6
+      "versionCode": 7,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
       "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow CuraPath to use your camera to photograph prescriptions and reports.",
+          "photosPermission": "Allow CuraPath to access your photos to upload prescriptions and reports.",
+          "microphonePermission": false
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-font",
       [

@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
-import LegalLayout, { EmailLink, List, Section } from './LegalLayout';
+import LegalLayout, { COMPANY, EmailLink, List, Section } from './LegalLayout';
 
 export default function Terms() {
   return (
     <LegalLayout title="Terms of Use">
       <Section title="Agreement">
         <p>
-          These terms apply to your use of CuraPath on Android and at web.curapath.in. By creating an
+          CuraPath is provided by {COMPANY}, Jabalpur, Madhya Pradesh, India (“we”, “us”). These terms
+          apply to your use of CuraPath on Android and at web.curapath.in. By creating an
           account or using the service, you agree to them and to our{' '}
           <Link to="/privacy" className="font-medium text-brand-purple underline underline-offset-2">Privacy Policy</Link>.
           If you don’t agree, please don’t use CuraPath.

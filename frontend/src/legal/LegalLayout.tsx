@@ -9,6 +9,9 @@ import { HeartPulse } from 'lucide-react';
  */
 
 export const SUPPORT_EMAIL = 'hello@curapath.in';
+export const COMPANY = 'Business Cradle Technologies Private Limited';
+export const COMPANY_ADDRESS = 'Katangi Bypass, Padwar Road, Jabalpur City, Madhya Pradesh, India';
+export const PRIVACY_EMAIL = 'bctpvtltd2025@gmail.com';
 export const LEGAL_UPDATED = '6 October 2026';
 
 const PAGES = [
@@ -17,12 +20,21 @@ const PAGES = [
   { to: '/delete-account', label: 'Delete Account' },
 ];
 
-export function EmailLink({ subject }: { subject?: string }) {
-  const href = `mailto:${SUPPORT_EMAIL}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`;
+export function EmailLink({ subject, email = SUPPORT_EMAIL }: { subject?: string; email?: string }) {
+  const href = `mailto:${email}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`;
   return (
     <a href={href} className="font-medium text-brand-purple underline underline-offset-2">
-      {SUPPORT_EMAIL}
+      {email}
     </a>
+  );
+}
+
+export function SubSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mt-5">
+      <h3 className="text-base font-semibold text-ink-900">{title}</h3>
+      <div className="mt-1.5 space-y-3">{children}</div>
+    </div>
   );
 }
 
@@ -45,7 +57,15 @@ export function List({ items }: { items: ReactNode[] }) {
   );
 }
 
-export default function LegalLayout({ title, children }: { title: string; children: ReactNode }) {
+export default function LegalLayout({
+  title,
+  updated = LEGAL_UPDATED,
+  children,
+}: {
+  title: string;
+  updated?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="min-h-screen bg-surface font-sans">
       <header className="border-b border-border bg-card">
@@ -67,10 +87,10 @@ export default function LegalLayout({ title, children }: { title: string; childr
       </header>
       <main className="mx-auto max-w-3xl px-4 py-10">
         <h1 className="text-3xl font-bold text-ink-900">{title}</h1>
-        <p className="mt-2 text-sm text-ink-500">Last updated {LEGAL_UPDATED}</p>
+        <p className="mt-2 text-sm text-ink-500">Last updated {updated}</p>
         {children}
         <p className="mt-12 border-t border-border pt-6 text-sm text-ink-500">
-          Questions? Write to <EmailLink />.
+          CuraPath is provided by {COMPANY}, {COMPANY_ADDRESS}. Questions? Write to <EmailLink />.
         </p>
       </main>
     </div>

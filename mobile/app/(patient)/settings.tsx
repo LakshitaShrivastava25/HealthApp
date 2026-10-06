@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import AddFamilyMemberForm, { serverMessage } from '../../src/components/AddFamilyMemberForm';
 import DateField, { formatIsoDate } from '../../src/components/DateField';
@@ -17,6 +17,7 @@ import {
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { allergiesApi, authApi, profilesApi, unwrap } from '../../src/lib/api';
+import { DELETE_ACCOUNT_URL, PRIVACY_URL, TERMS_URL } from '../../src/lib/links';
 import { colors, radius, spacing, type } from '../../src/theme';
 import NotificationSettingsCard from '../../src/components/NotificationSettingsCard';
 
@@ -126,7 +127,7 @@ export default function Settings() {
   function confirmDeleteAccount() {
     Alert.alert(
       'Delete your account?',
-      'Your account will be deactivated and you will be signed out immediately. Contact support if you need it restored.',
+      'You will be signed out and won’t be able to log back in. Doctor access and your emergency card stop working. To also have your records permanently erased, see “How account deletion works” below.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -299,9 +300,24 @@ export default function Settings() {
           <Feather name="trash-2" size={15} color={colors.danger} />
           <View style={{ flex: 1 }}>
             <Text style={[type.label, { color: colors.danger }]}>Delete account</Text>
-            <Text style={type.micro}>Deactivates your login — medical records are not erased</Text>
+            <Text style={type.micro}>Closes your account and stops all sharing</Text>
           </View>
         </Pressable>
+      </Card>
+
+      <Card>
+        <CardHeader title="Legal" />
+        {[
+          { icon: 'shield', label: 'Privacy policy', url: PRIVACY_URL },
+          { icon: 'file-text', label: 'Terms of use', url: TERMS_URL },
+          { icon: 'info', label: 'How account deletion works', url: DELETE_ACCOUNT_URL },
+        ].map((item) => (
+          <Pressable key={item.url} onPress={() => Linking.openURL(item.url)} style={styles.actionRow}>
+            <Feather name={item.icon as 'shield'} size={15} color={colors.ink700} />
+            <Text style={[type.label, { flex: 1 }]}>{item.label}</Text>
+            <Feather name="external-link" size={15} color={colors.ink300} />
+          </Pressable>
+        ))}
       </Card>
     </Screen>
   );

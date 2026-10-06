@@ -1,6 +1,12 @@
 import Reveal from './Reveal'
 import BrandMark from './BrandMark'
-import { MAIN_APP_URL } from '../config'
+import { DELETE_ACCOUNT_URL, MAIN_APP_URL, PRIVACY_URL, TERMS_URL } from '../config'
+
+const LEGAL_LINKS = [
+  { href: PRIVACY_URL, label: 'Privacy Policy' },
+  { href: TERMS_URL, label: 'Terms of Use' },
+  { href: DELETE_ACCOUNT_URL, label: 'Delete Account' },
+]
 
 export default function Footer() {
   return (
@@ -19,7 +25,14 @@ export default function Footer() {
         >
           Use App
         </a>
-        <p className="mt-4 text-sm text-slate-400">CuraPath. All rights reserved.</p>
+        <nav className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
+          {LEGAL_LINKS.map(({ href, label }) => (
+            <a key={href} href={href} className="text-slate-500 transition hover:text-ink">
+              {label}
+            </a>
+          ))}
+        </nav>
+        <p className="text-sm text-slate-400">CuraPath. All rights reserved.</p>
       </Reveal>
     </footer>
   )

@@ -93,10 +93,11 @@ def public_emergency_view(request, token):
     JSON-only response is kept available at ?format=json for any
     programmatic caller, so nothing that depended on it breaks.
     """
-    ep = get_object_or_404(EmergencyProfile, public_token=token)
+    ep = get_object_or_404(EmergencyProfile.objects.select_related('profile__account'), public_token=token)
     wants_json = request.GET.get('format') == 'json'
 
-    if not ep.is_active:
+    # A deleted or disabled account's card stops resolving too.
+    if not ep.is_active or not ep.profile.account.is_active:
         if wants_json:
             return JsonResponse({'detail': 'This emergency card has been revoked.'}, status=404)
         return render(request, 'emergency/public_card.html', {'revoked': True}, status=404)

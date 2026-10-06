@@ -3,6 +3,9 @@ import Landing from './landing/Landing';
 import patientRoutes from './patient/PatientApp';
 import doctorRoutes from './doctor/DoctorApp';
 import adminRoutes from './admin/AdminApp';
+import PrivacyPolicy from './legal/PrivacyPolicy';
+import Terms from './legal/Terms';
+import DeleteAccount from './legal/DeleteAccount';
 
 /**
  * The one router for all four former apps.
@@ -21,6 +24,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      {/* Public legal pages: linked from both apps and the Play Store listing. */}
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/delete-account" element={<DeleteAccount />} />
       {patientRoutes()}
       {doctorRoutes()}
       {adminRoutes()}

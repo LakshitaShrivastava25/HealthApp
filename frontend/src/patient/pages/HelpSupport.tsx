@@ -3,12 +3,12 @@ import { Mail, ChevronDown, LifeBuoy } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card } from '../components/ui';
 
-const SUPPORT_EMAIL = 'hello@curapath.in';
+import { SUPPORT_EMAIL } from '../../legal/LegalLayout';
 
 const FAQS = [
   {
     q: 'How does the AI read my documents?',
-    a: 'When you upload a document in Medical Locker, it\'s processed automatically to extract details like the date, hospital, and doctor. This uses Claude\'s AI, and needs a real API key configured on the backend — until that\'s set up, uploads still work but the extracted fields stay empty. You can always add or correct any field yourself using "Correct a field" on the document.',
+    a: 'When you upload a document in Medical Locker, it\'s processed automatically to extract details like the date, hospital, and doctor. This uses AI (Anthropic\'s Claude), which can make mistakes, so check the details against the original. If a document can\'t be read, it is still saved and you can fill in or correct any field yourself using "Correct a field" on the document.',
   },
   {
     q: 'Who can see my medical records?',

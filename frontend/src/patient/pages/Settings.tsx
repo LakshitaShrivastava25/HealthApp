@@ -12,7 +12,9 @@ import {
   Check,
   ShieldAlert,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Topbar from '../components/Topbar';
+import { SUPPORT_EMAIL } from '../../legal/LegalLayout';
 import { Card, Button } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { allergiesApi, authApi, profilesApi } from '../lib/api';
@@ -23,11 +25,13 @@ const notBuiltItems = [
   { icon: BellRing, label: 'Notification Preferences' },
 ];
 
-const supportItems = [
-  { icon: LifeBuoy, label: 'Help Center' },
-  { icon: MessageCircle, label: 'Contact Support' },
-  { icon: FileText, label: 'Terms & Conditions' },
-  { icon: ShieldCheck, label: 'Privacy Policy' },
+// `to` is an in-app route, `href` an external link (opened in a new tab);
+// an item with neither is still planned and renders disabled.
+const supportItems: { icon: typeof Info; label: string; to?: string; href?: string }[] = [
+  { icon: LifeBuoy, label: 'Help Center', to: '/patient/help' },
+  { icon: MessageCircle, label: 'Contact Support', href: `mailto:${SUPPORT_EMAIL}?subject=CuraPath Support Request` },
+  { icon: FileText, label: 'Terms & Conditions', to: '/terms' },
+  { icon: ShieldCheck, label: 'Privacy Policy', to: '/privacy' },
   { icon: Info, label: 'About Us' },
 ];
 
@@ -317,8 +321,9 @@ export default function Settings() {
               ) : (
                 <div className="bg-danger-bg rounded-lg p-3">
                   <p className="text-xs text-danger font-medium mb-2">
-                    Delete your account? This deactivates it immediately — you won't be able to log
-                    back in. Your medical records are not erased and can be restored by contacting support.
+                    Delete your account? You'll be signed out and won't be able to log back in. Doctor
+                    access and your emergency card stop working. To also have your records permanently
+                    erased, email {SUPPORT_EMAIL} — see the <Link to="/delete-account" className="underline">Delete Account</Link> page.
                   </p>
                   <div className="flex gap-2">
                     <Button variant="danger" onClick={handleDeleteAccount} disabled={deleting}>
@@ -336,19 +341,41 @@ export default function Settings() {
           <Card className="p-5">
             <p className="text-sm font-semibold text-ink-900 mb-2">Support & Legal</p>
             <div className="space-y-0.5">
-              {supportItems.map(({ icon: Icon, label }) => (
-                <button
-                  key={label}
-                  disabled
-                  title="Not yet built — this screen is planned but not implemented"
-                  className="w-full flex items-center justify-between px-2 py-3 rounded-lg opacity-60 cursor-not-allowed"
-                >
-                  <span className="flex items-center gap-3 text-sm font-medium text-ink-700">
-                    <Icon size={16} className="text-ink-500" /> {label}
-                  </span>
-                  <ChevronRight size={15} className="text-ink-500" />
-                </button>
-              ))}
+              {supportItems.map(({ icon: Icon, label, to, href }) => {
+                const content = (
+                  <>
+                    <span className="flex items-center gap-3 text-sm font-medium text-ink-700">
+                      <Icon size={16} className="text-ink-500" /> {label}
+                    </span>
+                    <ChevronRight size={15} className="text-ink-500" />
+                  </>
+                );
+                const rowClass = 'w-full flex items-center justify-between px-2 py-3 rounded-lg';
+                if (to) {
+                  return (
+                    <Link key={label} to={to} className={`${rowClass} hover:bg-surface`}>
+                      {content}
+                    </Link>
+                  );
+                }
+                if (href) {
+                  return (
+                    <a key={label} href={href} target="_blank" rel="noreferrer" className={`${rowClass} hover:bg-surface`}>
+                      {content}
+                    </a>
+                  );
+                }
+                return (
+                  <button
+                    key={label}
+                    disabled
+                    title="Not yet built — this screen is planned but not implemented"
+                    className={`${rowClass} opacity-60 cursor-not-allowed`}
+                  >
+                    {content}
+                  </button>
+                );
+              })}
             </div>
           </Card>
         </div>

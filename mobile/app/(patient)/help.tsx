@@ -4,6 +4,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, CardHeader, Row, Screen, SectionTitle } from '../../src/components/ui';
 import { getApiBaseUrl } from '../../src/lib/config';
+import { SUPPORT_EMAIL } from '../../src/lib/links';
 import { colors, radius, spacing, type } from '../../src/theme';
 
 const FAQS = [
@@ -29,7 +30,7 @@ const FAQS = [
   },
   {
     q: 'What happens if I delete my account?',
-    a: 'Your login is deactivated immediately and you are signed out. This is a deactivation, not an erasure of medical records — contact support if you need it reversed.',
+    a: 'You are signed out and the account is closed immediately; doctor access and your emergency card stop working. To have your records permanently erased as well, email us — Settings → Delete account page explains how.',
   },
 ];
 
@@ -75,13 +76,13 @@ export default function HelpSupport() {
       <SectionTitle>Still need help?</SectionTitle>
       <Card>
         <Pressable
-          onPress={() => Linking.openURL('mailto:hello@curapath.in')}
+          onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
           style={styles.actionRow}
         >
           <Feather name="mail" size={16} color={colors.brandPurple} />
           <View style={{ flex: 1 }}>
             <Text style={type.label}>Email support</Text>
-            <Text style={type.micro}>hello@curapath.in</Text>
+            <Text style={type.micro}>{SUPPORT_EMAIL}</Text>
           </View>
           <Feather name="external-link" size={15} color={colors.ink300} />
         </Pressable>

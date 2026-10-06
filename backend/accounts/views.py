@@ -1,8 +1,13 @@
+from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from doctors.models import DoctorPatientAccess
+from emergency.models import EmergencyProfile
 
 from .models import Account
 from .serializers import AccountSerializer, SendOTPSerializer, VerifyOTPSerializer
@@ -97,7 +102,20 @@ class MeView(APIView):
         subsequent authenticated request, so this immediately locks the
         account out; VerifyOTPView below also blocks a fresh login attempt
         with a clear message rather than a confusing later failure.
+
+        Everything the account had shared stops being shared with it: doctor
+        grants (pending or approved) are revoked and emergency cards stop
+        resolving, as the /delete-account page promises.
         """
-        request.user.is_active = False
-        request.user.save(update_fields=['is_active'])
+        account = request.user
+        with transaction.atomic():
+            account.is_active = False
+            account.save(update_fields=['is_active'])
+            DoctorPatientAccess.objects.filter(
+                profile__account=account,
+                status__in=[DoctorPatientAccess.Status.PENDING, DoctorPatientAccess.Status.APPROVED],
+            ).update(status=DoctorPatientAccess.Status.REVOKED)
+            EmergencyProfile.objects.filter(
+                profile__account=account, revoked_at__isnull=True,
+            ).update(revoked_at=timezone.now())
         return Response(status=status.HTTP_204_NO_CONTENT)

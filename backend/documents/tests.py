@@ -355,3 +355,40 @@ class CloudinaryStorageTests(TestCase):
 
     def test_url_points_at_our_signed_endpoint_not_cloudinary(self):
         self.assertTrue(self.storage.url('documents/rx_1.pdf').startswith('/api/files/?t='))
+
+
+class StoredFileCleanupTests(TestCase):
+    """Deleting a document used to leave its file in storage forever."""
+
+    def setUp(self):
+        self.account = Account.objects.create_user(phone_number='+919000003333')
+        self.profile = Profile.objects.create(account=self.account, full_name='Test Patient', relation='self')
+        self.client_api = APIClient()
+        self.client_api.credentials(
+            HTTP_AUTHORIZATION='Bearer ' + str(RefreshToken.for_user(self.account).access_token)
+        )
+
+    @override_settings(ANTHROPIC_API_KEY='')
+    def test_deleting_document_deletes_its_file(self):
+        response = self.client_api.post(
+            '/api/documents/',
+            {'profile': str(self.profile.id),
+             'file': SimpleUploadedFile('rx.pdf', text_pdf(), content_type='application/pdf'),
+             'category': 'prescription', 'title': 'Rx'},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        doc = Document.objects.get(profile=self.profile)
+        storage, name = doc.file.storage, doc.file.name
+        self.assertTrue(storage.exists(name))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.client_api.delete(f'/api/documents/{doc.id}/').status_code, 204)
+        self.assertFalse(storage.exists(name))
+
+    def test_storage_failure_does_not_fail_the_delete(self):
+        doc = Document.objects.create(profile=self.profile, title='Rx', file='documents/missing.pdf')
+        with patch('documents.storage.DatabaseStorage.delete', side_effect=RuntimeError('down')):
+            with self.captureOnCommitCallbacks(execute=True):
+                doc.delete()
+        self.assertFalse(Document.objects.filter(pk=doc.pk).exists())

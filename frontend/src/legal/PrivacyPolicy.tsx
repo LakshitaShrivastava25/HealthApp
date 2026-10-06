@@ -42,7 +42,6 @@ export default function PrivacyPolicy() {
               <><strong>Affiliate</strong> means an entity that controls, is controlled by, or is under common control with a party, where "control" means ownership of 50% or more of the shares, equity interest or other securities entitled to vote for election of directors or other managing authority.</>,
               <><strong>Application</strong> refers to CuraPath, the software program provided by the Company.</>,
               <><strong>Company</strong> (referred to as either "the Company", "We", "Us" or "Our" in this Privacy Policy) refers to {COMPANY}, Katangi By Pass, Padwar Road, Jabalpur City.</>,
-              <><strong>Cookies</strong> are small files that are placed on Your computer, mobile device or any other device by a website, containing the details of Your browsing history on that website, among its many uses.</>,
               <><strong>Country/State</strong> refers to: Madhya Pradesh, India.</>,
               <><strong>Device</strong> means any device that can access the Service, such as a computer, a cell phone or a digital tablet.</>,
               <><strong>Health Data</strong> means the medical and health information You or Your family members store in the Service, as described under "Health and Medical Information" below.</>,
@@ -65,7 +64,7 @@ export default function PrivacyPolicy() {
             While using Our Service, We may ask You to provide Us with certain personally identifiable information that
             can be used to contact or identify You. Personally identifiable information may include, but is not limited to:
           </p>
-          <List items={['Email address', 'First name and last name', 'Phone number', 'Address, State, Province, ZIP/Postal code, City']} />
+          <List items={['Phone number', 'First name and last name', 'Email address (optional)']} />
           <p className="font-medium text-ink-900">Usage Data</p>
           <p>Usage Data is collected automatically when using the Service.</p>
           <p>
@@ -114,7 +113,6 @@ export default function PrivacyPolicy() {
           </p>
           <List
             items={[
-              'Information regarding Your location',
               'Pictures and other information from Your Device’s camera and photo library, only when You choose to photograph or attach a document',
               'A push-notification token, so We can send You alerts and reminders',
             ]}
@@ -124,38 +122,23 @@ export default function PrivacyPolicy() {
             information may be uploaded to the Company's servers and/or a Service Provider's server or it may be simply
             stored on Your device.
           </p>
-          <p>You can enable or disable access to this information at any time, through Your Device settings.</p>
+          <p>
+            You can enable or disable access to this information at any time, through Your Device settings. CuraPath does
+            not collect Your location, contacts or microphone audio.
+          </p>
         </SubSection>
 
         <SubSection title="Tracking Technologies and Cookies">
           <p>
-            We use tracking technologies (such as cookies) to track the activity and to improve Our Service. The
-            technologies We use may include:
-          </p>
-          <List
-            items={[
-              <><strong>Cookies or Browser Cookies.</strong> A cookie is a small file placed on Your Device. You can instruct Your browser to refuse all Cookies or to indicate when a Cookie is being sent. However, if You do not accept Cookies, You may not be able to use some parts of Our Service.</>,
-              <><strong>Web Beacons.</strong> Certain sections of Our Service may contain small electronic files known as web beacons (also referred to as clear gifs, pixel tags, and single-pixel gifs) that permit the Company, for example, to count users who have visited those pages and for other related website statistics (for example, recording the popularity of a certain section and verifying system and server integrity).</>,
-            ]}
-          />
-          <p>
-            Cookies can be "Persistent" or "Session" Cookies. Persistent Cookies remain on Your personal computer or mobile
-            device when You go offline, while Session Cookies are deleted as soon as You close Your web browser.
+            The Website uses Your browser's local storage, and may use essential session cookies, only to keep You signed
+            in, protect Your Account against fraudulent use and remember basic preferences. Without them, You cannot sign
+            in to the Website.
           </p>
           <p>
-            Where required by law, We use non-essential cookies (that is, Cookies other than the Necessary / Essential
-            Cookies described below) only with Your consent. You can withdraw or change Your consent at any time using Our
-            cookie preferences tool (if available) or through Your browser/device settings. Withdrawing consent does not
-            affect the lawfulness of processing based on consent before its withdrawal.
+            We do not use advertising cookies, web beacons, third-party analytics or cross-site tracking, and We do not
+            track You across other apps or websites. You can clear this storage at any time through Your browser
+            settings, which signs You out.
           </p>
-          <p>We use both Session and Persistent Cookies for the purposes set out below:</p>
-          <List
-            items={[
-              <><strong>Necessary / Essential Cookies</strong> (Type: Session Cookies; Administered by: Us). These Cookies are essential to provide You with services available through the Website and to enable You to use some of its features. They help to authenticate users and prevent fraudulent use of user accounts. Without these Cookies, the services that You have asked for cannot be provided, and We only use these Cookies to provide You with those services.</>,
-              <><strong>Cookies Policy / Notice Acceptance Cookies</strong> (Type: Persistent Cookies; Administered by: Us). These Cookies identify whether users have accepted the use of cookies on the Website and record the consent choices You have made, so that We can honor those choices on future visits.</>,
-              <><strong>Functionality Cookies</strong> (Type: Persistent Cookies; Administered by: Us). These Cookies allow Us to remember choices You make when You use the Website, such as remembering Your Account login details or language preference. The purpose of these Cookies is to provide You with a more personal experience and to avoid You having to re-enter Your preferences every time You use the Website.</>,
-            ]}
-          />
         </SubSection>
 
         <SubSection title="Use of Your Personal Data">
@@ -167,16 +150,15 @@ export default function PrivacyPolicy() {
               <><strong>To read Your documents automatically:</strong> uploaded documents are processed by software, including artificial intelligence, to extract their details so You don't have to type them in. This can make mistakes, so always check the details against the original document.</>,
               <><strong>For the performance of a contract:</strong> the development, compliance and undertaking of the purchase contract for the products, items or services You have purchased or of any other contract with Us through the Service.</>,
               <><strong>To contact You:</strong> To contact You by email, telephone calls, SMS, or other equivalent forms of electronic communication, such as a mobile application's push notifications regarding updates or informative communications related to the functionalities, products or contracted services, including the security updates, when necessary or reasonable for their implementation.</>,
-              <><strong>To provide You</strong> with news, special offers, and general information about other goods, services and events which We offer that are similar to those that You have already purchased or inquired about. We send such marketing communications only where permitted by applicable law: where prior consent is required (for example, under the laws applicable in the EEA and the UK), We will send them only with Your consent; otherwise, We may send them until You opt out. You may opt out or withdraw Your consent at any time by using the unsubscribe link in any marketing email We send or by contacting Us. Health Data is never used for marketing.</>,
               <><strong>To manage Your requests:</strong> To attend and manage Your requests to Us.</>,
               <><strong>For business transfers:</strong> We may use Your Personal Data to evaluate or conduct a merger, divestiture, restructuring, reorganization, dissolution, or other sale or transfer of some or all of Our assets, whether as a going concern or as part of bankruptcy, liquidation, or similar proceeding, in which Personal Data held by Us about Our Service users is among the assets transferred.</>,
-              <><strong>For other purposes:</strong> We may use Your information for other purposes, such as data analysis, identifying usage trends, determining the effectiveness of Our promotional campaigns, and evaluating and improving Our Service, products, services, marketing and Your experience.</>,
+              <><strong>For other purposes:</strong> We may use Your information for other purposes, such as data analysis, identifying usage trends, and evaluating and improving Our Service and Your experience. We do not use Your data for advertising or marketing.</>,
             ]}
           />
           <p>We may share Your Personal Data in the following situations:</p>
           <List
             items={[
-              <><strong>With Service Providers:</strong> We may share Your Personal Data with Service Providers to monitor and analyze the use of Our Service, and to contact You. The Service Providers that process data to run CuraPath are: Render (application hosting), a managed PostgreSQL database provider (data storage), Cloudinary (storage of uploaded files), Anthropic (AI reading of uploaded documents and answers to insurance questions), Twilio (sending login codes by SMS) and Expo (delivering push notifications). They may use Your data only to provide their service to Us.</>,
+              <><strong>With Service Providers:</strong> We share Your Personal Data with Service Providers only to run the Service and to contact You. The Service Providers that process data to run CuraPath are: Render (application hosting), a managed PostgreSQL database provider (data storage), Cloudinary (storage of uploaded files), Anthropic (AI reading of uploaded documents and answers to insurance questions), Twilio (sending login codes by SMS) and Expo (delivering push notifications). They may use Your data only to provide their service to Us.</>,
               <><strong>With doctors You choose:</strong> a doctor You grant access to can view that profile's records until You revoke access.</>,
               <><strong>Through Your emergency card:</strong> anyone who has Your emergency card link or QR code can see the fields You chose to show on it, until You revoke the card.</>,
               <><strong>For business transfers:</strong> We may share or transfer Your Personal Data in connection with, or during negotiations of, any merger, sale of Company assets, financing, or acquisition of all or a portion of Our business to another company.</>,
@@ -189,33 +171,13 @@ export default function PrivacyPolicy() {
 
         <SubSection title="Text Messages Privacy Notice">
           <p>
-            You have the option to receive text (SMS) messages from Us. If You opt in to text messages, We will send You
-            updates, notifications, and other communications as described below. When You opt in, We will collect and
-            store the information You provide in connection with text messaging, such as Your phone number, the date and
-            method of Your consent, and message delivery and read information.
+            We send text (SMS) messages only to sign You in: a one-time password (OTP) to the mobile number You enter on
+            the login screen. We do not send marketing or promotional text messages.
           </p>
           <p>
             No mobile information will be shared with or sold to third parties or affiliates for marketing or promotional
-            purposes. The phone numbers and consent records We collect for texting are never shared with anyone for any
-            purpose, except the Service Providers that technically have to handle them to deliver the texts.
-          </p>
-          <p>
-            Consent to receive text messages is not a condition of any purchase or use of Our Service. If You consent to
-            receive SMS from Us, You agree to receive text messages from Us related to:
-          </p>
-          <List
-            items={[
-              'Customer care and support',
-              'Account notifications, such as activity, status, or renewal reminders',
-              'Delivery notifications and updates on the status of a delivery',
-              'Authentication messages, such as one-time passwords (OTP) and passcodes',
-              'Security alerts, such as suspicious login attempts or unusual account activity',
-              'Marketing and promotional offers, discounts, and other promotional content',
-            ]}
-          />
-          <p>
-            Reply STOP to opt-out. Reply HELP for support. Message &amp; data rates may apply. Messaging frequency may
-            vary. Carriers are not liable for delayed or undelivered messages.
+            purposes. Your phone number is shared only with the Service Provider that delivers the login codes (Twilio).
+            Message &amp; data rates may apply. Carriers are not liable for delayed or undelivered messages.
           </p>
         </SubSection>
 
@@ -238,20 +200,9 @@ export default function PrivacyPolicy() {
           <p className="font-medium text-ink-900">Health Data</p>
           <List items={[<>Retained while Your Account is open. When You ask Us to erase Your data (see <Link to="/delete-account" className={linkClass}>Delete Account</Link>), Health Data and uploaded files are permanently deleted within 30 days, except where the law requires Us to keep them.</>]} />
           <p className="font-medium text-ink-900">Customer Support Data</p>
-          <List
-            items={[
-              'Support tickets and correspondence: up to 24 months from the date of ticket closure to resolve follow-up inquiries, track service quality, and defend against potential legal claims.',
-              'Chat transcripts: up to 24 months for quality assurance and staff training purposes.',
-            ]}
-          />
+          <List items={['Support emails and correspondence: up to 24 months from the date the request is closed, to resolve follow-up inquiries and defend against potential legal claims.']} />
           <p className="font-medium text-ink-900">Usage Data</p>
-          <List
-            items={[
-              'Website analytics data (cookies, IP addresses, device identifiers): up to 24 months from the date of collection, which allows us to analyze trends while respecting privacy principles.',
-              'Application usage statistics: up to 24 months to understand feature adoption and service improvements.',
-              'Server logs (IP addresses, access times): up to 24 months for security monitoring and troubleshooting purposes.',
-            ]}
-          />
+          <List items={['Server logs (IP addresses, access times): up to 24 months for security monitoring and troubleshooting purposes.']} />
           <p>
             Usage Data is retained in accordance with the retention periods described above, and may be retained longer
             only where necessary for security, fraud prevention, or legal compliance.
@@ -271,7 +222,7 @@ export default function PrivacyPolicy() {
             items={[
               'Deletion: Personal Data is removed from Our systems and no longer actively processed.',
               'Backup retention: Residual copies may remain in encrypted backups for a limited period consistent with Our backup retention schedule and are not restored except where necessary for security, disaster recovery, or legal compliance.',
-              'Anonymization: In some cases, We convert Personal Data into anonymous statistical data that cannot be linked back to You. This anonymized data may be retained indefinitely for research and analytics.',
+              'Anonymization: In some cases, We convert Personal Data into anonymous statistical data that cannot be linked back to You. This anonymized data may be retained indefinitely to improve the Service.',
             ]}
           />
         </SubSection>

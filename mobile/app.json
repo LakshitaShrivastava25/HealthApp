@@ -8,17 +8,17 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.healthnow.mobile",
+      "bundleIdentifier": "com.bctpvtltd.curapath",
       "icon": "./assets/images/icon.png"
     },
     "android": {
-      "package": "com.healthnow.mobile",
+      "package": "com.bctpvtltd.curapath",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#6D5BD0"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 8,
+      "versionCode": 9,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.RECORD_AUDIO"

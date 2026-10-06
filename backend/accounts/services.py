@@ -249,6 +249,21 @@ def master_otp_mode() -> tuple[bool, str]:
     return on, code or config.master_otp
 
 
+def reviewer_otp(phone_number: str) -> str:
+    """
+    The fixed Google Play review code when phone_number is REVIEWER_PHONE,
+    else ''. Off unless both settings are set; a code that isn't 6 digits is
+    ignored, since verify-otp could never accept it.
+    """
+    if not settings.REVIEWER_PHONE or phone_number != settings.REVIEWER_PHONE:
+        return ''
+    code = settings.REVIEWER_OTP
+    if not re.fullmatch(r'[0-9]{6}', code):
+        logger.error('REVIEWER_OTP is not 6 digits; reviewer login is off')
+        return ''
+    return code
+
+
 def request_otp(phone_number: str) -> dict:
     """
     Generates and stores a hashed OTP. Rate-limits to OTP_RATE_LIMIT_PER_HOUR
@@ -299,6 +314,18 @@ def request_otp(phone_number: str) -> dict:
                 'status': 429,
                 'retry_after': wait,
             }
+
+    review_code = reviewer_otp(phone_number)
+    if review_code:
+        # Play Store review login: nothing is sent. The fixed code is stored
+        # hashed like any local OTP, so expiry and the attempt limit apply.
+        OTPRequest.objects.create(
+            phone_number=phone_number,
+            otp_hash=_hash_otp(review_code, phone_number),
+            expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
+        )
+        logger.info('Reviewer login: skipping SMS for %s', _mask_phone(phone_number))
+        return {'ok': True}
 
     uses_twilio = _uses_twilio()
     uses_twofactor = settings.USE_TWOFACTOR and bool(settings.TWOFACTOR_API_KEY)
@@ -380,7 +407,8 @@ def verify_otp(phone_number: str, otp: str) -> str:
     candidate.save(update_fields=['attempt_count'])
     if candidate.attempt_count > OTP_MAX_ATTEMPTS:
         return VERIFY_LOCKED
-    if _uses_twilio():
+    # Twilio never issued the reviewer's code, so that row is checked locally.
+    if _uses_twilio() and not reviewer_otp(phone_number):
         result = _check_via_twilio(phone_number, otp)
         if result == VERIFY_UNAVAILABLE:
             # Twilio never saw the check, so it mustn't cost the user a try.

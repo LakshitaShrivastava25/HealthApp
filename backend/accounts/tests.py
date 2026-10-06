@@ -723,3 +723,72 @@ class ResendCooldownTests(OTPAPIMixin, TestCase):
         newest = services.OTPRequest.objects.order_by('-created_at', '-id').first()
         services.OTPRequest.objects.filter(pk=newest.pk).update(created_at=timezone.now())
         self._assert_error(self._send(), 429, 'Too many OTP requests. Try again later.')
+
+
+REVIEWER = '+919999999999'
+
+
+@override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='',
+                   REVIEWER_PHONE=REVIEWER, REVIEWER_OTP='123456')
+class ReviewerLoginTests(TestCase):
+    """The Google Play review number signs in with a fixed code and no SMS."""
+
+    def setUp(self):
+        self.client = APIClient()
+        OTPConfig.objects.create(mode=OTPConfig.Mode.SMS)
+        patcher = mock.patch.object(services, '_twilio_verify_post')
+        self.twilio = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _send(self, phone=REVIEWER):
+        return self.client.post('/api/auth/send-otp/', {'phone_number': phone}, format='json')
+
+    def _verify(self, otp, phone=REVIEWER):
+        return self.client.post('/api/auth/verify-otp/', {'phone_number': phone, 'otp': otp}, format='json')
+
+    def test_reviewer_signs_in_with_fixed_code_without_sms(self):
+        r = self._send()
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data, {'ok': True})
+        r = self._verify('123456')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('access', r.data)
+        self.twilio.assert_not_called()
+
+    def test_wrong_code_and_attempt_limit_still_apply(self):
+        self._send()
+        self.assertEqual(self._verify('000000').status_code, 400)
+        for _ in range(services.OTP_MAX_ATTEMPTS - 1):
+            self._verify('000000')
+        self.assertEqual(self._verify('123456').status_code, 429)
+
+    def test_code_expires(self):
+        self._send()
+        services.OTPRequest.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
+        self.assertEqual(self._verify('123456').status_code, 400)
+
+    def test_code_needs_a_send_first(self):
+        self.assertEqual(self._verify('123456').status_code, 400)
+
+    def test_other_numbers_still_use_twilio(self):
+        self.twilio.return_value = (201, {'status': 'pending'})
+        self.assertEqual(self._send(PHONE).status_code, 200)
+        self.twilio.assert_called_once()
+        self.twilio.return_value = (200, {'status': 'pending'})
+        self.assertEqual(self._verify('123456', PHONE).status_code, 400)
+
+    def test_deleted_reviewer_account_is_reactivated(self):
+        Account.objects.create_user(REVIEWER, is_active=False)
+        self._send()
+        self.assertEqual(self._verify('123456').status_code, 200)
+        self.assertTrue(Account.objects.get(phone_number=REVIEWER).is_active)
+
+    @override_settings(REVIEWER_OTP='')
+    def test_off_without_a_code(self):
+        self.twilio.return_value = (201, {'status': 'pending'})
+        self._send()
+        self.twilio.assert_called_once()
+
+    @override_settings(REVIEWER_OTP='12ab56')
+    def test_malformed_code_is_ignored(self):
+        self.assertEqual(services.reviewer_otp(REVIEWER), '')

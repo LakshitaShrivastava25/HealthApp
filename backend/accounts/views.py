@@ -67,6 +67,10 @@ class VerifyOTPView(APIView):
             return Response({'detail': message}, status=http_status)
 
         account, created = Account.objects.get_or_create(phone_number=phone_number)
+        if not account.is_active and services.reviewer_otp(phone_number):
+            # Play reviewers test Delete account; the next review still needs a login.
+            account.is_active = True
+            account.save(update_fields=['is_active'])
         if not account.is_active:
             return Response(
                 {'detail': 'This account has been deleted. Contact support if this was a mistake.'},

@@ -215,6 +215,12 @@ USE_MASTER_OTP = (
 )
 MASTER_OTP = os.getenv('MASTER_OTP', '').strip()
 
+# Google Play review login. With both set, REVIEWER_PHONE (E.164, e.g.
+# +919999999999) gets no SMS and signs in with REVIEWER_OTP; expiry, resend
+# cooldown and the attempt limit still apply. Leave either unset to turn it off.
+REVIEWER_PHONE = os.getenv('REVIEWER_PHONE', '').strip()
+REVIEWER_OTP = os.getenv('REVIEWER_OTP', '').strip()
+
 # Initial OTP mode ('sms' or 'master') used only when the OTPConfig row is
 # first created. After that, switch it from the admin portal (Settings → OTP),
 # Django admin, or `python manage.py otp_mode master|sms`. Defaults to real SMS;

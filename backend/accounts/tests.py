@@ -58,6 +58,7 @@ class MasterOTPTests(TestCase):
 
 
 @override_settings(USE_TWOFACTOR=True, TWOFACTOR_API_KEY='', OTP_DEFAULT_MODE='sms', USE_MASTER_OTP=None, MASTER_OTP='')
+@override_settings(ADMIN_PHONE_NUMBERS=['+919000000001'])
 class OTPSettingsAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -135,6 +136,7 @@ TWILIO_SETTINGS = dict(
 
 
 @override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+@override_settings(ADMIN_PHONE_NUMBERS=['+919000000001'])
 class TwilioTestSMSHintTests(TestCase):
     """POST /api/admin/otp-settings/ turns common Twilio Verify errors into a hint."""
 
@@ -593,6 +595,7 @@ class TwoFactorVerifyTests(OTPAPIMixin, TestCase):
 
 
 @override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+@override_settings(ADMIN_PHONE_NUMBERS=['+919000000001'])
 class TwilioHintMatchingTests(TestCase):
     """Admin test-SMS hints match on Twilio's error code, not digits in the message."""
 
@@ -792,3 +795,56 @@ class ReviewerLoginTests(TestCase):
     @override_settings(REVIEWER_OTP='12ab56')
     def test_malformed_code_is_ignored(self):
         self.assertEqual(services.reviewer_otp(REVIEWER), '')
+
+
+ADMIN_PHONE = '+918962900701'
+DASHBOARD_URL = '/api/admin/dashboard/summary/'
+
+
+@override_settings(ADMIN_PHONE_NUMBERS=[ADMIN_PHONE], USE_MASTER_OTP=True, MASTER_OTP='424242')
+class AdminAllowListTests(TestCase):
+    """
+    Only a number on ADMIN_PHONE_NUMBERS reaches the Admin Portal.
+
+    Logs in through the master-OTP path the other tests in this file use,
+    rather than asserting on a code the SMS gateway would have generated —
+    verify_otp short-circuits to the master code, so no send is involved.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def _login(self, phone):
+        return self.client.post(
+            '/api/auth/verify-otp/', {'phone_number': phone, 'otp': '424242'}, format='json'
+        )
+
+    def _dashboard_as(self, access):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION='Bearer ' + access)
+        return client.get(DASHBOARD_URL)
+
+    def test_allow_listed_number_is_promoted_and_reaches_the_dashboard(self):
+        response = self._login(ADMIN_PHONE)
+        self.assertEqual(response.status_code, 200)
+
+        account = Account.objects.get(phone_number=ADMIN_PHONE)
+        self.assertEqual(account.role, Account.Role.ADMIN)
+        self.assertTrue(account.is_staff)
+        self.assertEqual(self._dashboard_as(response.data['access']).status_code, 200)
+
+    def test_other_number_stays_a_patient_and_is_refused(self):
+        response = self._login('+919111111111')
+        self.assertEqual(response.status_code, 200)
+
+        account = Account.objects.get(phone_number='+919111111111')
+        self.assertEqual(account.role, Account.Role.PATIENT)
+        self.assertEqual(self._dashboard_as(response.data['access']).status_code, 403)
+
+    def test_admin_role_off_the_list_is_still_refused(self):
+        """The allow list is the authority, not the role column: promoting an
+        account in the database must not be enough on its own."""
+        Account.objects.create_user('+919222222222', role=Account.Role.ADMIN)
+        response = self._login('+919222222222')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._dashboard_as(response.data['access']).status_code, 403)

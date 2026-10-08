@@ -29,7 +29,8 @@ import {
   useOtpTimers,
 } from '@shared/auth';
 import { useAuth } from '../context/AuthContext';
-import { profilesApi } from '../lib/api';
+import { clearTokens, getAccessToken, getRefreshToken, profilesApi } from '../lib/api';
+import { setTokens as setAdminTokens } from '../../admin/lib/api';
 import { usePhoneInput } from '@shared/components/PhoneInput';
 
 type StepName = 'phone' | 'otp' | 'profile' | 'staff';
@@ -78,7 +79,7 @@ function describeAge(iso: string): string {
 }
 
 export default function Login() {
-  const { sendOtp, verifyOtp, refreshProfiles, logout } = useAuth();
+  const { sendOtp, verifyOtp, refreshProfiles } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -136,24 +137,22 @@ export default function Login() {
         const role = await verifyOtp(fullNumber, code);
 
         if (role && STAFF_ROLES.includes(role)) {
-          // This phone number belongs to a staff account — it has no
-          // business in the patient app. Since the merge the admin screens
-          // live in this same app, so this is now an in-app route change
-          // rather than a jump to another origin. The session still does
-          // NOT carry across: the two portals read different localStorage
-          // token keys, so a second real OTP prompt still happens in the
-          // Admin area. That's an honest limitation, not hidden mid-flow.
+          // This phone number belongs to a staff account, so it must not
+          // hold a patient session. The OTP it just passed is a real staff
+          // login though, so hand the tokens straight to the Admin Portal's
+          // own storage keys instead of asking for a second code.
           //
-          // logout() here matters: verifyOtp already set valid tokens for
-          // this User Portal session before this check ran. Without
-          // clearing them, hitting Back after landing on the Admin Portal
-          // would drop the person back into an already-"logged in" User
-          // Portal, holding a staff account's session in the wrong app.
-          logout();
+          // Deliberately NOT logout(): that would also tell the server to
+          // blacklist this refresh token, which the Admin Portal is about
+          // to use. clearTokens() only drops the patient copy locally.
+          const access = getAccessToken();
+          const refresh = getRefreshToken();
+          clearTokens();
+          if (access && refresh) setAdminTokens(access, refresh);
           setStep('staff');
           setTimeout(() => {
-            navigate('/admin');
-          }, 1800);
+            navigate('/admin', { replace: true });
+          }, 1200);
           return;
         }
 
@@ -179,7 +178,7 @@ export default function Login() {
         setVerifying(false);
       }
     },
-    [fullNumber, logout, navigate, refreshProfiles, rejectedAttempts, verifyOtp, verifying]
+    [fullNumber, navigate, refreshProfiles, rejectedAttempts, verifyOtp, verifying]
   );
 
   async function handleProfileSetup() {
@@ -425,15 +424,15 @@ export default function Login() {
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-brand-lavender text-brand-purple">
                   <ArrowUpRight size={22} />
                 </div>
-                <p className="text-[15px] font-semibold text-ink-900">Staff account recognised</p>
+                <p className="text-[15px] font-semibold text-ink-900">Admin Portal</p>
                 <p className="mx-auto mt-1.5 max-w-[280px] text-[12.5px] leading-relaxed text-ink-500">
-                  Taking you to the Admin Portal — you&apos;ll confirm with one more code there.
+                  Staff account verified. Signing you in to the Admin Portal…
                 </p>
                 <Link
                   to="/admin"
                   className="mt-4 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-purple underline-offset-2 hover:underline"
                 >
-                  Not redirected? Continue to Admin Portal
+                  Not redirected? Open Admin Portal
                   <ArrowUpRight size={13} />
                 </Link>
               </div>

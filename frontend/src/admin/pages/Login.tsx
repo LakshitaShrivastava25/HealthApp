@@ -94,7 +94,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!verified) return;
-    const id = setTimeout(() => navigate('/', { replace: true }), SUCCESS_HOLD_MS);
+    const id = setTimeout(() => navigate('/admin', { replace: true }), SUCCESS_HOLD_MS);
     return () => clearTimeout(id);
   }, [verified, navigate]);
 

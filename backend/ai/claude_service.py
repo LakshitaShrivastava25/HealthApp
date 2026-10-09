@@ -190,9 +190,28 @@ class ClaudeService:
         """
         from documents.models import Document
         from documents.derived import rebuild_derived_records
+        from documents.duplicates import find_content_match, page_fingerprints
 
         extraction = extract_text(document.file)
         document.raw_ocr_text = extraction.text or ''
+        document.page_fingerprints = page_fingerprints(extraction.pages)
+
+        if extraction.succeeded:
+            match = find_content_match(document)
+            if match and match.kind == 'same_content':
+                # Every page says exactly what an existing document says: a
+                # re-downloaded or re-printed copy. Keep the file, link it,
+                # and reuse what was already read — no second paid call and
+                # no second set of medicines or timeline events.
+                return self._link_as_copy(document, match.document)
+            if match:
+                document.possible_duplicate_of = match.document
+                document.possible_duplicate_score = match.score
+                document.possible_duplicate_pages = match.shared_pages
+            else:
+                document.possible_duplicate_of = None
+                document.possible_duplicate_score = None
+                document.possible_duplicate_pages = []
 
         if not extraction.succeeded:
             document.structured_data = {
@@ -215,7 +234,10 @@ class ClaudeService:
                 if document.category == Document.Category.PRESCRIPTION
                 else 'report_structuring.txt'
             )
-            result = self._structure(prompt, extraction.text)
+            # 4000, not 3000: each medicine now carries its generic name,
+            # strength, form and the doctor's explicit instruction, and a
+            # long prescription must not be cut off mid-JSON.
+            result = self._structure(prompt, extraction.text, max_tokens=4000)
 
         if extraction.note:
             # Extraction partly succeeded — some pages had no readable text.
@@ -237,6 +259,12 @@ class ClaudeService:
             # review screen asks the person for the date either way.
             if parsed_date and parsed_date <= timezone.localdate():
                 document.document_date = parsed_date
+            if not document.title or document.title == document.original_filename:
+                # The apps send the filename as the title, and hospital
+                # portals name files like "Caches_AMB-1002-26349476.pdf".
+                # A title a person can recognise replaces it; the original
+                # filename stays on the record.
+                document.title = self._readable_title(document) or document.title
 
         document.structured_data = result
         document.status = Document.Status.NEEDS_REVIEW
@@ -244,6 +272,59 @@ class ClaudeService:
         document.save()
         rebuild_derived_records(document)
         return result
+
+    @staticmethod
+    def _readable_title(document):
+        """'Prescription · Dr V H · 3 Jun 2026' from whatever was read."""
+        parts = []
+        if document.doctor_name:
+            doctor = document.doctor_name.strip()
+            parts.append(doctor if doctor.lower().startswith('dr') else f'Dr {doctor}')
+        elif document.hospital_name:
+            parts.append(document.hospital_name.strip())
+        if document.document_date:
+            parts.append(f'{document.document_date.day} {document.document_date:%b %Y}')
+        if not parts:
+            return ''
+        return ' · '.join([document.get_category_display()] + parts)[:255]
+
+    def _link_as_copy(self, document, original):
+        from documents.derived import rebuild_derived_records
+        from documents.models import Document
+
+        document.duplicate_of = original
+        document.duplicate_kind = Document.DuplicateKind.SAME_CONTENT
+        document.possible_duplicate_of = None
+        document.possible_duplicate_score = None
+        document.possible_duplicate_pages = []
+        document.structured_data = dict(original.structured_data or {})
+        document.doctor_name = original.doctor_name
+        document.hospital_name = original.hospital_name
+        document.document_date = original.document_date
+        if not document.title or document.title == document.original_filename:
+            document.title = original.title
+        document.status = (
+            original.status if original.status in (Document.Status.PROCESSED, Document.Status.NEEDS_REVIEW)
+            else Document.Status.NEEDS_REVIEW
+        )
+        document.processed_at = timezone.now()
+        document.save()
+        rebuild_derived_records(document)
+        return document.structured_data
+
+    # -- medicine names -------------------------------------------------------
+    def normalize_medicine_names(self, lines: list) -> dict:
+        """
+        Generic name, brand, strength, form, route and release for medicine
+        lines read before extraction returned them. One call per profile
+        (management command normalize_medicines_ai). Returns {"medicines":
+        [...]} in input order, or a dict flagged `_extraction_failed`.
+        """
+        if not self.enabled:
+            return {'_extraction_failed': True, 'note': 'ANTHROPIC_API_KEY is unset.'}
+        return self._structure(
+            'medicine_normalization.txt', json.dumps(lines, ensure_ascii=False), max_tokens=4000
+        )
 
     def _mock_document_structuring(self, category: str) -> dict:
         if category == 'prescription':

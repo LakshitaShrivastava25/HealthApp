@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, type Mode } from '../context/AuthContext';
+import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '../lib/councils';
 import { colors, radius, spacing, type } from '../theme';
 import { Badge, Card, Row } from './ui';
 
@@ -78,7 +79,7 @@ export function ModeSwitchCard() {
           </Text>
         </View>
         {target === 'doctor' && status && status !== 'verified' && (
-          <Badge tone={status === 'rejected' ? 'danger' : 'warning'}>{status}</Badge>
+          <Badge tone={DOCTOR_STATUS_TONE[status] ?? 'warning'}>{DOCTOR_STATUS_LABEL[status] ?? status}</Badge>
         )}
         <Feather name="repeat" size={16} color={colors.ink300} />
       </Row>

@@ -10,10 +10,18 @@ Return ONLY valid JSON matching this schema, with no explanation text before or 
   "medicines": [
     {
       "name": string,
+      "generic_name": string | null,
+      "brand_name": string | null,
+      "strength": string | null,
+      "form": string | null,
+      "route": string | null,
+      "release": string | null,
       "dosage": string | null,
       "frequency": string | null,
       "instructions": string | null,
-      "duration": string | null
+      "duration": string | null,
+      "action": "start" | "continue" | "change" | "stop" | "hold" | "one_time" | null,
+      "action_text": string | null
     }
   ],
   "tests": [string],
@@ -26,6 +34,25 @@ Rules:
 - Keep medicine names exactly as written, including strength (e.g. "Paracetamol 650mg").
 - "frequency" is how often it is taken (e.g. "twice daily", "1-0-1"); "instructions" is how
   (e.g. "after food"); "duration" is how long (e.g. "5 days"). Do not merge them.
+- "generic_name" is the active ingredient(s), e.g. "Carbidopa + Levodopa". If the document gives
+  only a brand and you are certain of that brand's active ingredients, give them; if you are not
+  certain, use null. Never guess between similar-sounding drugs.
+- "brand_name" is the brand as written (e.g. "Ecosprin"), or null if only a generic is written.
+- "strength" is the strength as written (e.g. "150mg", "25mg + 100mg"); "form" is tablet, capsule,
+  syrup, injection, drops, cream, inhaler, etc.; "route" is oral, injection, eye, ear, nasal,
+  topical, inhaled, etc. — only when written or obvious from the form.
+- "release" is the modified-release marker exactly as written (CR, SR, ER, XR, XL, MR) or null for
+  an ordinary form. Do not treat "OD" (once daily) as a release marker.
+- "action" records ONLY an instruction the doctor explicitly wrote about this medicine:
+  "start" (newly started), "continue" (written as continue / same / as before),
+  "change" (dose or frequency explicitly changed), "stop" (explicitly stopped or discontinued),
+  "hold" (temporarily withheld, e.g. "withhold on day of surgery"), "one_time" (a single dose,
+  e.g. STAT). Otherwise null.
+  - A conditional precaution such as "stop if any giddiness" is NOT "stop" — use null.
+  - If the prescription explicitly stops a medicine (e.g. "Stop Tab X"), include that medicine in
+    the list with "action": "stop", even though it is no longer prescribed.
+  - Never infer an action from a medicine being absent.
+- "action_text" is the exact words the action is based on, copied from the document, or null.
 - Dates are frequently written DD/MM/YYYY in Indian documents. Convert to YYYY-MM-DD.
   If a date is genuinely ambiguous, return null rather than guessing.
 - Record a diagnosis only if the document states one. Do not infer a diagnosis from the

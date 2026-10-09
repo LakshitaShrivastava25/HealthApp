@@ -7,6 +7,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { doctorApi } from '../../../src/lib/api';
+import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '../../../src/lib/councils';
 import { colors, radius, spacing, type } from '../../../src/theme';
 import NotificationSettingsCard from '../../../src/components/NotificationSettingsCard';
 import { ModeSwitchCard } from '../../../src/components/ModeSwitch';
@@ -116,12 +117,8 @@ export default function DoctorProfile() {
     }
   }
 
-  const verificationTone =
-    doctor?.verification_status === 'verified'
-      ? 'success'
-      : doctor?.verification_status === 'rejected'
-        ? 'danger'
-        : 'warning';
+  const status = doctor?.verification_status ?? 'pending';
+  const verificationTone = DOCTOR_STATUS_TONE[status] ?? 'warning';
 
   return (
     <Screen>
@@ -132,7 +129,7 @@ export default function DoctorProfile() {
           <Text style={[type.h2, { flex: 1 }]} numberOfLines={2}>
             Dr. {doctor?.full_name}
           </Text>
-          <Badge tone={verificationTone}>{doctor?.verification_status}</Badge>
+          <Badge tone={verificationTone}>{DOCTOR_STATUS_LABEL[status] ?? status}</Badge>
         </Row>
 
         {editing ? (
@@ -170,6 +167,7 @@ export default function DoctorProfile() {
               ['Specialization', doctor?.specialization],
               ['Qualification', doctor?.qualification || '—'],
               ['Registration number', doctor?.registration_number || '—'],
+              ['Medical council', doctor?.state_council_name || '—'],
               ['Clinic', doctor?.clinic_name || '—'],
               ['Address', doctor?.clinic_address || '—'],
               ['Booking number', doctor?.booking_phone_number || '—'],
@@ -184,8 +182,8 @@ export default function DoctorProfile() {
               Edit profile
             </Button>
             <Text style={styles.warnNote}>
-              Changing your registration number sends you back to the admin queue for
-              re-verification — the number is what an admin actually checked.
+              Changing your name sends you back to the admin queue for re-verification —
+              an admin checked your registration on the medical register under that name.
             </Text>
           </>
         )}

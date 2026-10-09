@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import CouncilPicker from '../../src/components/CouncilPicker';
+import RegisterCheck from '../../src/components/RegisterCheck';
 import { Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { doctorApi, type UploadFile } from '../../src/lib/api';
@@ -39,6 +41,10 @@ export default function DoctorRegister() {
   const [experience, setExperience] = useState(doctor ? String(doctor.experience_years ?? '') : '');
   const [clinicName, setClinicName] = useState(doctor?.clinic_name ?? '');
   const [registrationNumber, setRegistrationNumber] = useState(doctor?.registration_number ?? '');
+  const [councilId, setCouncilId] = useState(doctor?.state_council_id ?? '');
+  const [registrationYear, setRegistrationYear] = useState(
+    doctor?.registration_year ? String(doctor.registration_year) : ''
+  );
   const [clinicAddress, setClinicAddress] = useState(doctor?.clinic_address ?? '');
   const [bookingPhone, setBookingPhone] = useState(doctor?.booking_phone_number ?? '');
   const [fee, setFee] = useState(doctor?.consultation_fee ?? '');
@@ -69,6 +75,8 @@ export default function DoctorRegister() {
       form.append('experience_years', String(Number(experience) || 0));
       form.append('clinic_name', clinicName.trim());
       form.append('registration_number', registrationNumber.trim());
+      form.append('state_council_id', councilId);
+      if (registrationYear) form.append('registration_year', registrationYear);
       form.append('clinic_address', clinicAddress.trim());
       form.append('booking_phone_number', bookingPhone.trim());
       // Optional fields are omitted rather than sent blank: an empty string
@@ -114,7 +122,8 @@ export default function DoctorRegister() {
     }
   }
 
-  const required = [fullName, specialization, clinicName, registrationNumber, clinicAddress, bookingPhone];
+  // The council is what makes the number checkable on the NMC register.
+  const required = [fullName, specialization, clinicName, registrationNumber, councilId, clinicAddress, bookingPhone];
   const canSubmit = required.every((v) => v.trim().length > 0);
 
   const fieldError = (name: string) =>
@@ -129,7 +138,7 @@ export default function DoctorRegister() {
           title={editing ? 'Update your registration' : 'Register as a doctor'}
           subtitle={
             editing
-              ? 'Changing your registration number, name or licence sends your registration back to an admin for review.'
+              ? 'Changing your registration number, council, name or licence sends your registration back to an admin for review.'
               : `Signed in as ${account?.phone_number ?? ''}. An admin verifies your credentials before you can request patient access. Your own records stay on this same account.`
           }
         />
@@ -175,6 +184,28 @@ export default function DoctorRegister() {
           autoCapitalize="characters"
         />
         {fieldError('registration_number')}
+
+        <CouncilPicker
+          value={councilId}
+          onChange={setCouncilId}
+          error={fieldErrors.state_council_id?.join(' ')}
+        />
+
+        <Input
+          label="Year of registration (optional)"
+          value={registrationYear}
+          onChangeText={(v) => setRegistrationYear(v.replace(/[^0-9]/g, '').slice(0, 4))}
+          placeholder="e.g. 2015"
+          keyboardType="number-pad"
+          error={fieldErrors.registration_year?.join(' ')}
+        />
+
+        <RegisterCheck
+          registrationNumber={registrationNumber}
+          councilId={councilId}
+          year={registrationYear}
+          fullName={fullName}
+        />
 
         <Input label="Clinic name" value={clinicName} onChangeText={setClinicName} placeholder="e.g. City Heart Clinic" />
         {fieldError('clinic_name')}

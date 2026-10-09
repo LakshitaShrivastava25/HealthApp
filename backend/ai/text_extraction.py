@@ -25,10 +25,13 @@ from pypdf.errors import PdfReadError
 
 
 class ExtractionResult:
-    def __init__(self, text: str | None, method: str, note: str | None = None):
+    def __init__(self, text: str | None, method: str, note: str | None = None, pages: list[str] | None = None):
         self.text = text
         self.method = method  # 'pdf_native', 'ocr', or 'unavailable'
         self.note = note
+        # Text of each page in order ('' for a page with none) — what
+        # duplicate detection fingerprints (documents/duplicates.py).
+        self.pages = pages or []
 
     @property
     def succeeded(self) -> bool:
@@ -77,7 +80,7 @@ def extract_text_from_pdf(file_obj) -> ExtractionResult:
             'Image-based OCR would be needed, which is not configured yet.',
         )
 
-    result = ExtractionResult(combined, 'pdf_native')
+    result = ExtractionResult(combined, 'pdf_native', pages=[t.strip() for t in pages_text])
     # More than one empty page suggests a genuine mixed document, not
     # just an odd blank page — a single blank page is common and not
     # worth flagging, but several strongly suggests a scanned annexure.

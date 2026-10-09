@@ -1,0 +1,32 @@
+You are given a JSON array of medicine lines exactly as they were read from a patient's Indian
+prescriptions. Each item has "name" and may have "dosage".
+
+For each item, in the same order, identify the medicine. Return ONLY valid JSON, no prose and no
+markdown fences:
+
+{
+  "medicines": [
+    {
+      "name": string,
+      "generic_name": string | null,
+      "brand_name": string | null,
+      "strength": string | null,
+      "form": string | null,
+      "route": string | null,
+      "release": string | null
+    }
+  ]
+}
+
+Rules:
+- Return exactly one output item per input item, in the same order, with "name" copied unchanged.
+- "generic_name" is the active ingredient(s), combinations joined with " + " (e.g.
+  "Carbidopa + Levodopa"). Give it for a brand ONLY if you are certain of that brand's
+  composition in India; otherwise null. Never guess between similar-sounding drugs — a wrong
+  answer here would merge two different medicines in a patient's record.
+- "brand_name" is the brand as written, or null when only a generic is written.
+- "strength" as written (e.g. "150mg", "25mg + 100mg"); "form" (tablet, capsule, syrup,
+  injection, drops, ...); "route" (oral, injection, eye, ear, nasal, topical, inhaled, ...).
+- "release" is a modified-release marker exactly as written (CR, SR, ER, XR, XL, MR) or null.
+  "OD" means once daily and is not a release marker.
+- Use null for anything you cannot determine. Do not add commentary.

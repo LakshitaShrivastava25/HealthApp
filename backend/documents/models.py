@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 from family.models import Profile
 
@@ -25,6 +26,11 @@ class Document(models.Model):
         NEEDS_REVIEW = 'needs_review', 'Needs Review'
         FAILED = 'failed', 'Failed'
 
+    class DuplicateKind(models.TextChoices):
+        EXACT = 'exact', 'Byte-for-byte the same file'
+        SAME_CONTENT = 'same_content', 'Same text on every page'
+        MANUAL = 'manual', 'Marked as a duplicate by the person'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='documents')
     file = models.FileField(upload_to='documents/%Y/%m/')
@@ -42,11 +48,58 @@ class Document(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
 
+    # Duplicate detection (documents/duplicates.py). The filename is kept
+    # for traceability only — it is never evidence that two files match.
+    original_filename = models.CharField(max_length=255, blank=True)
+    file_sha256 = models.CharField(max_length=64, blank=True, db_index=True)
+    file_size = models.PositiveIntegerField(null=True, blank=True)
+    # One hash per page of normalised extracted text ('' for a blank page).
+    page_fingerprints = models.JSONField(default=list, blank=True)
+    # Set on a verified copy of another document. A copy keeps its file but
+    # adds nothing to the timeline or the medicines list.
+    duplicate_of = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='copies'
+    )
+    duplicate_kind = models.CharField(max_length=20, choices=DuplicateKind.choices, blank=True)
+    # An unverified match (shared pages, very similar text) for the person to
+    # confirm or dismiss. Never acted on automatically.
+    possible_duplicate_of = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
+    possible_duplicate_score = models.FloatField(null=True, blank=True)
+    possible_duplicate_pages = models.JSONField(default=list, blank=True)
+    # The person said "not a duplicate" — no content check links it again.
+    duplicate_check_dismissed = models.BooleanField(default=False)
+
     class Meta:
         ordering = ['-uploaded_at']
 
     def __str__(self):
         return self.title or f"Document {self.id}"
+
+
+class DocumentUpload(models.Model):
+    """
+    Every upload attempt, including the ones that turned out to be a file
+    already in the locker. An exact re-upload creates no second Document, so
+    this is where "uploaded again on <date> as <filename>" is remembered.
+    """
+
+    class Outcome(models.TextChoices):
+        NEW = 'new', 'New document'
+        EXACT_DUPLICATE = 'exact_duplicate', 'Already in the locker'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='document_uploads')
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='uploads')
+    original_filename = models.CharField(max_length=255, blank=True)
+    file_sha256 = models.CharField(max_length=64, blank=True)
+    file_size = models.PositiveIntegerField(null=True, blank=True)
+    outcome = models.CharField(max_length=20, choices=Outcome.choices)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['created_at']
 
 
 class TimelineEvent(models.Model):

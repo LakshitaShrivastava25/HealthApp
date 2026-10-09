@@ -1,6 +1,8 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from accounts.models import Account
+from doctors.councils import council_name
 from doctors.models import Doctor
 from family.models import Profile
 from documents.models import Document
@@ -36,23 +38,43 @@ class AdminDoctorVerificationSerializer(serializers.ModelSerializer):
     # patients will be shown. Conflating them in the UI would be a real
     # privacy problem, so they are never named alike.
     account_phone_number = serializers.CharField(source='account.phone_number', read_only=True)
+    state_council_name = serializers.SerializerMethodField()
+    verified_by_phone = serializers.CharField(source='verified_by.phone_number', read_only=True, default=None)
+    name_matches = serializers.SerializerMethodField()
+    # Where the admin can check the register by hand.
+    imr_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Doctor
         fields = [
             'id', 'full_name', 'specialization', 'qualification', 'experience_years',
-            'registration_number', 'clinic_name', 'clinic_address',
+            'registration_number', 'state_council_id', 'state_council_name', 'registration_year',
+            'clinic_name', 'clinic_address',
             'consultation_fee', 'booking_phone_number', 'account_phone_number',
             'available_days', 'clinic_open_time', 'clinic_close_time',
-            'license_document', 'verification_status',
+            'license_document', 'verification_status', 'submitted_at',
+            # What the NMC register said — the admin's evidence.
+            'nmc_result', 'nmc_checked_at', 'nmc_doctor_id', 'nmc_name', 'nmc_qualification',
+            'nmc_university', 'nmc_registration_date', 'nmc_suspended', 'nmc_remarks',
+            'nmc_payload', 'name_match_score', 'name_matches', 'verification_provider',
+            'verification_attempts', 'last_verification_error',
+            # The admin's decision.
+            'verified_at', 'verified_by_phone', 'rejection_reason', 'imr_url',
         ]
-        read_only_fields = [
-            'id', 'full_name', 'specialization', 'qualification', 'experience_years',
-            'registration_number', 'clinic_name', 'clinic_address',
-            'consultation_fee', 'booking_phone_number', 'account_phone_number',
-            'available_days', 'clinic_open_time', 'clinic_close_time',
-            'license_document',
-        ]
+        # Everything is read-only here: status changes go through the
+        # audited approve / reject / reverify actions, never a bare PATCH.
+        read_only_fields = fields
+
+    def get_state_council_name(self, obj):
+        return council_name(obj.state_council_id) or None
+
+    def get_name_matches(self, obj):
+        if obj.name_match_score is None:
+            return None
+        return obj.name_match_score >= settings.DOCTOR_NAME_MATCH_THRESHOLD
+
+    def get_imr_url(self, obj):
+        return 'https://nmc.org.in/information-desk/indian-medical-register/'
 
 
 class AdminPatientProfileSerializer(serializers.ModelSerializer):

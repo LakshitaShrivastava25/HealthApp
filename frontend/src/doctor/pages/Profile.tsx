@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Button, Badge } from '../components/ui';
+import CouncilField from '../components/CouncilField';
+import RegisterCheck from '../components/RegisterCheck';
+import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '@shared/councils';
 import BookingPhoneField from '../components/BookingPhoneField';
 import { DAY_NAMES } from '../components/ClinicAvailability';
 import { authApi, doctorApi, profileApi } from '../lib/api';
@@ -29,6 +32,9 @@ type Doctor = {
   clinic_name: string;
   clinic_address: string;
   registration_number: string;
+  state_council_id: string;
+  registration_year: number | null;
+  rejection_reason: string;
   booking_phone_number: string;
   consultation_fee: string | null;
   license_document: string | null;
@@ -88,6 +94,9 @@ export default function Profile() {
   const [clinicAddress, setClinicAddress] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [originalRegistration, setOriginalRegistration] = useState('');
+  const [councilId, setCouncilId] = useState('');
+  const [originalCouncil, setOriginalCouncil] = useState('');
+  const [registrationYear, setRegistrationYear] = useState('');
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [digits, setDigits] = useState('');
   const [fee, setFee] = useState('');
@@ -106,6 +115,9 @@ export default function Profile() {
     setClinicAddress(d.clinic_address ?? '');
     setRegistrationNumber(d.registration_number ?? '');
     setOriginalRegistration(d.registration_number ?? '');
+    setCouncilId(d.state_council_id ?? '');
+    setOriginalCouncil(d.state_council_id ?? '');
+    setRegistrationYear(d.registration_year ? String(d.registration_year) : '');
     const phone = splitPhone(d.booking_phone_number ?? '');
     setCountry(phone.country);
     setDigits(phone.digits);
@@ -121,7 +133,8 @@ export default function Profile() {
     authApi.me().then((r) => setLoginNumber(r.data.phone_number ?? ''));
   }, []);
 
-  const registrationChanged = registrationNumber.trim() !== originalRegistration.trim();
+  const registrationChanged =
+    registrationNumber.trim() !== originalRegistration.trim() || councilId !== originalCouncil;
   const timesInvalid = !!openTime && !!closeTime && openTime >= closeTime;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -139,6 +152,8 @@ export default function Profile() {
       form.append('clinic_name', clinicName);
       form.append('clinic_address', clinicAddress);
       form.append('registration_number', registrationNumber);
+      if (councilId) form.append('state_council_id', councilId);
+      if (registrationYear) form.append('registration_year', registrationYear);
       form.append('booking_phone_number', `${country.dialCode}${digits}`);
       // A JSON list inside multipart has to be stringified; DRF's JSONField
       // parses it back on the other side.
@@ -154,7 +169,7 @@ export default function Profile() {
       setSaved(true);
       // The backend decides whether re-verification happened; this only
       // reports what came back rather than predicting it.
-      if (registrationChanged && data.verification_status === 'pending') setReverified(true);
+      if (registrationChanged && data.verification_status !== 'verified') setReverified(true);
       await refreshDoctor();
     } catch (err: any) {
       const body = err?.response?.data;
@@ -180,12 +195,7 @@ export default function Profile() {
     );
   }
 
-  const statusTone =
-    doctor.verification_status === 'verified'
-      ? 'success'
-      : doctor.verification_status === 'rejected'
-        ? 'danger'
-        : 'warning';
+  const statusTone = DOCTOR_STATUS_TONE[doctor.verification_status] ?? 'warning';
 
   return (
     <>
@@ -199,9 +209,9 @@ export default function Profile() {
               </p>
               {reverified && (
                 <p className="mt-1.5 text-xs text-ink-700">
-                  Your registration number changed, so your account has been set back to{' '}
-                  <strong>pending</strong> and returned to the admin verification queue. Patients
-                  will not see you in Find Care until an admin approves the new number.
+                  Your registration details changed, so they were checked against the NMC register
+                  again and returned to the admin verification queue. Patients will not see you in
+                  Find Care until an admin approves them.
                 </p>
               )}
             </Card>
@@ -215,8 +225,14 @@ export default function Profile() {
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-ink-900">Professional details</p>
-              <Badge tone={statusTone}>{doctor.verification_status}</Badge>
+              <Badge tone={statusTone}>{DOCTOR_STATUS_LABEL[doctor.verification_status] ?? doctor.verification_status}</Badge>
             </div>
+            {doctor.verification_status === 'rejected' && doctor.rejection_reason && (
+              <p className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger">
+                <strong>Not approved:</strong> {doctor.rejection_reason} Correct your details below and save to
+                send them for review again.
+              </p>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Row label="Full name" icon={<User size={13} />}>
@@ -263,12 +279,30 @@ export default function Profile() {
               {registrationChanged && (
                 <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-warning">
                   <ShieldAlert size={13} className="mt-px shrink-0" />
-                  Changing this returns your account to the admin verification queue — an admin
-                  approved the current number, so a new one has to be checked before you appear in
-                  Find Care again.
+                  Changing your registration details returns your account to the admin verification
+                  queue — an admin approved the current ones, so new ones have to be checked before
+                  you appear in Find Care again.
                 </p>
               )}
             </Row>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <CouncilField value={councilId} onChange={setCouncilId} />
+              <Row label="Year of registration" icon={<CalendarClock size={13} />}>
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  value={registrationYear}
+                  onChange={(e) => setRegistrationYear(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                  placeholder="e.g. 2015"
+                />
+              </Row>
+            </div>
+            <RegisterCheck
+              registrationNumber={registrationNumber}
+              councilId={councilId}
+              year={registrationYear}
+              fullName={fullName}
+            />
           </Card>
 
           <Card className="p-5 space-y-4">

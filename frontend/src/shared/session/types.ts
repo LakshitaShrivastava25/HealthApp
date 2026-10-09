@@ -31,10 +31,18 @@ export type DoctorRecord = {
   specialization: string;
   qualification: string;
   experience_years: number;
-  verification_status: 'pending' | 'verified' | 'rejected';
+  verification_status: 'pending' | 'manual_review' | 'failed' | 'verified' | 'rejected';
   clinic_name: string;
   clinic_address?: string;
   registration_number?: string;
+  state_council_id?: string;
+  state_council_name?: string;
+  registration_year?: number | null;
+  /** Set by an admin when rejecting; shown so the doctor can correct it. */
+  rejection_reason?: string;
+  nmc_result?: '' | 'found' | 'not_found' | 'ambiguous' | 'unavailable';
+  nmc_name?: string;
+  nmc_qualification?: string;
   booking_phone_number?: string;
   consultation_fee?: string | null;
   license_document?: string | null;

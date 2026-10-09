@@ -20,7 +20,29 @@ type DocumentDetail = {
   doctor_name: string;
   structured_data: Record<string, unknown>;
   file: string;
+  original_filename?: string;
+  duplicate_of?: string | null;
+  duplicate_kind?: string;
+  possible_duplicate?: {
+    id: string;
+    title: string;
+    uploaded_at: string;
+    score: number | null;
+    shared_pages: number[];
+  } | null;
+  copies?: { id: string; title: string; original_filename: string; uploaded_at: string; duplicate_kind: string }[];
+  upload_history?: { original_filename: string; uploaded_at: string; outcome: string }[];
 };
+
+const DUPLICATE_KIND_LABEL: Record<string, string> = {
+  exact: 'the exact same file',
+  same_content: 'the same text on every page',
+  manual: 'marked by you',
+};
+
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 /** The real Document.Category values, same set the Timeline keys on. */
 const CATEGORIES = [
@@ -84,6 +106,10 @@ export default function DocumentDetailModal({
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState('');
 
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
+  const [duplicateError, setDuplicateError] = useState('');
+  const [viewingId, setViewingId] = useState(documentId);
+
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -91,7 +117,7 @@ export default function DocumentDetailModal({
   function load() {
     setLoading(true);
     documentsApi
-      .get(documentId)
+      .get(viewingId)
       .then((r) => {
         setDoc(r.data);
         setEditText(editableJson(r.data.structured_data));
@@ -101,9 +127,28 @@ export default function DocumentDetailModal({
   }
 
   useEffect(() => {
+    setViewingId(documentId);
+  }, [documentId]);
+
+  useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId]);
+  }, [viewingId]);
+
+  /** Confirms or rejects a duplicate link; medicines and timeline follow server-side. */
+  async function handleDuplicate(run: () => Promise<{ data: DocumentDetail }>) {
+    setDuplicateError('');
+    setDuplicateBusy(true);
+    try {
+      const { data } = await run();
+      setDoc(data);
+      onUpdated?.();
+    } catch {
+      setDuplicateError('Could not save that. Please try again.');
+    } finally {
+      setDuplicateBusy(false);
+    }
+  }
 
   async function handleSaveCorrection() {
     setSaveError('');
@@ -116,7 +161,7 @@ export default function DocumentDetailModal({
     }
     setSaving(true);
     try {
-      await documentsApi.correct(documentId, parsed);
+      await documentsApi.correct(viewingId, parsed);
       setEditing(false);
       load();
       onUpdated?.();
@@ -131,7 +176,7 @@ export default function DocumentDetailModal({
     setDeleteError('');
     setDeleting(true);
     try {
-      await documentsApi.delete(documentId);
+      await documentsApi.delete(viewingId);
       onDeleted?.();
       onClose();
     } catch {
@@ -192,7 +237,7 @@ export default function DocumentDetailModal({
     setRetryError('');
     setRetrying(true);
     try {
-      const { data } = await documentsApi.retryProcessing(documentId);
+      const { data } = await documentsApi.retryProcessing(viewingId);
       setDoc(data);
       setEditText(editableJson(data.structured_data));
       onUpdated?.();
@@ -230,6 +275,54 @@ export default function DocumentDetailModal({
                 <Badge tone={statusTone[doc.status] || 'neutral'}>{doc.status.replace('_', ' ')}</Badge>
                 <Badge tone="neutral">{doc.category}</Badge>
               </div>
+
+              {/* DUPLICATES — a copy is kept for traceability but adds
+                  nothing to the timeline or medicines; an unverified match
+                  is only a question, never acted on without the person. */}
+              {doc.duplicate_of && (
+                <div className="mb-4 rounded-xl border border-info/30 bg-info-bg/60 p-4 text-xs text-ink-700">
+                  <p className="font-semibold text-ink-900 text-sm">This is a copy of another document</p>
+                  <p className="mt-1">
+                    Matched by {DUPLICATE_KIND_LABEL[doc.duplicate_kind || ''] ?? 'content'}. It is kept, but its
+                    medicines and timeline entries are not counted twice.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button variant="secondary" className="!px-3 !py-1.5 text-xs" onClick={() => setViewingId(doc.duplicate_of as string)}>
+                      Open the original
+                    </Button>
+                    <Button variant="ghost" className="!px-3 !py-1.5 text-xs" disabled={duplicateBusy}
+                      onClick={() => handleDuplicate(() => documentsApi.notDuplicate(doc.id))}>
+                      It's a different document
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!doc.duplicate_of && doc.possible_duplicate && (
+                <div className="mb-4 rounded-xl border border-warning/40 bg-warning-bg/40 p-4 text-xs text-ink-700">
+                  <p className="font-semibold text-ink-900 text-sm">Possibly the same as “{doc.possible_duplicate.title}”</p>
+                  <p className="mt-1">
+                    {doc.possible_duplicate.shared_pages.length
+                      ? `Page${doc.possible_duplicate.shared_pages.length > 1 ? 's' : ''} ${doc.possible_duplicate.shared_pages.join(', ')} of this file match that document, but it also has content of its own.`
+                      : `Its text is ${Math.round((doc.possible_duplicate.score ?? 0) * 100)}% the same as that document.`}{' '}
+                    Both are kept until you decide.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button variant="secondary" className="!px-3 !py-1.5 text-xs" disabled={duplicateBusy}
+                      onClick={() => handleDuplicate(() => documentsApi.markDuplicate(doc.id, doc.possible_duplicate!.id))}>
+                      Yes, it's a duplicate
+                    </Button>
+                    <Button variant="ghost" className="!px-3 !py-1.5 text-xs" disabled={duplicateBusy}
+                      onClick={() => handleDuplicate(() => documentsApi.notDuplicate(doc.id))}>
+                      No, keep both
+                    </Button>
+                    <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={() => setViewingId(doc.possible_duplicate!.id)}>
+                      Compare
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {duplicateError && <p className="-mt-2 mb-4 text-xs text-danger">{duplicateError}</p>}
 
               {/* REVIEW SCREEN — shown only while the document is still
                   needs_review, i.e. the AI has finished but nobody has
@@ -446,6 +539,28 @@ export default function DocumentDetailModal({
                 >
                   View original file →
                 </a>
+              )}
+
+              {!editing && ((doc.upload_history?.length ?? 0) > 1 || (doc.copies?.length ?? 0) > 0 || doc.original_filename) && (
+                <div className="mt-5 rounded-lg bg-surface px-3 py-2.5 text-xs text-ink-500 space-y-1">
+                  {doc.original_filename && <p>Uploaded as <span className="text-ink-700">{doc.original_filename}</span></p>}
+                  {(doc.upload_history ?? [])
+                    .filter((u) => u.outcome === 'exact_duplicate')
+                    .map((u, i) => (
+                      <p key={i}>
+                        Uploaded again on {shortDate(u.uploaded_at)}
+                        {u.original_filename ? <> as <span className="text-ink-700">{u.original_filename}</span></> : null} — same file, not added twice.
+                      </p>
+                    ))}
+                  {(doc.copies ?? []).map((c) => (
+                    <p key={c.id}>
+                      Copy uploaded on {shortDate(c.uploaded_at)} ({DUPLICATE_KIND_LABEL[c.duplicate_kind] ?? 'duplicate'}){' '}
+                      <button onClick={() => setViewingId(c.id)} className="font-medium text-accent-ink hover:underline">
+                        Open
+                      </button>
+                    </p>
+                  ))}
+                </div>
               )}
 
               {!editing && (

@@ -45,25 +45,34 @@ def _clean(text, limit):
 
 def rebuild_derived_records(document):
     """
-    Rebuilds what this document implies, and returns (events, medicines)
-    counts.
+    Rebuilds what this document implies, and returns (events, medicine
+    lines) counts.
 
     Timeline events are deleted and recreated: they are pure projections
     with nothing hanging off them, so rebuilding is always safe.
 
-    Medications are only ever ADDED, never deleted. A Medication owns its
-    ReminderSchedule rows through a cascading foreign key, so deleting one
-    to rebuild it would silently destroy reminder times the person set by
-    hand. Matching on (profile, source_document, name) means re-processing
-    the same document is idempotent without touching anything the person
-    has since built on top of it.
+    Medicines go through medicines/consolidation.py. This document's
+    prescription lines (MedicationOccurrence) are replaced, then the whole
+    profile's medicine list is recomputed — one Medication per medicine
+    however many prescriptions mention it. Medication rows themselves are
+    never deleted there (reminders hang off them); duplicates are merged and
+    reminders follow the surviving row.
+
+    A document that is a copy of another (duplicate_of) contributes
+    nothing: the original already put its events and medicines on record,
+    and a second set would be exactly the duplication this prevents.
     """
     from documents.models import TimelineEvent
-    from medicines.models import Medication
+    from medicines.consolidation import rebuild_profile_medications, replace_document_occurrences
 
     data = document.structured_data if isinstance(document.structured_data, dict) else {}
 
     TimelineEvent.objects.filter(source_document=document).delete()
+
+    if document.duplicate_of_id:
+        replace_document_occurrences(document)  # clears any it had
+        rebuild_profile_medications(document.profile)
+        return 0, 0
 
     event_date = (
         document.document_date
@@ -122,33 +131,8 @@ def rebuild_derived_records(document):
 
     TimelineEvent.objects.bulk_create(events)
 
-    # 4. Medicines prescribed.
-    created_medicines = 0
-    for medicine in _as_list(data.get('medicines')):
-        if isinstance(medicine, str):
-            medicine = {'name': medicine}
-        if not isinstance(medicine, dict):
-            continue
-        name = _clean(medicine.get('name'), 150)
-        if not name:
-            continue
-        _, created = Medication.objects.get_or_create(
-            profile=document.profile,
-            source_document=document,
-            name=name,
-            defaults={
-                'dosage': _clean(medicine.get('dosage'), 100),
-                'frequency': _clean(medicine.get('frequency'), 100),
-                'instructions': _clean(medicine.get('instructions'), 255),
-                'start_date': _parse_iso_date(medicine.get('start_date')) or event_date,
-                'end_date': _parse_iso_date(medicine.get('end_date')),
-                # A medicine read off a prescription is presumed current.
-                # The person can end it from the Medicines screen; nothing
-                # here should decide on its own that a drug was stopped.
-                'is_active': True,
-            },
-        )
-        if created:
-            created_medicines += 1
-
-    return len(events), created_medicines
+    # 4. Medicines prescribed — one line per medicine on this document, then
+    #    the profile's consolidated list (medicines/consolidation.py).
+    lines = replace_document_occurrences(document)
+    rebuild_profile_medications(document.profile)
+    return len(events), lines

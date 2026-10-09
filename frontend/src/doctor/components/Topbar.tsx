@@ -4,13 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { Avatar, Badge } from './ui';
 import { MobileMenuButton } from '@shared/layout/ResponsiveShell';
 import ModeSwitch from '@shared/session/ModeSwitch';
+import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '@shared/councils';
 import AmbientBackground from '@shared/components/AmbientBackground';
 
-const statusTone: Record<string, 'success' | 'warning' | 'danger'> = {
-  verified: 'success',
-  pending: 'warning',
-  rejected: 'danger',
-};
+
 
 export default function Topbar({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   const { doctor } = useAuth();
@@ -46,7 +43,9 @@ export default function Topbar({ title, subtitle, action }: { title: string; sub
             <Avatar initials={initials} size={34} />
             <div className="hidden sm:block text-left">
               <p className="text-sm font-semibold text-ink-900 leading-tight">Dr. {doctor.full_name}</p>
-              <Badge tone={statusTone[doctor.verification_status] || 'warning'}>{doctor.verification_status}</Badge>
+              <Badge tone={DOCTOR_STATUS_TONE[doctor.verification_status] || 'warning'}>
+                {DOCTOR_STATUS_LABEL[doctor.verification_status] ?? doctor.verification_status}
+              </Badge>
             </div>
           </Link>
         )}

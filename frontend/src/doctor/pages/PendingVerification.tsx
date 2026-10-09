@@ -69,13 +69,36 @@ export default function PendingVerification() {
         </div>
 
         <h1 className="text-[19px] font-bold tracking-[-0.01em] text-ink-900">
-          {rejected ? 'Registration not approved' : 'Verification pending'}
+          {rejected ? 'Registration not approved' : doctor?.verification_status === 'pending' ? 'Verification pending' : 'Under review'}
         </h1>
         <p className="mx-auto mt-2 max-w-[320px] text-[13px] leading-relaxed text-ink-500">
           {rejected
             ? 'An administrator reviewed your registration and did not approve it. Correcting your details in your profile sends it back for review.'
-            : <>Thanks, Dr. {doctor?.full_name}. Your registration number and licence are with our team for review — you&apos;ll be able to request patient access once an admin approves your account.</>}
+            : doctor?.verification_status === 'failed'
+              ? "We couldn't reach the medical register right now — your registration will be verified shortly. An admin can still review it in the meantime."
+              : <>Thanks, Dr. {doctor?.full_name}. Your registration number and licence are with our team for review — you&apos;ll be able to request patient access once an admin approves your account.</>}
         </p>
+
+        {rejected && doctor?.rejection_reason && (
+          <p className="mx-auto mt-3 max-w-[320px] rounded-lg bg-danger-bg px-3 py-2 text-left text-[12.5px] text-danger">
+            <strong>Reason:</strong> {doctor.rejection_reason}
+          </p>
+        )}
+
+        {/* What the NMC register check found, so the doctor knows where
+            their registration stands before an admin gets to it. */}
+        {!rejected && doctor?.nmc_result === 'found' && (
+          <p className="mx-auto mt-3 max-w-[320px] rounded-lg bg-success-bg px-3 py-2 text-left text-[12.5px] text-success">
+            Found on the NMC register as <strong>{doctor.nmc_name}</strong>
+            {doctor.nmc_qualification ? ` (${doctor.nmc_qualification})` : ''}.
+          </p>
+        )}
+        {!rejected && doctor?.nmc_result === 'not_found' && (
+          <p className="mx-auto mt-3 max-w-[320px] rounded-lg bg-warning-bg px-3 py-2 text-left text-[12.5px] text-warning">
+            Your registration number wasn&apos;t found in {doctor.state_council_name || 'that council'} on the NMC
+            register. If it&apos;s mistyped, correct it in your profile.
+          </p>
+        )}
 
         {/* This screen is outside the app shell, so without this link a
             doctor awaiting (or re-awaiting) approval has no route to their

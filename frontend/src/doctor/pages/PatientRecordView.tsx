@@ -10,7 +10,18 @@ type TimelineEvent = { id: string; event_date: string; title: string; summary: s
 // this view simply never asked for it, so a doctor could see titles but not
 // open anything.
 type Doc = { id: string; title: string; category: string; document_date: string | null; file: string | null };
-type Medication = { id: string; name: string; dosage: string; frequency: string; instructions: string };
+type Medication = {
+  id: string;
+  name: string;
+  dosage: string;
+  frequency: string;
+  instructions: string;
+  // One row per medicine across all the patient's prescriptions.
+  generic_name?: string;
+  status?: string;
+  last_prescribed_on?: string | null;
+  last_prescribed_by?: string;
+};
 type Allergy = { id: string; substance: string; reaction: string };
 
 export default function PatientRecordView() {
@@ -171,8 +182,17 @@ export default function PatientRecordView() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-ink-900">{m.name}</p>
                     <p className="text-xs text-ink-500 mt-0.5">
-                      {[m.dosage, m.frequency].filter(Boolean).join(' · ') || '—'}
+                      {[m.generic_name && !m.name.toLowerCase().includes(m.generic_name.toLowerCase().split(' + ')[0]) ? m.generic_name : '', m.dosage, m.frequency]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
                     </p>
+                    {m.last_prescribed_on && (
+                      <p className="text-[11px] text-ink-300 mt-0.5">
+                        Last prescribed {m.last_prescribed_on}
+                        {m.last_prescribed_by ? ` by ${/^dr\b/i.test(m.last_prescribed_by) ? m.last_prescribed_by : `Dr ${m.last_prescribed_by}`}` : ''}
+                        {m.status === 'needs_review' ? ' · prescriptions disagree' : ''}
+                      </p>
+                    )}
                   </div>
                   {m.instructions && <p className="text-xs text-ink-300 shrink-0">{m.instructions}</p>}
                 </div>

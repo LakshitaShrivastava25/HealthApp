@@ -193,6 +193,11 @@ export const documentsApi = {
   correct: (id: string, structured_data: Record<string, unknown>) =>
     api.patch(`/documents/${id}/correct/`, { structured_data }),
   delete: (id: string) => api.delete(`/documents/${id}/`),
+  // The person confirms this is a copy of another document (kept, but it
+  // adds nothing to the timeline or medicines), or that it is not.
+  markDuplicate: (id: string, ofId: string) =>
+    api.post(`/documents/${id}/mark-duplicate/`, { of: ofId }),
+  notDuplicate: (id: string) => api.post(`/documents/${id}/not-duplicate/`),
 };
 
 export const timelineApi = {
@@ -220,7 +225,16 @@ export const pushApi = {
 };
 
 export const medicinesApi = {
-  list: (profileId: string) => api.get('/medications/', { params: { profile_id: profileId } }),
+  // One row per medicine across every prescription. scope: 'current'
+  // (default — what the person is meant to be taking), 'past' or 'all'.
+  list: (profileId: string, scope: 'current' | 'past' | 'all' = 'current') =>
+    api.get('/medications/', { params: { profile_id: profileId, scope } }),
+  // The person's own answer to "still taking it?" — wins until a newer prescription.
+  setStatus: (id: string, status: 'taking' | 'stopped') =>
+    api.post(`/medications/${id}/set-status/`, { status }),
+  merge: (id: string, otherId: string) => api.post(`/medications/${id}/merge/`, { other: otherId }),
+  keepSeparate: (id: string, otherId: string) =>
+    api.post(`/medications/${id}/keep-separate/`, { other: otherId }),
   create: (data: Record<string, unknown>) => api.post('/medications/', data),
   delete: (id: string) => api.delete(`/medications/${id}/`),
   addReminder: (medication: string, time_of_day: string) =>
@@ -264,10 +278,29 @@ export const doctorsApi = {
 };
 
 // -- doctor portal --------------------------------------------------------
+export type RegisterCheck = {
+  status: 'found' | 'not_found' | 'ambiguous' | 'unavailable';
+  nmc_name: string | null;
+  nmc_qualification: string | null;
+  nmc_university: string | null;
+  name_match_score: number | null;
+  name_matches: boolean | null;
+  suspended: boolean;
+  message: string;
+};
+
 export const doctorApi = {
   me: () => api.get('/doctors/me/'),
   register: (form: FormData) => api.post('/doctors/', form, MULTIPART),
   updateProfile: (form: FormData) => api.patch('/doctors/me/', form, MULTIPART),
+  /** The form's "Verify" button: what the NMC register has for this number.
+   *  Informational only — an admin reviews every registration regardless. */
+  verifyRegistration: (data: {
+    registration_number: string;
+    state_council_id: string;
+    registration_year?: number | null;
+    full_name?: string;
+  }) => api.post<RegisterCheck>('/doctors/verify-registration/', data),
   updateAvailability: (data: {
     available_days: string[];
     clinic_open_time: string | null;
@@ -303,9 +336,16 @@ export const adminApi = {
   policies: (status?: string) => api.get('/admin/insurance-policies/', { params: { status } }),
   validatePolicy: (id: string, data: Record<string, unknown>) =>
     api.patch(`/admin/insurance-policies/${id}/`, data),
-  doctorVerification: () => api.get('/admin/doctor-verification/'),
+  /** `status` is 'review' (pending, under review, register unreachable), a
+   *  single status, or '' for everyone. Paginated server-side. */
+  doctorQueue: (status: string, page = 1) =>
+    api.get('/admin/doctors/', { params: { ...(status ? { status } : {}), page } }),
   approveDoctor: (id: string) => api.post(`/admin/doctor-verification/${id}/approve/`),
-  rejectDoctor: (id: string) => api.post(`/admin/doctor-verification/${id}/reject/`),
+  // The reason is shown to the doctor so they can correct their details.
+  rejectDoctor: (id: string, reason?: string) =>
+    api.post(`/admin/doctor-verification/${id}/reject/`, reason ? { reason } : {}),
+  /** Looks the doctor up on the NMC register again, bypassing the cache. */
+  reverifyDoctor: (id: string) => api.post(`/admin/doctors/${id}/reverify/`),
   patients: (search?: string) => api.get('/admin/patients/', { params: { search } }),
   accounts: (search?: string) => api.get('/admin/accounts/', { params: { search } }),
   // Login OTP mode switch: 'master' (fixed code, no SMS) or 'sms' (2Factor).

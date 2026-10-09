@@ -1,5 +1,9 @@
+import logging
+
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from rest_framework import serializers as drf_serializers
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, ValidationError
@@ -10,6 +14,7 @@ from config.throttling import ActionThrottleMixin
 from family.permissions import profile_id_param
 
 from .access import acting_doctor, active_grants
+from .councils import COUNCILS, council_name
 from .models import ConsultationNote, Doctor, DoctorPatientAccess
 from .serializers import (
     ConsultationNoteSerializer, DoctorAvailabilitySerializer, PublicDoctorSerializer,
@@ -17,7 +22,33 @@ from .serializers import (
 )
 
 
-class DoctorViewSet(viewsets.ModelViewSet):
+logger = logging.getLogger(__name__)
+
+
+def _check_register(doctor):
+    """
+    Run the NMC register check for a doctor who just registered or changed
+    their details. One attempt only — the person is waiting on this request;
+    `manage.py reverify_doctors` retries anything that couldn't be reached.
+    Never fails the request: whatever happens, the doctor is in the admin
+    queue already.
+    """
+    from .services.verification import apply_verification
+
+    try:
+        apply_verification(doctor, attempts=1)
+    except Exception:  # a register problem must never block registration
+        logger.exception('NMC check failed unexpectedly for doctor %s', doctor.pk)
+
+
+class VerifyRegistrationSerializer(drf_serializers.Serializer):
+    registration_number = drf_serializers.CharField(max_length=100)
+    state_council_id = drf_serializers.ChoiceField(choices=COUNCILS)
+    registration_year = drf_serializers.IntegerField(required=False, allow_null=True, min_value=1900, max_value=2100)
+    full_name = drf_serializers.CharField(max_length=150, required=False, allow_blank=True)
+
+
+class DoctorViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
     """
     /api/doctors/ — registration creates a Doctor row with verification_status=pending.
     Admin Portal approves/rejects (see admin_portal app). Doctors can't log in
@@ -25,6 +56,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
     """
     serializer_class = DoctorSerializer
     permission_classes = [IsAuthenticated]
+    action_throttle_scopes = {'verify_registration': 'nmc_precheck'}
 
     def get_serializer_class(self):
         # Browsing the directory returns the patient-facing shape, which
@@ -48,8 +80,14 @@ class DoctorViewSet(viewsets.ModelViewSet):
         # the database is free to order each query differently.
         return (verified | own).distinct().order_by('full_name')
 
-    @transaction.atomic
     def perform_create(self, serializer):
+        with transaction.atomic():
+            self._create_registration(serializer)
+        # After the commit: the register check can take seconds, and must not
+        # hold a database transaction open while it waits on NMC.
+        _check_register(serializer.instance)
+
+    def _create_registration(self, serializer):
         # Guards against a 500 crash (UNIQUE constraint violation) if
         # registration is ever attempted twice for the same account — found
         # by reproducing a real user's error report, where a stale frontend
@@ -65,8 +103,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
         # Accounts" list: doctors were quietly counted as patients because
         # nothing had ever updated this field after Doctor registration.
         #
-        # @transaction.atomic above ties this write to the Doctor row
-        # created just above — if either write fails, both roll back, so
+        # The atomic block in perform_create ties this write to the Doctor
+        # row created just above — if either write fails, both roll back, so
         # an account can never end up at role=doctor with no Doctor record
         # (or vice versa). Found and fixed after review flagged that the
         # two writes were previously independent.
@@ -95,6 +133,11 @@ class DoctorViewSet(viewsets.ModelViewSet):
             serializer.is_valid(raise_exception=True)
             serializer.save()
             doctor.refresh_from_db()
+            if getattr(serializer, 'credentials_changed', False):
+                # A corrected or changed registration is checked again and
+                # goes back to the admin queue.
+                _check_register(doctor)
+                doctor.refresh_from_db()
 
         # Always answer with the full record so the client re-renders from
         # what was actually stored, including a verification_status the
@@ -119,6 +162,60 @@ class DoctorViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(DoctorSerializer(doctor).data)
+
+    @action(detail=False, methods=['post'], url_path='verify-registration')
+    def verify_registration(self, request):
+        """
+        POST /api/doctors/verify-registration/ — the registration form's
+        "Verify" button: looks the number up on the NMC register before the
+        doctor submits, and says what the register has. Informational only;
+        an admin still reviews every registration. Signed-in only (doctors
+        register from their own account) and throttled, so it can't be used
+        as a free register scraper.
+        """
+        from .services.verification import (
+            AMBIGUOUS, FOUND, NOT_FOUND, compute_name_match, verify_registration,
+        )
+
+        params = VerifyRegistrationSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        data = params.validated_data
+        council = data['state_council_id']
+        result = verify_registration(
+            data['registration_number'].strip().upper(), council, data.get('registration_year'), attempts=1,
+        )
+
+        body = {
+            'status': result.status,
+            'nmc_name': result.name or None,
+            'nmc_qualification': result.qualification or None,
+            'nmc_university': result.university or None,
+            'name_match_score': None,
+            'name_matches': None,
+            'suspended': result.status == FOUND and result.is_suspended,
+        }
+        if result.status == FOUND:
+            if data.get('full_name'):
+                score = round(compute_name_match(data['full_name'], result.name), 3)
+                body['name_match_score'] = score
+                body['name_matches'] = score >= settings.DOCTOR_NAME_MATCH_THRESHOLD
+            body['message'] = (
+                'Found on the NMC register — but listed as removed. An admin will review your registration.'
+                if body['suspended'] else
+                'Found on the NMC register. An admin will confirm your registration after you submit.'
+            )
+        elif result.status == NOT_FOUND:
+            body['message'] = (
+                f'No registration {data["registration_number"].strip()} found in {council_name(council)} '
+                'on the NMC register. Check the number and council — you can still submit, and an admin will review it.'
+            )
+        elif result.status == AMBIGUOUS:
+            body['message'] = 'Several register entries match this number. An admin will confirm which is yours.'
+        else:
+            body['message'] = (
+                "We couldn't reach the medical register right now — your registration will be verified shortly."
+            )
+        return Response(body)
 
     # -- no edits by id ------------------------------------------------------
     # A doctor edits their own record through /doctors/me/ (and

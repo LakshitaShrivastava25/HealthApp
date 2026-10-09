@@ -10,7 +10,18 @@ import { colors, radius, spacing, type } from '../../../src/theme';
 type TimelineEvent = { id: string; event_date: string; title: string; summary: string; event_type: string };
 type Doc = { id: string; title: string; category: string; document_date: string | null };
 type Allergy = { id: string; substance: string; reaction: string; kind: string };
-type Med = { id: string; name: string; dosage: string; frequency: string; instructions: string };
+type Med = {
+  id: string;
+  name: string;
+  dosage: string;
+  frequency: string;
+  instructions: string;
+  // One row per medicine across all the patient's prescriptions.
+  generic_name?: string;
+  status?: string;
+  last_prescribed_on?: string | null;
+  last_prescribed_by?: string;
+};
 
 export default function PatientRecordView() {
   const { profileId } = useLocalSearchParams<{ profileId: string }>();
@@ -135,6 +146,13 @@ export default function PatientRecordView() {
                   {[m.dosage, m.frequency, m.instructions].filter(Boolean).join(' · ') ||
                     'No dosage recorded'}
                 </Text>
+                {!!m.last_prescribed_on && (
+                  <Text style={type.micro}>
+                    {`Last prescribed ${m.last_prescribed_on}`}
+                    {m.last_prescribed_by ? ` by ${m.last_prescribed_by.toLowerCase().startsWith('dr') ? m.last_prescribed_by : `Dr ${m.last_prescribed_by}`}` : ''}
+                    {m.status === 'needs_review' ? ' · prescriptions disagree' : ''}
+                  </Text>
+                )}
               </View>
             </Row>
           ))

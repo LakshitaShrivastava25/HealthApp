@@ -27,6 +27,8 @@ export const doctorApi = {
     experience_years: number;
     clinic_name: string;
     registration_number: string;
+    state_council_id: string;
+    registration_year?: string;
     clinic_address: string;
     booking_phone_number: string;
     consultation_fee?: string;
@@ -39,12 +41,33 @@ export const doctorApi = {
     form.append('experience_years', String(data.experience_years));
     form.append('clinic_name', data.clinic_name);
     form.append('registration_number', data.registration_number);
+    form.append('state_council_id', data.state_council_id);
+    if (data.registration_year) form.append('registration_year', data.registration_year);
     form.append('clinic_address', data.clinic_address);
     form.append('booking_phone_number', data.booking_phone_number);
     if (data.consultation_fee) form.append('consultation_fee', data.consultation_fee);
     if (data.license_document) form.append('license_document', data.license_document);
     return api.post('/doctors/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  // The form's "Verify" button: looks the number up on the NMC register
+  // before submitting. Informational — an admin reviews every registration.
+  verifyRegistration: (data: {
+    registration_number: string;
+    state_council_id: string;
+    registration_year?: number | null;
+    full_name?: string;
+  }) => api.post<RegisterCheck>('/doctors/verify-registration/', data),
+};
+
+export type RegisterCheck = {
+  status: 'found' | 'not_found' | 'ambiguous' | 'unavailable';
+  nmc_name: string | null;
+  nmc_qualification: string | null;
+  nmc_university: string | null;
+  name_match_score: number | null;
+  name_matches: boolean | null;
+  suspended: boolean;
+  message: string;
 };
 
 export const profileApi = {

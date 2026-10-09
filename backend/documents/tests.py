@@ -392,3 +392,203 @@ class StoredFileCleanupTests(TestCase):
             with self.captureOnCommitCallbacks(execute=True):
                 doc.delete()
         self.assertFalse(Document.objects.filter(pk=doc.pk).exists())
+
+
+def pdf_pages(pages):
+    """A multi-page PDF; each page a list of text lines."""
+    objs = [b'<< /Type /Catalog /Pages 2 0 R >>', None]
+    kids = []
+    font_id = 3 + 2 * len(pages)
+    for i, lines in enumerate(pages):
+        page_id, content_id = 3 + 2 * i, 4 + 2 * i
+        kids.append(f'{page_id} 0 R')
+        content = ' '.join(['BT /F1 12 Tf 72 720 Td 14 TL'] + [f'({line}) Tj T*' for line in lines] + ['ET']).encode()
+        objs.append(
+            f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] '
+            f'/Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>'.encode()
+        )
+        objs.append(b'<< /Length ' + str(len(content)).encode() + b' >>\nstream\n' + content + b'\nendstream')
+    objs[1] = f'<< /Type /Pages /Kids [{" ".join(kids)}] /Count {len(pages)} >>'.encode()
+    objs.append(b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+    out = io.BytesIO()
+    out.write(b'%PDF-1.4\n')
+    offsets = []
+    for i, body in enumerate(objs, start=1):
+        offsets.append(out.tell())
+        out.write(f'{i} 0 obj\n'.encode() + body + b'\nendobj\n')
+    xref = out.tell()
+    out.write(f'xref\n0 {len(objs) + 1}\n'.encode())
+    out.write(b'0000000000 65535 f \n')
+    for off in offsets:
+        out.write(f'{off:010d} 00000 n \n'.encode())
+    out.write(f'trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode())
+    return out.getvalue()
+
+
+def ai_result(*medicines, date='2026-06-03', doctor='Vikram Huded'):
+    import json
+    return json.dumps({
+        'doctor_name': doctor, 'hospital_name': None, 'date': date, 'diagnosis': [],
+        'medicines': [{'name': name, 'dosage': None, 'frequency': 'OD', 'instructions': None} for name in medicines],
+        'tests': [], 'follow_up_date': None,
+    })
+
+
+PAGE_ONE = ['Dr Vikram Huded', 'Aspirin 150mg once daily after food', 'Printed on 08/10/2026 16:30']
+PAGE_ONE_REPRINT = ['Dr Vikram Huded', 'Aspirin 150mg once daily after food', 'Printed on 09/10/2026 10:05']
+PAGE_TWO = ['Follow up after review', 'Amantadine 100mg once daily']
+
+
+@override_settings(ANTHROPIC_API_KEY='sk-ant-key')
+class DuplicateDocumentTests(TestCase):
+    """
+    The same prescription uploaded two or three times — under the same
+    name, another name, or as a re-downloaded copy — must not become several
+    documents, several timeline entries and several copies of each medicine.
+    """
+
+    def setUp(self):
+        self.account = Account.objects.create_user(phone_number='+919000005555')
+        self.profile = Profile.objects.create(account=self.account, full_name='Mother', relation='parent')
+        self.client_api = APIClient()
+        self.client_api.credentials(
+            HTTP_AUTHORIZATION='Bearer ' + str(RefreshToken.for_user(self.account).access_token)
+        )
+
+    def upload(self, data, filename='rx.pdf'):
+        return self.client_api.post(
+            '/api/documents/',
+            {'profile': str(self.profile.id),
+             'file': SimpleUploadedFile(filename, data, content_type='application/pdf'),
+             'category': 'prescription', 'title': filename},
+            format='multipart',
+        )
+
+    def medicines(self):
+        return Medication.objects.filter(profile=self.profile, merged_into__isnull=True, is_archived=False)
+
+    def test_exact_same_file_under_another_name_is_not_added_again(self):
+        data = pdf_pages([PAGE_ONE])
+        with patch.object(ClaudeService, '_call', return_value=ai_result('Aspirin 150mg')) as call:
+            first = self.upload(data, 'Caches_AMB-1002-26349476.pdf')
+            second = self.upload(data, 'mum prescription june.pdf')
+            third = self.upload(data, 'Caches_AMB-1002-26349476.pdf')
+
+        self.assertEqual(first.status_code, 201, first.content)
+        self.assertEqual(first.data['upload']['outcome'], 'new')
+        for again in (second, third):
+            self.assertEqual(again.status_code, 200, again.content)
+            self.assertEqual(again.data['id'], first.data['id'])
+            self.assertEqual(again.data['upload']['outcome'], 'exact_duplicate')
+        self.assertEqual(call.call_count, 1, 'the AI is paid for once')
+        self.assertEqual(Document.objects.filter(profile=self.profile).count(), 1)
+        self.assertEqual(self.medicines().count(), 1)
+        history = self.client_api.get(f'/api/documents/{first.data["id"]}/').data['upload_history']
+        self.assertEqual([h['original_filename'] for h in history],
+                         ['Caches_AMB-1002-26349476.pdf', 'mum prescription june.pdf', 'Caches_AMB-1002-26349476.pdf'])
+
+    def test_same_filename_with_different_content_is_a_new_document(self):
+        with patch.object(ClaudeService, '_call', side_effect=[ai_result('Aspirin 150mg'), ai_result('Amantadine 100mg')]):
+            first = self.upload(pdf_pages([PAGE_ONE]), 'prescription.pdf')
+            second = self.upload(pdf_pages([PAGE_TWO]), 'prescription.pdf')
+        self.assertEqual((first.status_code, second.status_code), (201, 201))
+        self.assertNotEqual(first.data['id'], second.data['id'])
+        self.assertIsNone(second.data['duplicate_of'])
+        self.assertEqual(self.medicines().count(), 2)
+
+    def test_reprinted_copy_is_linked_and_adds_nothing(self):
+        with patch.object(ClaudeService, '_call', return_value=ai_result('Aspirin 150mg')) as call:
+            original = self.upload(pdf_pages([PAGE_ONE]))
+            copy = self.upload(pdf_pages([PAGE_ONE_REPRINT]))
+
+        self.assertEqual(copy.status_code, 201)
+        self.assertEqual(str(copy.data['duplicate_of']), str(original.data['id']))
+        self.assertEqual(copy.data['duplicate_kind'], 'same_content')
+        self.assertEqual(call.call_count, 1, 'a verified copy reuses what was already read')
+        self.assertEqual(TimelineEvent.objects.filter(source_document_id=copy.data['id']).count(), 0)
+        self.assertEqual(self.medicines().count(), 1)
+        # Kept for traceability, listed under its original rather than beside it.
+        listing = self.client_api.get('/api/documents/', {'profile_id': str(self.profile.id)}).data['results']
+        self.assertEqual([d['id'] for d in listing], [original.data['id']])
+        self.assertEqual([c['id'] for c in listing[0]['copies']], [copy.data['id']])
+
+    def test_overlapping_pdf_is_flagged_and_its_unique_content_kept(self):
+        with patch.object(ClaudeService, '_call', side_effect=[
+            ai_result('Aspirin 150mg'), ai_result('Aspirin 150mg', 'Amantadine 100mg'),
+        ]):
+            first = self.upload(pdf_pages([PAGE_ONE]))
+            bundle = self.upload(pdf_pages([PAGE_ONE_REPRINT, PAGE_TWO]))
+
+        self.assertIsNone(bundle.data['duplicate_of'], 'unique pages mean it is not a copy')
+        self.assertEqual(bundle.data['possible_duplicate']['id'], first.data['id'])
+        self.assertEqual(bundle.data['possible_duplicate']['shared_pages'], [1])
+        names = sorted(self.medicines().values_list('generic_name', flat=True))
+        self.assertEqual(names, ['Amantadine', 'Aspirin'])
+        aspirin = self.medicines().get(generic_name='Aspirin')
+        self.assertEqual(aspirin.prescription_count, 1, 'the shared page is one prescription, not two')
+
+    def test_mark_and_unmark_as_duplicate(self):
+        with patch.object(ClaudeService, '_call', side_effect=[ai_result('Aspirin 150mg'), ai_result('Aspirin 150mg', doctor='V Huded')]):
+            first = self.upload(pdf_pages([PAGE_ONE]))
+            second = self.upload(pdf_pages([['Different layout entirely', 'Ecosprin 150 daily']]))
+        url = f'/api/documents/{second.data["id"]}/'
+        response = self.client_api.post(url + 'mark-duplicate/', {'of': first.data['id']}, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['duplicate_kind'], 'manual')
+        self.assertEqual(TimelineEvent.objects.filter(source_document_id=second.data['id']).count(), 0)
+
+        response = self.client_api.post(url + 'not-duplicate/')
+        self.assertIsNone(response.data['duplicate_of'])
+        self.assertGreater(TimelineEvent.objects.filter(source_document_id=second.data['id']).count(), 0)
+
+    def test_deleting_the_original_promotes_its_copy(self):
+        with patch.object(ClaudeService, '_call', return_value=ai_result('Aspirin 150mg')):
+            original = self.upload(pdf_pages([PAGE_ONE]))
+            copy = self.upload(pdf_pages([PAGE_ONE_REPRINT]))
+        self.assertEqual(self.client_api.delete(f'/api/documents/{original.data["id"]}/').status_code, 204)
+        promoted = Document.objects.get(pk=copy.data['id'])
+        self.assertIsNone(promoted.duplicate_of)
+        self.assertGreater(TimelineEvent.objects.filter(source_document=promoted).count(), 0)
+        self.assertEqual(self.medicines().count(), 1, 'the prescription is still on record')
+
+    def test_filename_title_is_replaced_by_a_readable_one(self):
+        with patch.object(ClaudeService, '_call', return_value=ai_result('Aspirin 150mg')):
+            response = self.upload(pdf_pages([PAGE_ONE]), 'Caches_AMB-1002-26349476.pdf')
+        self.assertEqual(response.data['title'], 'Prescription · Dr Vikram Huded · 3 Jun 2026')
+        self.assertEqual(response.data['original_filename'], 'Caches_AMB-1002-26349476.pdf')
+
+    def test_backfill_links_copies_uploaded_before_detection_existed(self):
+        """What production already holds: the same file stored twice, unlinked."""
+        import json
+        from datetime import date
+
+        from django.core.management import call_command
+
+        from documents.derived import rebuild_derived_records
+
+        data = pdf_pages([PAGE_ONE])
+        documents = []
+        for minute in (30, 47):
+            document = Document.objects.create(
+                profile=self.profile, title='Caches_AMB-1002-26349476.pdf', category='prescription',
+                file=SimpleUploadedFile('Caches_AMB-1002-26349476.pdf', data),
+                document_date=date(2026, 6, 3), doctor_name='Vikram Huded',
+                status=Document.Status.PROCESSED, structured_data=json.loads(ai_result('Aspirin 150mg')),
+            )
+            rebuild_derived_records(document)
+            documents.append(document)
+        first, second = documents
+
+        out = io.StringIO()
+        call_command('backfill_document_fingerprints', stdout=out)
+        self.assertIn('EXACT copy', out.getvalue())
+        self.assertIsNone(Document.objects.get(pk=second.pk).duplicate_of, 'a dry run changes nothing')
+
+        call_command('backfill_document_fingerprints', '--apply', stdout=io.StringIO())
+        copy = Document.objects.get(pk=second.pk)
+        self.assertEqual(copy.duplicate_of_id, first.pk)
+        self.assertEqual(copy.duplicate_kind, Document.DuplicateKind.EXACT)
+        self.assertTrue(copy.file_sha256)
+        self.assertEqual(TimelineEvent.objects.filter(source_document=copy).count(), 0)
+        self.assertTrue(Document.objects.filter(pk=copy.pk).exists(), 'the file is kept')
+        self.assertEqual(self.medicines().count(), 1)

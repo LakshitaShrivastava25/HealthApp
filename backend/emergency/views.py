@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from family.permissions import assert_owns_profile
+from medicines.consolidation import ensure_fresh
 from .models import EmergencyProfile
 from .serializers import EmergencyProfileSerializer, PublicEmergencyViewSerializer
 
@@ -109,7 +110,13 @@ def public_emergency_view(request, token):
     if ep.include_allergies:
         data['allergies'] = list(profile.allergies.values_list('substance', flat=True))
     if ep.include_medications:
-        data['medications'] = list(profile.medications.filter(is_active=True).values_list('name', flat=True))
+        ensure_fresh([profile.pk])
+        # One name per medicine: rows merged during consolidation and
+        # medicines whose prescriptions were deleted are inactive.
+        data['medications'] = list(
+            profile.medications.filter(is_active=True, merged_into__isnull=True, is_archived=False)
+            .order_by('name').values_list('name', flat=True)
+        )
     if ep.include_emergency_contact:
         data['emergency_contact_name'] = ep.emergency_contact_name
         data['emergency_contact_phone'] = ep.emergency_contact_phone

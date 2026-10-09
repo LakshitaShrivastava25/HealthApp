@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from ai.claude_service import ClaudeService
 from config.throttling import ActionThrottleMixin
 from doctors.access import acting_doctor, readable_profile_ids
+from medicines.consolidation import ensure_fresh
 from .models import AllergyRecord, Notification, Profile
 from .permissions import assert_owns_profile, profile_id_param
 from .serializers import AllergyRecordSerializer, NotificationSerializer, ProfileSerializer
@@ -70,6 +71,7 @@ class ProfileViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
         if acting_doctor(request):
             raise PermissionDenied("The AI Health Assistant is a patient feature.")
         profile = self.get_object()
+        ensure_fresh([profile.pk])
         serializer = AskHealthQuestionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -80,14 +82,20 @@ class ProfileViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
             'active_medications': [
                 {
                     'name': m.name,
+                    'generic_name': m.generic_name,
                     'dosage': m.dosage,
                     'frequency': m.frequency,
                     'instructions': m.instructions,
+                    # One row per medicine across all prescriptions, with
+                    # why it is considered current (medicines/consolidation.py).
+                    'status': m.status,
+                    'status_reason': m.status_reason,
+                    'last_prescribed_on': m.last_prescribed_on,
                     'reminder_times': list(
                         m.reminders.filter(is_active=True).values_list('time_of_day', flat=True)
                     ),
                 }
-                for m in profile.medications.filter(is_active=True)
+                for m in profile.medications.filter(is_active=True, merged_into__isnull=True, is_archived=False)
             ],
             'recent_documents': [
                 {

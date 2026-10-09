@@ -20,7 +20,25 @@ type Doc = {
   file: string | null;
   structured_data: Record<string, unknown>;
   uploaded_at: string;
+  original_filename?: string;
+  duplicate_of?: string | null;
+  duplicate_kind?: string;
+  possible_duplicate?: { id: string; title: string; score: number | null; shared_pages: number[] } | null;
+  copies?: { id: string; uploaded_at: string; duplicate_kind: string }[];
+  upload_history?: { original_filename: string; uploaded_at: string; outcome: string }[];
 };
+
+const DUPLICATE_KIND_LABEL: Record<string, string> = {
+  exact: 'the exact same file',
+  same_content: 'the same text on every page',
+  manual: 'marked by you',
+};
+
+function shortDate(iso: string) {
+  const d = new Date(iso);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 const statusTone = {
   processed: 'success',
@@ -159,6 +177,8 @@ export default function DocumentDetail() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const applyDoc = useCallback((data: Doc) => {
     setDoc(data);
@@ -202,6 +222,20 @@ export default function DocumentDetail() {
       clearInterval(timer);
     };
   }, [status, id, applyDoc]);
+
+  /** Confirms or rejects a duplicate link; medicines and timeline follow server-side. */
+  async function handleDuplicate(run: () => Promise<{ data: Doc }>) {
+    setDuplicateError(null);
+    setDuplicateBusy(true);
+    try {
+      const { data } = await run();
+      applyDoc(data);
+    } catch {
+      setDuplicateError("Couldn't save that. Check your connection and try again.");
+    } finally {
+      setDuplicateBusy(false);
+    }
+  }
 
   function setField<K extends keyof ReviewForm>(key: K, value: ReviewForm[K]) {
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -317,6 +351,54 @@ export default function DocumentDetail() {
         )}
       </Card>
 
+      {/* A copy is kept for traceability but adds nothing to the timeline or
+          medicines; an unverified match is only a question to the person. */}
+      {!!doc.duplicate_of && (
+        <Card style={{ backgroundColor: colors.infoBg }}>
+          <Text style={type.title}>This is a copy of another document</Text>
+          <Text style={[type.caption, { marginTop: spacing.xs, color: colors.ink700 }]}>
+            Matched by {DUPLICATE_KIND_LABEL[doc.duplicate_kind ?? ''] ?? 'content'}. It is kept, but its medicines and
+            timeline entries are not counted twice.
+          </Text>
+          <Row style={{ marginTop: spacing.md }}>
+            <Button variant="secondary" style={{ flex: 1 }} onPress={() => router.push(`/(patient)/document/${doc.duplicate_of}`)}>
+              Open original
+            </Button>
+            <Button variant="secondary" style={{ flex: 1 }} loading={duplicateBusy}
+              onPress={() => handleDuplicate(() => documentsApi.notDuplicate(doc.id))}>
+              It's different
+            </Button>
+          </Row>
+        </Card>
+      )}
+
+      {!doc.duplicate_of && !!doc.possible_duplicate && (
+        <Card style={{ backgroundColor: colors.warningBg }}>
+          <Text style={type.title}>Possibly the same as “{doc.possible_duplicate.title}”</Text>
+          <Text style={[type.caption, { marginTop: spacing.xs, color: colors.ink700 }]}>
+            {doc.possible_duplicate.shared_pages.length
+              ? `Page${doc.possible_duplicate.shared_pages.length > 1 ? 's' : ''} ${doc.possible_duplicate.shared_pages.join(', ')} match that document, but this file also has content of its own.`
+              : `Its text is ${Math.round((doc.possible_duplicate.score ?? 0) * 100)}% the same as that document.`}{' '}
+            Both are kept until you decide.
+          </Text>
+          <Row style={{ marginTop: spacing.md }}>
+            <Button variant="secondary" style={{ flex: 1 }} loading={duplicateBusy}
+              onPress={() => handleDuplicate(() => documentsApi.markDuplicate(doc.id, doc.possible_duplicate!.id))}>
+              It's a duplicate
+            </Button>
+            <Button variant="secondary" style={{ flex: 1 }} disabled={duplicateBusy}
+              onPress={() => handleDuplicate(() => documentsApi.notDuplicate(doc.id))}>
+              Keep both
+            </Button>
+          </Row>
+          <Pressable onPress={() => router.push(`/(patient)/document/${doc.possible_duplicate!.id}`)} hitSlop={8}
+            style={{ marginTop: spacing.sm }}>
+            <Text style={[type.label, { color: colors.brandPurple }]}>Compare with that document →</Text>
+          </Pressable>
+        </Card>
+      )}
+      {!!duplicateError && <ErrorNote message={duplicateError} />}
+
       {doc.status === 'needs_review' && !!form && (
         <Card>
           <CardHeader
@@ -424,6 +506,29 @@ export default function DocumentDetail() {
         <CardHeader title="Extracted details" />
         <StructuredData data={doc.structured_data ?? {}} />
       </Card>
+
+      {(!!doc.original_filename || !!doc.copies?.length ||
+        (doc.upload_history ?? []).some((u) => u.outcome === 'exact_duplicate')) && (
+        <Card>
+          <CardHeader title="Uploads" />
+          {!!doc.original_filename && <Text style={type.caption}>Uploaded as {doc.original_filename}</Text>}
+          {(doc.upload_history ?? [])
+            .filter((u) => u.outcome === 'exact_duplicate')
+            .map((u, i) => (
+              <Text key={i} style={[type.caption, { marginTop: spacing.xs }]}>
+                Uploaded again on {shortDate(u.uploaded_at)}
+                {u.original_filename ? ` as ${u.original_filename}` : ''} — same file, not added twice.
+              </Text>
+            ))}
+          {(doc.copies ?? []).map((c) => (
+            <Pressable key={c.id} onPress={() => router.push(`/(patient)/document/${c.id}`)} hitSlop={6}>
+              <Text style={[type.caption, { marginTop: spacing.xs, color: colors.brandPurple }]}>
+                Copy uploaded on {shortDate(c.uploaded_at)} ({DUPLICATE_KIND_LABEL[c.duplicate_kind] ?? 'duplicate'}) →
+              </Text>
+            </Pressable>
+          ))}
+        </Card>
+      )}
 
       <Pressable onPress={confirmDelete} style={styles.deleteRow}>
         <Feather name="trash-2" size={15} color={colors.danger} />

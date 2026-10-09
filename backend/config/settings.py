@@ -186,11 +186,14 @@ REST_FRAMEWORK = {
         'ai': os.getenv('THROTTLE_AI', '60/hour'),
         'uploads': os.getenv('THROTTLE_UPLOADS', '60/hour'),
         'access_requests': os.getenv('THROTTLE_ACCESS_REQUESTS', '30/hour'),
+        # The registration form's "Verify" button looks a number up on the NMC
+        # register; a budget keeps it from becoming a free register scraper.
+        'nmc_precheck': os.getenv('THROTTLE_NMC_PRECHECK', '10/min'),
     } if not TESTING else {
         # The suite makes hundreds of requests from one address; the
         # throttle tests set their own low rates.
         scope: '100000/hour'
-        for scope in ('anon', 'user', 'otp_send', 'otp_verify', 'ai', 'uploads', 'access_requests')
+        for scope in ('anon', 'user', 'otp_send', 'otp_verify', 'ai', 'uploads', 'access_requests', 'nmc_precheck')
     },
 }
 
@@ -296,3 +299,17 @@ LOGGING = {
     'handlers': {'console': {'class': 'logging.StreamHandler'}},
     'loggers': {'accounts': {'handlers': ['console'], 'level': 'INFO'}},
 }
+
+# --- Doctor verification (NMC Indian Medical Register) --------------------
+# See doctors/services/verification. The check only informs the admin who
+# approves or rejects; it never decides on its own.
+NMC_BASE_URL = os.getenv('NMC_BASE_URL', 'https://nmc.org.in/indian-medical-register')
+NMC_TIMEOUT = float(os.getenv('NMC_TIMEOUT', '20'))
+# Optional extra CA bundle (.pem) if NMC's TLS chain ever omits its
+# intermediate certificate. Never disable certificate checks instead.
+NMC_CA_BUNDLE = os.getenv('NMC_CA_BUNDLE', '')
+# Name similarity (0-1) the admin queue shows as a match.
+DOCTOR_NAME_MATCH_THRESHOLD = float(os.getenv('DOCTOR_NAME_MATCH_THRESHOLD', '0.85'))
+# Optional paid fallback, tried only when NMC is unreachable. Off unless both are set.
+DOCTOR_VERIFY_VENDOR_URL = os.getenv('DOCTOR_VERIFY_VENDOR_URL', '')
+DOCTOR_VERIFY_VENDOR_TOKEN = os.getenv('DOCTOR_VERIFY_VENDOR_TOKEN', '')

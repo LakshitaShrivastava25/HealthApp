@@ -142,6 +142,8 @@ GET       /api/public/emergency/{token}/    ← unauthenticated, allow-listed fi
 ### Doctors (`/api/`)
 ```
 GET/POST  /api/doctors/
+GET/PATCH /api/doctors/me/
+POST      /api/doctors/verify-registration/   # NMC pre-check, 10/min
 GET/POST  /api/doctor-access/
 POST      /api/doctor-access/{id}/approve/
 POST      /api/doctor-access/{id}/deny/
@@ -154,13 +156,80 @@ GET/POST  /api/consultation-notes/
 GET  /api/admin/dashboard/summary/
 GET/PATCH  /api/admin/documents/?status=needs_review
 GET/PATCH  /api/admin/insurance-policies/?status=needs_review
-GET/PATCH  /api/admin/doctor-verification/
-POST       /api/admin/doctor-verification/{id}/approve/
-POST       /api/admin/doctor-verification/{id}/reject/
+GET        /api/admin/doctors/?status=review|pending,manual_review,...
+GET        /api/admin/doctors/verification-queue/
+POST       /api/admin/doctors/{id}/approve/
+POST       /api/admin/doctors/{id}/reject/        {"reason": "..."}
+POST       /api/admin/doctors/{id}/reverify/
+           (/api/admin/doctor-verification/... is the same viewset, kept for older apps)
 GET/PATCH  /api/admin/accounts/?search=
 POST       /api/admin/accounts/{id}/deactivate/
 GET        /api/admin/audit-log/
 ```
+
+## Doctor NMC verification
+
+When a doctor registers (or changes their name, registration number,
+council, year or licence), the backend looks the registration up on the
+**NMC Indian Medical Register** and stores what it found for the admin.
+**The check never approves or rejects anyone** — every registration lands in
+the admin queue, and only an admin decides.
+
+**Providers** (`doctors/services/verification/`, swappable behind one
+`VerificationResult` shape):
+- `nmc_provider.py` — the NMC's public JSON search
+  (`/indian-medical-register/search`, plus `/black-list-doctors/search` for
+  removals). Free, no key. One request per check, no pagination, no bulk
+  scraping; retries 5xx/429/timeouts twice with backoff. Only an allowlist of
+  fields is kept — DOB, father's name and address are dropped before
+  anything is stored or logged.
+- `vendor_provider.py` — optional paid fallback, **off** unless both vendor
+  env vars are set, and only consulted when NMC is unreachable. Request and
+  response mapping is a TODO for whichever vendor is chosen.
+
+**Statuses** (`Doctor.verification_status`):
+
+| Status | Meaning | Who sets it |
+|---|---|---|
+| `pending` | Just submitted, not yet checked | registration / credential edit |
+| `manual_review` | Checked — result waiting for an admin ("Under review") | the check |
+| `failed` | Register unreachable — retried by the cron job ("Under review") | the check |
+| `verified` | Approved; visible in Find Care | **admin only** |
+| `rejected` | Not approved; the doctor sees `rejection_reason` | **admin only** |
+
+A verified doctor who later shows up as removed on the register goes back to
+`manual_review`; nobody is un-verified automatically.
+
+**Env vars** (all optional):
+
+| Var | Default | |
+|---|---|---|
+| `NMC_BASE_URL` | `https://nmc.org.in/indian-medical-register` | |
+| `NMC_TIMEOUT` | `20` | seconds per request |
+| `NMC_CA_BUNDLE` | — | CA file, only if NMC's chain fails on the host. TLS is never disabled. |
+| `DOCTOR_NAME_MATCH_THRESHOLD` | `0.85` | name-match score shown as "matches" |
+| `DOCTOR_VERIFY_VENDOR_URL` / `DOCTOR_VERIFY_VENDOR_TOKEN` | — | paid fallback; leave unset |
+| `THROTTLE_NMC_PRECHECK` | `10/min` | the form's Verify button |
+
+**Commands**
+```bash
+python manage.py nmc_smoke_test 2001123450 MAH   # one live lookup, PII-free output
+python manage.py reverify_doctors                # pending + failed, one at a time
+python manage.py reverify_doctors --audit-verified   # removal check for verified doctors
+```
+
+**Render cron job** (recommended): a Cron Job service on the backend's
+repo/env, schedule `0 */6 * * *`, command
+`python manage.py reverify_doctors --limit 100 --pause 2`.
+
+**Limitations**
+- The NMC register is a public website with no SLA; slow or down periods
+  show up as `failed` and are retried. Admins can always decide by hand
+  (the queue links to the register).
+- Older app versions don't send a council, so their registrations are
+  "Not checked" until the doctor adds one.
+- Tests mock every HTTP call (`doctors/test_doctor_verification.py`); only
+  `nmc_smoke_test` talks to the real register.
 
 ## Project layout
 ```

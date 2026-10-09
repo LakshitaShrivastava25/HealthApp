@@ -298,7 +298,8 @@ class RegisterFromPatientAccountTests(TestCase):
         doctor_id = response.data['id']
         account.refresh_from_db()
         self.assertEqual(account.role, Account.Role.DOCTOR)
-        self.assertEqual(response.data['verification_status'], 'pending')
+        # Waiting for an admin (the register check moves it to review).
+        self.assertIn(response.data['verification_status'], Doctor.AWAITING_ADMIN)
         self.assertEqual(response.data['full_name'], 'Asha Rao')
 
         # Still a patient in user mode.

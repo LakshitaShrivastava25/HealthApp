@@ -160,9 +160,16 @@ export const adminApi = {
   validatePolicy: (id: string, data: Record<string, unknown>) =>
     api.patch(`/admin/insurance-policies/${id}/`, data),
 
-  doctorVerification: () => api.get('/admin/doctor-verification/'),
+  // status: 'review' (pending + under review + register unreachable), a
+  // single status, or '' for everyone. Paginated, 20 a page.
+  doctorQueue: (status: string, page = 1) =>
+    api.get('/admin/doctors/', { params: { ...(status ? { status } : {}), page } }),
   approveDoctor: (id: string) => api.post(`/admin/doctor-verification/${id}/approve/`),
-  rejectDoctor: (id: string) => api.post(`/admin/doctor-verification/${id}/reject/`),
+  // The reason is shown to the doctor so they can correct their details.
+  rejectDoctor: (id: string, reason?: string) =>
+    api.post(`/admin/doctor-verification/${id}/reject/`, reason ? { reason } : {}),
+  // Asks the NMC register again; records what it says, decides nothing.
+  reverifyDoctor: (id: string) => api.post(`/admin/doctors/${id}/reverify/`),
 
   // Patient PROFILES (family members), distinct from accounts() below which
   // lists login records. Staff-only directory endpoint.

@@ -17,6 +17,7 @@ import {
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { allergiesApi, authApi, profilesApi, unwrap } from '../../src/lib/api';
+import { DOCTOR_STATUS_LABEL } from '../../src/lib/councils';
 import { DELETE_ACCOUNT_URL, PRIVACY_URL, TERMS_URL } from '../../src/lib/links';
 import { colors, radius, spacing, type } from '../../src/theme';
 import NotificationSettingsCard from '../../src/components/NotificationSettingsCard';
@@ -284,7 +285,9 @@ export default function Settings() {
           <Text style={[type.caption, { flex: 1 }]}>Account</Text>
           {/* One account can be both; "doctor" alone read as if User mode
               were not this person's own. */}
-          <Badge tone="neutral">{doctor ? `User · Doctor (${doctor.verification_status})` : 'User'}</Badge>
+          <Badge tone="neutral">{doctor
+              ? `User · Doctor (${(DOCTOR_STATUS_LABEL[doctor.verification_status] ?? doctor.verification_status).toLowerCase()})`
+              : 'User'}</Badge>
         </Row>
 
         <Pressable

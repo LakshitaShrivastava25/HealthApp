@@ -30,6 +30,8 @@ import {
 } from '@shared/auth';
 import { DEFAULT_COUNTRY, type Country } from '@shared/data/countries';
 import BookingPhoneField from '../components/BookingPhoneField';
+import CouncilField from '../components/CouncilField';
+import RegisterCheck from '../components/RegisterCheck';
 import { useAuth } from '../context/AuthContext';
 import { doctorApi } from '../lib/api';
 
@@ -97,6 +99,8 @@ export default function Register() {
   const [experienceYears, setExperienceYears] = useState('');
   const [clinicName, setClinicName] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
+  const [councilId, setCouncilId] = useState('');
+  const [registrationYear, setRegistrationYear] = useState('');
   const [clinicAddress, setClinicAddress] = useState('');
   const [bookingCountry, setBookingCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [bookingDigits, setBookingDigits] = useState('');
@@ -111,6 +115,10 @@ export default function Register() {
     // required field is blocked natively before any request is made.
     e.preventDefault();
     setError(null);
+    if (!councilId) {
+      setError('Choose the State Medical Council you are registered with.');
+      return;
+    }
     setSaving(true);
     try {
       await doctorApi.register({
@@ -127,6 +135,8 @@ export default function Register() {
         experience_years: Number(experienceYears) || 0,
         clinic_name: clinicName,
         registration_number: registrationNumber,
+        state_council_id: councilId,
+        registration_year: registrationYear,
         clinic_address: clinicAddress,
         booking_phone_number: `${bookingCountry.dialCode}${bookingDigits}`,
         consultation_fee: consultationFee,
@@ -242,9 +252,24 @@ export default function Register() {
             icon={<BadgeCheck size={15} />}
             value={registrationNumber}
             onChange={(e) => setRegistrationNumber(e.target.value)}
-            placeholder="MCI-123456"
-            hint="Used by our team to verify you against the medical register."
+            placeholder="e.g. 2001123450"
+            hint="Exactly as it appears on your council registration certificate."
             required
+          />
+          <CouncilField value={councilId} onChange={setCouncilId} required />
+          <Field
+            label="Year of registration (optional)"
+            icon={<CalendarClock size={15} />}
+            value={registrationYear}
+            onChange={(e) => setRegistrationYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            inputMode="numeric"
+            placeholder="e.g. 2015"
+          />
+          <RegisterCheck
+            registrationNumber={registrationNumber}
+            councilId={councilId}
+            year={registrationYear}
+            fullName={fullName}
           />
           <TextAreaField
             label="Clinic address"

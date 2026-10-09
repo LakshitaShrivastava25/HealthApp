@@ -3,10 +3,40 @@ import uuid
 
 from rest_framework import serializers
 
+from django.utils import timezone
+
 from documents.validators import validate_upload
 from family.models import Profile
 
-from .models import ConsultationNote, Doctor, DoctorPatientAccess
+from .councils import council_name
+from .models import ConsultationNote, Doctor, DoctorPatientAccess, normalize_registration_number
+
+
+def _check_registration(attrs, instance=None):
+    """
+    Normalises the registration fields in `attrs` and refuses a number that
+    another CuraPath doctor already registered with the same council — as a
+    400 here, before the database constraint could turn it into a 500.
+    """
+    number = attrs.get('registration_number', getattr(instance, 'registration_number', ''))
+    council = attrs.get('state_council_id', getattr(instance, 'state_council_id', ''))
+    number = normalize_registration_number(number)
+    if 'registration_number' in attrs:
+        attrs['registration_number'] = number
+    if number and council:
+        taken = Doctor.objects.filter(registration_number=number, state_council_id=council)
+        if instance is not None:
+            taken = taken.exclude(pk=instance.pk)
+        if taken.exists():
+            raise serializers.ValidationError({
+                'registration_number': [
+                    f'This registration number is already registered on CuraPath for {council_name(council)}.'
+                ],
+            })
+    year = attrs.get('registration_year')
+    if year is not None and not (1900 <= year <= timezone.localdate().year):
+        raise serializers.ValidationError({'registration_year': ['Enter the year you were registered.']})
+    return attrs
 
 # A booking number may be a mobile or a landline, so no exact digit count is
 # enforced — only a sane range. Mirrors the Doctor Portal's own limits.
@@ -15,15 +45,28 @@ BOOKING_PHONE_MAX_DIGITS = 15
 
 
 class DoctorSerializer(serializers.ModelSerializer):
+    # Shown to the doctor alongside the code they picked.
+    state_council_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Doctor
         fields = [
             'id', 'full_name', 'specialization', 'qualification', 'experience_years',
             'license_document', 'verification_status', 'clinic_name', 'consultation_fee',
-            'registration_number', 'clinic_address', 'booking_phone_number',
+            'registration_number', 'state_council_id', 'state_council_name', 'registration_year',
+            'clinic_address', 'booking_phone_number',
             'available_days', 'clinic_open_time', 'clinic_close_time',
+            # What the doctor is told about their review. The register's full
+            # record and the match score stay with the admin.
+            'rejection_reason', 'nmc_result', 'nmc_name', 'nmc_qualification',
         ]
-        read_only_fields = ['id', 'verification_status']
+        read_only_fields = [
+            'id', 'verification_status', 'rejection_reason', 'nmc_result', 'nmc_name', 'nmc_qualification',
+        ]
+        # Uniqueness of (registration number, council) is checked in
+        # _check_registration, after normalising, with a message a doctor can
+        # act on — instead of DRF's generic "must make a unique set".
+        validators = []
         # A licence is a PDF or a photo (documents/validators.py). An admin
         # opens it from the verification queue, so anything else is refused.
         extra_kwargs = {'license_document': {'validators': [validate_upload]}}
@@ -50,7 +93,13 @@ class DoctorSerializer(serializers.ModelSerializer):
             }
             if missing:
                 raise serializers.ValidationError(missing)
-        return attrs
+        # state_council_id is not in the required list: app versions released
+        # before it existed don't send it, and their registrations still go to
+        # the admin queue — just without an automatic register check.
+        return _check_registration(attrs, self.instance)
+
+    def get_state_council_name(self, obj):
+        return council_name(obj.state_council_id)
 
     def validate_booking_phone_number(self, value):
         """
@@ -206,10 +255,15 @@ class DoctorProfileUpdateSerializer(AvailabilityValidationMixin, serializers.Mod
         fields = [
             'full_name', 'specialization', 'qualification', 'experience_years',
             'clinic_name', 'clinic_address', 'registration_number',
+            'state_council_id', 'registration_year',
             'booking_phone_number', 'consultation_fee', 'license_document',
             'available_days', 'clinic_open_time', 'clinic_close_time',
         ]
         extra_kwargs = {'license_document': {'validators': [validate_upload]}}
+        validators = []  # see DoctorSerializer.Meta
+
+    def validate(self, attrs):
+        return _check_registration(super().validate(attrs), self.instance)
 
     # Reuse the exact name and phone rules the registration serializer
     # enforces, rather than letting the profile page be a back door around
@@ -240,15 +294,23 @@ class DoctorProfileUpdateSerializer(AvailabilityValidationMixin, serializers.Mod
         verified.
         """
         changed = False
-        for field in ('registration_number', 'full_name'):
+        for field in ('registration_number', 'full_name', 'state_council_id'):
             if field in validated_data:
                 new = (validated_data[field] or '').strip()
                 old = (getattr(instance, field) or '').strip()
                 changed = changed or new.casefold() != old.casefold()
+        if 'registration_year' in validated_data and validated_data['registration_year'] != instance.registration_year:
+            changed = True
         if validated_data.get('license_document'):
             changed = True
         if changed:
+            # Back to the admin queue as a fresh submission — including after
+            # a rejection, which is how a doctor corrects their details.
             validated_data['verification_status'] = Doctor.VerificationStatus.PENDING
+            validated_data['rejection_reason'] = ''
+            validated_data['submitted_at'] = timezone.now()
+        # The view re-checks the register when this is set.
+        self.credentials_changed = changed
         return super().update(instance, validated_data)
 
 

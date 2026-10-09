@@ -32,6 +32,8 @@ type Doc = {
   status: string;
   document_date: string | null;
   hospital_name: string;
+  copies?: { id: string }[];
+  possible_duplicate?: { id: string; title: string } | null;
 };
 
 export default function MedicalLocker() {
@@ -40,6 +42,7 @@ export default function MedicalLocker() {
   const [query, setQuery] = useState('');
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,13 +61,36 @@ export default function MedicalLocker() {
     const file = e.target.files?.[0];
     if (!file || !activeProfile) return;
     setUploading(true);
+    setUploadNotice(null);
     try {
       const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other');
       await loadDocuments();
+      if (data?.upload?.outcome === 'exact_duplicate') {
+        // The same file (under any name) is already here: nothing was added
+        // and nothing was processed again. Show the one that is.
+        setUploadNotice({ tone: 'info', text: data.upload.message });
+        setOpenDocId(data.id);
+        return;
+      }
+      if (data?.duplicate_of) {
+        setUploadNotice({
+          tone: 'info',
+          text: 'This is a copy of a prescription already in your locker (same text on every page). It was kept with the original and not counted twice.',
+        });
+      }
       // Open the review screen straight away when the AI produced something
       // to check. Without this the review step exists but is easy to miss —
       // the document would just appear in the list already looking done.
       if (data?.id && data.status === 'needs_review') setOpenDocId(data.id);
+    } catch {
+      // Uploads wait for processing, so a slow connection can time out even
+      // though the file arrived. Re-uploading is safe now — the same file
+      // is recognised and not added twice.
+      setUploadNotice({
+        tone: 'error',
+        text: "The upload didn't finish. Check your connection and try again — if it did arrive, it won't be added twice.",
+      });
+      await loadDocuments().catch(() => undefined);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -100,6 +126,20 @@ export default function MedicalLocker() {
             />
           </div>
         </div>
+
+        {uploadNotice && (
+          <div
+            role={uploadNotice.tone === 'error' ? 'alert' : 'status'}
+            className={`mb-5 flex items-start gap-3 rounded-xl2 border px-4 py-3 text-sm ${
+              uploadNotice.tone === 'error' ? 'border-danger/30 bg-danger-bg text-danger' : 'border-info/30 bg-info-bg text-ink-700'
+            }`}
+          >
+            <span className="flex-1">{uploadNotice.text}</span>
+            <button onClick={() => setUploadNotice(null)} className="text-xs font-medium text-ink-500" aria-label="Dismiss">
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <div className="flex gap-1.5 mb-5 flex-wrap">
           {tabs.map((t) => (
@@ -140,6 +180,10 @@ export default function MedicalLocker() {
                     <Badge tone={d.status === 'processed' ? 'success' : d.status === 'needs_review' ? 'warning' : 'neutral'}>
                       {d.status.replace('_', ' ')}
                     </Badge>
+                    {!!d.copies?.length && (
+                      <Badge tone="info">+{d.copies.length} cop{d.copies.length === 1 ? 'y' : 'ies'}</Badge>
+                    )}
+                    {d.possible_duplicate && <Badge tone="warning">possible duplicate</Badge>}
                   </div>
                 </div>
               </Card>

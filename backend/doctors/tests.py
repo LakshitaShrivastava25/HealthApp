@@ -137,7 +137,7 @@ class DoctorDirectoryExposureTests(TestCase):
 
         response = api.patch('/api/doctors/me/', {'full_name': 'Someone Famous'}, format='multipart')
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['verification_status'], 'pending')
+        self.assertIn(response.data['verification_status'], Doctor.AWAITING_ADMIN)
 
         self.verified.verification_status = Doctor.VerificationStatus.VERIFIED
         self.verified.save()
@@ -146,7 +146,7 @@ class DoctorDirectoryExposureTests(TestCase):
             {'license_document': SimpleUploadedFile('new.pdf', b'%PDF-1.4 new', content_type='application/pdf')},
             format='multipart',
         )
-        self.assertEqual(response.data['verification_status'], 'pending')
+        self.assertIn(response.data['verification_status'], Doctor.AWAITING_ADMIN)
 
     def test_licence_must_be_a_real_pdf_or_photo(self):
         api = self.api_as(self.pending_account)

@@ -85,6 +85,10 @@ export const documentsApi = {
   correct: (id: string, structuredData: Record<string, unknown>) =>
     api.patch(`/documents/${id}/correct/`, { structured_data: structuredData }),
   delete: (id: string) => api.delete(`/documents/${id}/`),
+  // The person confirms this is a copy of another document (kept, but it
+  // adds nothing to the timeline or medicines), or that it is not.
+  markDuplicate: (id: string, ofId: string) => api.post(`/documents/${id}/mark-duplicate/`, { of: ofId }),
+  notDuplicate: (id: string) => api.post(`/documents/${id}/not-duplicate/`),
 };
 
 export const doctorAccessApi = {
@@ -121,7 +125,16 @@ export const insuranceApi = {
 };
 
 export const medicinesApi = {
-  list: (profileId: string) => api.get('/medications/', { params: { profile_id: profileId } }),
+  // One row per medicine across every prescription. scope: 'current'
+  // (default — what the person is meant to be taking), 'past' or 'all'.
+  list: (profileId: string, scope: 'current' | 'past' | 'all' = 'current') =>
+    api.get('/medications/', { params: { profile_id: profileId, scope } }),
+  // The person's own answer to "still taking it?" — wins until a newer prescription.
+  setStatus: (id: string, status: 'taking' | 'stopped') =>
+    api.post(`/medications/${id}/set-status/`, { status }),
+  merge: (id: string, otherId: string) => api.post(`/medications/${id}/merge/`, { other: otherId }),
+  keepSeparate: (id: string, otherId: string) => api.post(`/medications/${id}/keep-separate/`, { other: otherId }),
+  unmerge: (id: string) => api.post(`/medications/${id}/unmerge/`),
   create: (data: { profile: string; name: string; dosage: string; instructions: string; frequency: string }) =>
     api.post('/medications/', data),
   delete: (id: string) => api.delete(`/medications/${id}/`),

@@ -11,6 +11,9 @@ router = DefaultRouter()
 router.register('documents', AdminDocumentViewSet, basename='admin-document')
 router.register('insurance-policies', AdminInsurancePolicyViewSet, basename='admin-insurance-policy')
 router.register('doctor-verification', AdminDoctorVerificationViewSet, basename='admin-doctor-verification')
+# The same queue under the name the NMC verification brief uses:
+# /api/admin/doctors/verification-queue/, /api/admin/doctors/{id}/approve/ …
+router.register('doctors', AdminDoctorVerificationViewSet, basename='admin-doctors')
 router.register('accounts', AdminAccountViewSet, basename='admin-account')
 router.register('patients', AdminPatientProfileViewSet, basename='admin-patient')
 router.register('audit-log', AuditLogViewSet, basename='admin-audit-log')

@@ -131,12 +131,27 @@ Uploading a document writes the record *and* what it implies:
 - a **timeline event for the document itself** — always, even with no key
   and no readable text, because the document is a real dated health event
 - a timeline event per **diagnosis** and per **test** found
-- a **Medication** row per medicine found on a prescription
+- a **MedicationOccurrence** per medicine line on the prescription, folded
+  into **one `Medication` per medicine** across all of the profile's
+  prescriptions (`backend/medicines/consolidation.py`). Aspirin on four
+  prescriptions is one medicine with four history entries, not four rows.
 
-Rebuilding is idempotent. Timeline events are deleted and recreated;
-medications are only ever added, never deleted — a `Medication` owns its
-`ReminderSchedule` rows through a cascading FK, so rebuilding by deletion
-would wipe reminder times the person set by hand.
+A medicine's status (continued / dose changed / stopped / course completed /
+one-time / needs review) comes only from what the prescriptions explicitly
+say. A medicine missing from a newer prescription is never marked stopped;
+the app asks "still taking it?" instead. See `backend/medicines/normalize.py`
+for how two lines are judged to be the same medicine (active ingredients +
+route + plain vs modified-release; strength changes are "dose changed").
+
+The exact same file uploaded again — under any filename — is recognised by
+its SHA-256 and not stored or processed twice; a re-downloaded copy with the
+same text on every page is kept but linked to the original
+(`backend/documents/duplicates.py`).
+
+Rebuilding is idempotent. Timeline events and prescription lines are deleted
+and recreated; `Medication` rows are never deleted — duplicates are merged
+(`merged_into`) and reminders move to the surviving row, because a
+`Medication` owns its `ReminderSchedule` rows through a cascading FK.
 
 ## Known remaining limitation
 

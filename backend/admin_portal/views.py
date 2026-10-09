@@ -72,20 +72,53 @@ class AdminInsurancePolicyViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
 
 class AdminDoctorVerificationViewSet(AuditLogMixin, viewsets.ModelViewSet):
+    """
+    The doctor verification queue. Served at both /api/admin/doctor-verification/
+    (what the web and mobile admin screens call) and /api/admin/doctors/.
+
+    Every registration lands here whatever the NMC register check found; an
+    admin approving or rejecting is the only thing that verifies or rejects
+    a doctor.
+
+      ?status=review                    pending + under review + register unreachable
+      ?status=verified | rejected | …   one status, or several comma-separated
+    """
     serializer_class = AdminDoctorVerificationSerializer
     permission_classes = [IsStaffAdmin]
     audit_target_type = 'doctor'
-    http_method_names = ['get', 'patch', 'post']
+    http_method_names = ['get', 'post']
 
     def get_queryset(self):
-        # select_related: the serializer now reads account.phone_number for
-        # every row, which would otherwise be one extra query per doctor.
-        return Doctor.objects.select_related('account').all()
+        # select_related: the serializer reads account and verified_by for
+        # every row, which would otherwise be extra queries per doctor.
+        qs = Doctor.objects.select_related('account', 'verified_by')
+        wanted = (self.request.query_params.get('status') or '').strip()
+        if self.action == 'verification_queue' and not wanted:
+            wanted = 'review'
+        if wanted:
+            statuses = set()
+            for part in wanted.split(','):
+                part = part.strip()
+                statuses.update(Doctor.AWAITING_ADMIN if part == 'review' else [part])
+            qs = qs.filter(verification_status__in=statuses)
+        # Oldest first: the queue is worked in the order doctors applied.
+        return qs.order_by('submitted_at', 'full_name')
+
+    @action(detail=False, methods=['get'], url_path='verification-queue')
+    def verification_queue(self, request):
+        """GET .../verification-queue/ — the doctors waiting for a decision (paginated)."""
+        page = self.paginate_queryset(self.get_queryset())
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         doctor = self.get_object()
         doctor.verification_status = Doctor.VerificationStatus.VERIFIED
+        doctor.verified_at = timezone.now()
+        doctor.verified_by = request.user
+        doctor.rejection_reason = ''
+        if not doctor.verification_provider:
+            doctor.verification_provider = Doctor.Provider.MANUAL
         doctor.save()
         self._log(request, 'approve_doctor', doctor)
         return Response(AdminDoctorVerificationSerializer(doctor).data)
@@ -93,9 +126,24 @@ class AdminDoctorVerificationViewSet(AuditLogMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         doctor = self.get_object()
+        # The reason is shown to the doctor so they can correct their details.
+        # Optional for app versions whose Reject button sends none.
+        reason = str(request.data.get('reason') or '').strip()[:1000]
         doctor.verification_status = Doctor.VerificationStatus.REJECTED
+        doctor.rejection_reason = reason or 'Your registration could not be verified.'
+        doctor.verified_at = timezone.now()
+        doctor.verified_by = request.user
         doctor.save()
         self._log(request, 'reject_doctor', doctor)
+        return Response(AdminDoctorVerificationSerializer(doctor).data)
+
+    @action(detail=True, methods=['post'])
+    def reverify(self, request, pk=None):
+        """Ask the NMC register again (fresh, not cached). Records what it says; decides nothing."""
+        from doctors.services.verification import apply_verification
+
+        doctor = apply_verification(self.get_object(), use_cache=False)
+        self._log(request, 'reverify_doctor', doctor)
         return Response(AdminDoctorVerificationSerializer(doctor).data)
 
 

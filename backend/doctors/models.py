@@ -4,15 +4,42 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
+from django.utils import timezone
 
 from family.models import Profile
+
+from .councils import COUNCILS
+
+
+def normalize_registration_number(value):
+    """How a registration number is stored and compared: trimmed, upper-case."""
+    return (value or '').strip().upper()
 
 
 class Doctor(models.Model):
     class VerificationStatus(models.TextChoices):
-        PENDING = 'pending', 'Pending'
+        # Only an admin ever sets VERIFIED or REJECTED. The NMC register check
+        # (doctors/services/verification) moves a registration between the
+        # three "waiting for an admin" states and records what it found.
+        PENDING = 'pending', 'Pending'                    # not checked yet
+        MANUAL_REVIEW = 'manual_review', 'Under review'  # checked; admin to decide
+        FAILED = 'failed', 'Register unreachable'        # check couldn't run; admin can still decide
         VERIFIED = 'verified', 'Verified'
         REJECTED = 'rejected', 'Rejected'
+
+    class NMCResult(models.TextChoices):
+        FOUND = 'found', 'Found on the register'
+        NOT_FOUND = 'not_found', 'Not found on the register'
+        AMBIGUOUS = 'ambiguous', 'Several possible matches'
+        UNAVAILABLE = 'unavailable', 'Register unreachable'
+
+    class Provider(models.TextChoices):
+        NMC = 'nmc', 'NMC register'
+        VENDOR = 'vendor', 'Verification vendor'
+        MANUAL = 'manual', 'Checked by an admin'
+
+    AWAITING_ADMIN = (VerificationStatus.PENDING, VerificationStatus.MANUAL_REVIEW, VerificationStatus.FAILED)
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     account = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='doctor_profile')
@@ -21,7 +48,9 @@ class Doctor(models.Model):
     qualification = models.CharField(max_length=255, blank=True)
     experience_years = models.PositiveSmallIntegerField(default=0)
     license_document = models.FileField(upload_to='doctor_licenses/', blank=True, null=True)
-    verification_status = models.CharField(max_length=10, choices=VerificationStatus.choices, default=VerificationStatus.PENDING)
+    verification_status = models.CharField(max_length=20, choices=VerificationStatus.choices, default=VerificationStatus.PENDING)
+    # When the registration arrived — the admin queue is worked oldest first.
+    submitted_at = models.DateTimeField(default=timezone.now)
     clinic_name = models.CharField(max_length=150, blank=True)
     consultation_fee = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
 
@@ -54,7 +83,52 @@ class Doctor(models.Model):
     clinic_open_time = models.TimeField(null=True, blank=True)
     clinic_close_time = models.TimeField(null=True, blank=True)
 
+    # --- NMC Indian Medical Register check -----------------------------
+    # The council the registration number belongs to (one number can exist
+    # in several councils). Blank for doctors who registered before this
+    # existed and for older app versions that don't send it; those go to
+    # the admin queue unchecked.
+    state_council_id = models.CharField(max_length=8, choices=COUNCILS, blank=True, default='')
+    registration_year = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # What the register said, for the admin who decides — never a decision.
+    nmc_result = models.CharField(max_length=12, choices=NMCResult.choices, blank=True, default='')
+    nmc_checked_at = models.DateTimeField(null=True, blank=True)
+    nmc_doctor_id = models.CharField(max_length=32, blank=True, default='')
+    nmc_name = models.CharField(max_length=255, blank=True, default='')
+    nmc_qualification = models.CharField(max_length=255, blank=True, default='')
+    nmc_university = models.CharField(max_length=255, blank=True, default='')
+    nmc_registration_date = models.DateField(null=True, blank=True)
+    nmc_suspended = models.BooleanField(default=False)
+    nmc_remarks = models.CharField(max_length=500, blank=True, default='')
+    # The register's record with personal fields (date of birth, address,
+    # father's name) removed — see services/verification/nmc_provider.py.
+    nmc_payload = models.JSONField(null=True, blank=True)
+    name_match_score = models.FloatField(null=True, blank=True)
+    verification_provider = models.CharField(max_length=10, choices=Provider.choices, blank=True, default='')
+    verification_attempts = models.PositiveIntegerField(default=0)
+    last_verification_error = models.TextField(blank=True, default='')
+
+    # --- The admin's decision -------------------------------------------
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    rejection_reason = models.TextField(blank=True, default='')
+
+    class Meta:
+        constraints = [
+            # One registration, one CuraPath account. Blank pairs (older
+            # registrations without a council) are exempt.
+            models.UniqueConstraint(
+                fields=['registration_number', 'state_council_id'],
+                condition=~Q(registration_number='') & ~Q(state_council_id=''),
+                name='doctor_unique_registration_per_council',
+            ),
+        ]
+
     def clean(self):
+        self.registration_number = normalize_registration_number(self.registration_number)
         # The real, universal enforcement point for the "Dr. Dr." fix.
         # DoctorSerializer.validate_full_name catches this for API callers,
         # but Django admin's ModelForm and any raw

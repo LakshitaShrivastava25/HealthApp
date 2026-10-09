@@ -18,3 +18,9 @@ db.sqlite3
 # Editor/OS
 .vscode/
 .DS_Store
+
+# Service-account keys (Firebase Admin / Google Cloud). These are private
+# keys — never commit them. FCM's key goes into EAS credentials instead.
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json

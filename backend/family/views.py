@@ -5,16 +5,19 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ai.claude_service import ClaudeService
+from config.throttling import ActionThrottleMixin
+from doctors.access import acting_doctor, readable_profile_ids
 from .models import AllergyRecord, Notification, Profile
-from .permissions import assert_owns_profile
+from .permissions import assert_owns_profile, profile_id_param
 from .serializers import AllergyRecordSerializer, NotificationSerializer, ProfileSerializer
 
 
 class AskHealthQuestionSerializer(serializers.Serializer):
-    question = serializers.CharField()
+    # Every question is a paid AI call; a question has no business being an essay.
+    question = serializers.CharField(max_length=1000)
 
 
-class ProfileViewSet(viewsets.ModelViewSet):
+class ProfileViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
     """
     /api/profiles/ — family members under the logged-in account.
     Every other app (documents, insurance, medicines, emergency) filters
@@ -24,35 +27,35 @@ class ProfileViewSet(viewsets.ModelViewSet):
     patient's profile here (name, blood group, DOB, etc.) — without this,
     the Doctor Portal would have no way to show who its approved patients
     even are, since DoctorPatientAccess only stores a raw profile id.
-    Doctors can never create/update/delete a profile or use /ask/ on one
-    that isn't theirs.
+    In doctor mode nothing here is writable and /ask/ is unavailable.
+
+    The same account in user mode (?acting_as=patient, see doctors/access.py)
+    is simply a patient: it manages its own family's profiles like any other
+    account, which is what lets a doctor use CuraPath for their own health.
     """
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated]
+    action_throttle_scopes = {'ask': 'ai'}
 
     def get_queryset(self):
-        user = self.request.user
-        own = Profile.objects.filter(account=user)
-        if hasattr(user, 'doctor_profile'):
-            from doctors.models import DoctorPatientAccess
-            approved_profile_ids = DoctorPatientAccess.objects.filter(
-                doctor=user.doctor_profile, status=DoctorPatientAccess.Status.APPROVED
-            ).values_list('profile_id', flat=True)
-            return (own | Profile.objects.filter(id__in=approved_profile_ids)).distinct()
+        own = Profile.objects.filter(account=self.request.user)
+        doctor = acting_doctor(self.request)
+        if doctor:
+            return (own | Profile.objects.filter(id__in=readable_profile_ids(doctor))).distinct()
         return own
 
     def perform_create(self, serializer):
-        if hasattr(self.request.user, 'doctor_profile'):
+        if acting_doctor(self.request):
             raise PermissionDenied("Doctors cannot create patient profiles.")
         serializer.save(account=self.request.user)
 
     def perform_update(self, serializer):
-        if hasattr(self.request.user, 'doctor_profile'):
+        if acting_doctor(self.request):
             raise PermissionDenied("Doctors cannot edit a patient's profile.")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if hasattr(self.request.user, 'doctor_profile'):
+        if acting_doctor(self.request):
             raise PermissionDenied("Doctors cannot delete a patient's profile.")
         instance.delete()
 
@@ -64,7 +67,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
         TDD's health-chat rules (see ai/claude_service.py). Patient-only —
         the AI assistant is a patient-facing feature, not a doctor tool.
         """
-        if hasattr(request.user, 'doctor_profile'):
+        if acting_doctor(request):
             raise PermissionDenied("The AI Health Assistant is a patient feature.")
         profile = self.get_object()
         serializer = AskHealthQuestionSerializer(data=request.data)
@@ -116,29 +119,25 @@ class AllergyRecordViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'doctor_profile'):
-            from doctors.models import DoctorPatientAccess
-            approved_profile_ids = DoctorPatientAccess.objects.filter(
-                doctor=user.doctor_profile, status=DoctorPatientAccess.Status.APPROVED
-            ).values_list('profile_id', flat=True)
-            qs = AllergyRecord.objects.filter(profile_id__in=approved_profile_ids)
+        doctor = acting_doctor(self.request)
+        if doctor:
+            qs = AllergyRecord.objects.filter(profile_id__in=readable_profile_ids(doctor))
         else:
-            qs = AllergyRecord.objects.filter(profile__account=user)
-        profile_id = self.request.query_params.get('profile_id')
+            qs = AllergyRecord.objects.filter(profile__account=self.request.user)
+        profile_id = profile_id_param(self.request)
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
         # Stable order so pagination cannot repeat or skip an allergy.
         return qs.order_by('-recorded_at')
 
     def perform_create(self, serializer):
-        if hasattr(self.request.user, 'doctor_profile'):
+        if acting_doctor(self.request):
             raise PermissionDenied("Doctors cannot add allergy records on behalf of a patient.")
         assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
         serializer.save()
 
     def perform_update(self, serializer):
-        if hasattr(self.request.user, 'doctor_profile'):
+        if acting_doctor(self.request):
             raise PermissionDenied("Doctors cannot edit a patient's allergy records.")
         # Also checked on update: without it a record could be moved onto
         # someone else's profile by PATCHing the foreign key.
@@ -147,7 +146,7 @@ class AllergyRecordViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_destroy(self, instance):
-        if hasattr(self.request.user, 'doctor_profile'):
+        if acting_doctor(self.request):
             raise PermissionDenied("Doctors cannot delete a patient's allergy records.")
         instance.delete()
 
@@ -168,7 +167,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = Notification.objects.filter(profile__account=self.request.user)
-        profile_id = self.request.query_params.get('profile_id')
+        profile_id = profile_id_param(self.request)
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
         return qs

@@ -24,7 +24,7 @@ import NotificationSettingsCard from '../../src/components/NotificationSettingsC
 type Allergy = { id: string; kind: string; substance: string; reaction: string };
 
 export default function Settings() {
-  const { account, profiles, activeProfile, refreshProfiles, logout } = useAuth();
+  const { account, profiles, activeProfile, refreshProfiles, logout, doctor } = useAuth();
   const router = useRouter();
 
   const [editing, setEditing] = useState(false);
@@ -281,8 +281,10 @@ export default function Settings() {
           <Text style={type.label}>{account?.phone_number}</Text>
         </Row>
         <Row style={styles.factRow}>
-          <Text style={[type.caption, { flex: 1 }]}>Role</Text>
-          <Badge tone="neutral">{account?.role}</Badge>
+          <Text style={[type.caption, { flex: 1 }]}>Account</Text>
+          {/* One account can be both; "doctor" alone read as if User mode
+              were not this person's own. */}
+          <Badge tone="neutral">{doctor ? `User · Doctor (${doctor.verification_status})` : 'User'}</Badge>
         </Row>
 
         <Pressable

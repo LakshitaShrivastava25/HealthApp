@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Document, TimelineEvent
+from .validators import validate_upload
 
 
 class DocumentSerializer(serializers.ModelSerializer):
@@ -13,6 +14,8 @@ class DocumentSerializer(serializers.ModelSerializer):
             'structured_data', 'uploaded_at', 'processed_at',
         ]
         read_only_fields = ['id', 'status', 'structured_data', 'uploaded_at', 'processed_at']
+        # PDFs and photos only, checked by content (documents/validators.py).
+        extra_kwargs = {'file': {'validators': [validate_upload]}}
 
     def validate_document_date(self, value):
         """

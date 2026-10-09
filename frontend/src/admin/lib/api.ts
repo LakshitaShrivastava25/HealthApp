@@ -81,7 +81,7 @@ api.interceptors.response.use(
       const refresh = getRefreshToken();
       if (!refresh) {
         clearTokens();
-        window.location.href = '/admin/login';
+        window.location.href = '/login';
         return Promise.reject(error);
       }
       if (isRefreshing) {
@@ -127,7 +127,7 @@ api.interceptors.response.use(
         // the next person's session.
         if (generationAtRefresh !== sessionGeneration) return Promise.reject(error);
         clearTokens();
-        window.location.href = '/admin/login';
+        window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {
         // After a logout clearTokens() already released the lock, and a newer
@@ -139,11 +139,9 @@ api.interceptors.response.use(
   }
 );
 
-// -- auth (shared OTP mechanism with the User Portal; permission checks
-// on the backend are what actually gate access to admin endpoints) -----
+// -- auth (staff sign in at /login, which hands the session to this store;
+// permission checks on the backend are what actually gate admin endpoints) --
 export const authApi = {
-  sendOtp: (phone_number: string) => api.post('/auth/send-otp/', { phone_number }),
-  verifyOtp: (phone_number: string, otp: string) => api.post('/auth/verify-otp/', { phone_number, otp }),
   me: () => api.get('/auth/me/'),
   // Blacklists the refresh token server-side. Plain axios: a 401 here must
   // not kick off a refresh of the session being ended.

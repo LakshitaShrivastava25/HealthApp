@@ -1,77 +1,80 @@
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { User, Stethoscope } from 'lucide-react';
-import { AnimatedMedicalBackground, AuthKeyframes } from '@shared/auth';
+import { useEffect } from 'react';
+import { MotionConfig } from 'framer-motion';
+import AboutUs from './components/AboutUs';
+import AnimatedBackground from './components/AnimatedBackground';
+import Benefits from './components/Benefits';
+import Features from './components/Features';
+import Footer from './components/Footer';
+import GetAppButton from './components/GetAppButton';
+import Hero from './components/Hero';
+import HowItWorks from './components/HowItWorks';
+import Navbar from './components/Navbar';
+import Security from './components/Security';
+import Testimonials from './components/Testimonials';
 import './landing.css';
 
 /**
- * The portal selector, previously Landing/index.html served as a separate
- * static file. Converted to a real route so it lives in the same app as the
- * portals it links to — the markup, classes and copy are carried over
- * verbatim so it renders exactly as it did before; only the two <a href> to
- * localhost ports became in-app <Link>s.
+ * The public landing page — "/" for anyone not signed in.
  *
- * Its styles stay in a plain scoped stylesheet rather than being rewritten
- * into Tailwind: this page never used Tailwind, and re-expressing it would
- * risk visual drift for no benefit in a restructuring task.
+ * It used to be a separate site (outer-landing-page, at www.curapath.in)
+ * that linked across to web.curapath.in. Living in this app instead puts
+ * the whole journey on one address:
  *
- * The animated background is the same <AnimatedMedicalBackground> the login
- * screens show — imported, not copied. It is mounted exactly the way
- * <AuthShell> mounts it (same 0.7s opacity fade, same keyframe injection),
- * because that wrapper is part of how the effect looks, not incidental.
+ *   curapath.in  →  curapath.in/login  →  sign in  →  the app
  *
- * It takes the background exactly as the login screens do, with no props:
- * the story illustration (characters + journey line) is meant to appear on
- * every page that renders this component, not only here.
+ * Its styles keep their own palette (the `lp-` colours in
+ * tailwind.config.js) so the marketing blue never bleeds into the app.
  */
 export default function Landing() {
+  // Anchor links (#features, #security, …) glide on this page only; the
+  // app's own pages keep instant scrolling.
+  useEffect(() => {
+    const html = document.documentElement;
+    const previous = html.style.scrollBehavior;
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) html.style.scrollBehavior = 'smooth';
+    const title = document.title;
+    document.title = 'CuraPath — Simplify Family Healthcare';
+    return () => {
+      html.style.scrollBehavior = previous;
+      document.title = title;
+    };
+  }, []);
+
   return (
-    <div className="hn-landing">
-      <AuthKeyframes />
+    // reducedMotion="user": for visitors whose OS asks for reduced motion,
+    // framer-motion skips transform animations and only fades.
+    <MotionConfig reducedMotion="user">
+      <div className="cp-landing">
+        <a
+          href="#main"
+          className="fixed top-[calc(0.75rem_+_env(safe-area-inset-top))] left-4 z-[60] -translate-y-[calc(100%_+_2rem)] rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-lp-ink shadow-lg transition-transform focus:translate-y-0 motion-reduce:transition-none"
+        >
+          Skip to content
+        </a>
 
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7 }}>
-        <AnimatedMedicalBackground />
-      </motion.div>
+        {/* overflow-x-clip, not -hidden: it clips stray horizontal overflow
+            without making this wrapper a scroll container, which would stop
+            the navbar's position: sticky from working. */}
+        <div className="relative min-h-screen overflow-x-clip">
+          <AnimatedBackground />
 
-      <div className="page">
-        <div className="brand">
-          <div className="brand-badge">
-            <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 0C1.46 6.7 1.33 10.28 4 13l8 8 8-8c2.67-2.72 2.54-6.3.42-8.42z"/></svg>
-          </div>
-          <span className="brand-name">CuraPath</span>
-        </div>
-        <p className="subtitle">Choose how you're signing in.</p>
+          <Navbar />
 
-        <div className="cards">
-          <Link className="card patient" to="/patient">
-            <div className="icon-wrap">
-              <User size={26} strokeWidth={2} />
-            </div>
-            <p className="card-title">I'm a Patient</p>
-            <p className="card-desc">Manage your health records, medicines, insurance, and family profiles.</p>
-            <div className="card-cta">
-              Continue to User Portal
-              <svg viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </div>
-          </Link>
+          <main id="main" className="scroll-mt-20">
+            <Hero />
+            <Features />
+            <HowItWorks />
+            <Benefits />
+            <Security />
+            <Testimonials />
+            <AboutUs />
+          </main>
 
-          <Link className="card doctor" to="/doctor">
-            <div className="icon-wrap">
-              <Stethoscope size={26} strokeWidth={2} />
-            </div>
-            <p className="card-title">I'm a Doctor</p>
-            <p className="card-desc">Request patient access, review approved records, and add consultation notes.</p>
-            <div className="card-cta">
-              Continue to Doctor Portal
-              <svg viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </div>
-          </Link>
+          <Footer />
         </div>
 
-        <p className="footnote">
-          Each app checks who's allowed in after you sign in — picking a card here doesn't grant access by itself.
-        </p>
+        <GetAppButton />
       </div>
-    </div>
+    </MotionConfig>
   );
 }

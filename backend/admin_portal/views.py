@@ -240,6 +240,15 @@ class OTPSettingsView(APIView):
             if not (master.isdigit() and len(master) == 6):
                 return Response({'detail': 'Master OTP must be exactly 6 digits.'}, status=400)
             config.master_otp = master
+        # The built-in code is published in the repository, so outside DEBUG
+        # master mode ignores it (accounts/services.master_otp_mode). Say so
+        # here rather than let the switch appear to do nothing.
+        from accounts.services import DEFAULT_MASTER_OTP
+        effective_code = dj_settings.MASTER_OTP or config.master_otp
+        if config.mode == OTPConfig.Mode.MASTER and not dj_settings.DEBUG and effective_code == DEFAULT_MASTER_OTP:
+            return Response({
+                'detail': f'Set your own 6-digit master code first — the default {DEFAULT_MASTER_OTP} is publicly known.',
+            }, status=400)
         config.updated_by = request.user
         config.save()
         AuditLog.objects.create(

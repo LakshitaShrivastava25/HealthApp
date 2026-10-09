@@ -1,8 +1,9 @@
-import { Outlet, Route, Navigate, useLocation } from 'react-router-dom';
+import { Route, Navigate, useLocation } from 'react-router-dom';
 import { Sparkles, FileBarChart } from 'lucide-react';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
 import AppLayout from './layouts/AppLayout';
-import Login from './pages/Login';
+import SessionStatus from '../auth/SessionStatus';
+import ProfileSetup from './pages/ProfileSetup';
 import Dashboard from './pages/Dashboard';
 import HealthTimeline from './pages/HealthTimeline';
 import MedicalLocker from './pages/MedicalLocker';
@@ -15,39 +16,33 @@ import Settings from './pages/Settings';
 import ComingSoon from './pages/ComingSoon';
 import HelpSupport from './pages/HelpSupport';
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+/**
+ * User mode's gate. Signed out → the one sign-in screen, remembering where
+ * they were going. Signed in without a profile of their own → profile setup:
+ * every record hangs off a profile, so there is nothing to show without one.
+ */
+function RequireProfile({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, loadFailed, profiles } = useAuth();
   const location = useLocation();
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center text-ink-500 text-sm">Loading...</div>;
-  }
+  if (isLoading || loadFailed) return <SessionStatus />;
   if (!isAuthenticated) {
-    // Carry where they were actually going, so signing in returns them
-    // there instead of silently dropping everyone on the dashboard.
-    return <Navigate to="/patient/login" replace state={{ from: location.pathname + location.search }} />;
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   }
+  if (profiles.length === 0) return <Navigate to="/patient/setup" replace />;
   return <>{children}</>;
-}
-
-/** Scopes the patient AuthProvider to /patient/* only — each portal keeps
- *  its own provider and its own localStorage token keys, exactly as before. */
-function PatientShell() {
-  return (
-    <AuthProvider>
-      <Outlet />
-    </AuthProvider>
-  );
 }
 
 export default function patientRoutes() {
   return (
-    <Route path="/patient" element={<PatientShell />}>
-      <Route path="login" element={<Login />} />
+    <Route path="/patient">
+      {/* The old User Portal sign-in; everyone signs in at /login now. */}
+      <Route path="login" element={<Navigate to="/login" replace />} />
+      <Route path="setup" element={<ProfileSetup />} />
       <Route
         element={
-          <RequireAuth>
+          <RequireProfile>
             <AppLayout />
-          </RequireAuth>
+          </RequireProfile>
         }
       >
         <Route index element={<Dashboard />} />

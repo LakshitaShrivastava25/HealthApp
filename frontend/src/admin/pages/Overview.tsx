@@ -37,10 +37,10 @@ export default function Overview() {
   }, []);
 
   const tiles = [
-    { label: 'Total Patients', value: summary?.total_users, icon: Users, href: '/accounts', tone: 'purple' as const },
-    { label: 'Documents Needing Review', value: summary?.documents_needing_review, icon: FileText, href: '/documents', tone: 'teal' as const },
-    { label: 'Policies Needing Review', value: summary?.policies_needing_review, icon: ShieldCheck, href: '/insurance-policies', tone: 'warning' as const },
-    { label: 'Doctors Awaiting Verification', value: summary?.doctor_verification_queue, icon: Stethoscope, href: '/doctor-verification', tone: 'danger' as const },
+    { label: 'Total Patients', value: summary?.total_users, icon: Users, href: '/admin/accounts', tone: 'purple' as const },
+    { label: 'Documents Needing Review', value: summary?.documents_needing_review, icon: FileText, href: '/admin/documents', tone: 'teal' as const },
+    { label: 'Policies Needing Review', value: summary?.policies_needing_review, icon: ShieldCheck, href: '/admin/insurance-policies', tone: 'warning' as const },
+    { label: 'Doctors Awaiting Verification', value: summary?.doctor_verification_queue, icon: Stethoscope, href: '/admin/doctor-verification', tone: 'danger' as const },
   ];
 
   const pendingTotal =

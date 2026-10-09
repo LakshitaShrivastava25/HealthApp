@@ -7,6 +7,21 @@ type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 export const api: AxiosInstance = axios.create();
 
+export type Mode = 'patient' | 'doctor';
+
+/**
+ * Which side of the account the screens on show act for. One login can be
+ * both a patient and a doctor; every request tells the backend which with
+ * `?acting_as=` (backend/doctors/access.py) — User mode reads and writes the
+ * account's own family records, Doctor mode reads approved patients' records
+ * only. Set by AuthContext the moment the mode changes, before any screen
+ * of the new mode mounts and starts fetching.
+ */
+let actingAs: Mode = 'patient';
+export function setActingAs(mode: Mode) {
+  actingAs = mode;
+}
+
 /**
  * Resolved per request rather than baked in at module load. The base URL can
  * change at runtime (the login screen's manual override), and an axios
@@ -16,6 +31,9 @@ api.interceptors.request.use(async (config) => {
   config.baseURL = getApiBaseUrl();
   const token = await getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // A call may name its mode explicitly (the session always loads the
+  // account's own profiles in User mode), so that wins.
+  config.params = { acting_as: actingAs, ...config.params };
   return config;
 });
 
@@ -137,6 +155,9 @@ export const authApi = {
 // -- patient -------------------------------------------------------------
 export const profilesApi = {
   list: () => api.get('/profiles/'),
+  /** The account's own family, whatever mode the app is in — in Doctor mode
+   *  the plain list also includes approved patients. */
+  listOwn: () => api.get('/profiles/', { params: { acting_as: 'patient' } }),
   get: (id: string) => api.get(`/profiles/${id}/`),
   create: (data: Record<string, unknown>) => api.post('/profiles/', data),
   update: (id: string, data: Record<string, unknown>) => api.patch(`/profiles/${id}/`, data),

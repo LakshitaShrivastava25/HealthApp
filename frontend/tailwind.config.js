@@ -1,3 +1,5 @@
+import defaultTheme from 'tailwindcss/defaultTheme';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -5,6 +7,9 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    // xs (360px) first, so it sorts before the default breakpoints. Used by
+    // the landing page's floating "Get the App" button.
+    screens: { xs: '22.5rem', ...defaultTheme.screens },
     extend: {
       colors: {
         // Portal accent. Channel triplets (not hex) so Tailwind's
@@ -33,6 +38,16 @@ export default {
         warning: { DEFAULT: '#F59E0B', bg: '#FEF3E2' },
         danger: { DEFAULT: '#EF4444', bg: '#FDEBEB' },
         info: { DEFAULT: '#3B82F6', bg: '#EAF1FE' },
+        // The public landing page's own palette (src/landing). Namespaced so
+        // its marketing blue and green can't collide with the app's brand,
+        // accent and ink colours above.
+        lp: {
+          brand: { DEFAULT: '#2563eb', dark: '#1d4ed8', light: '#dbeafe' },
+          accent: { DEFAULT: '#10b981', dark: '#059669', light: '#d1fae5' },
+          ink: '#0f172a',
+          body: '#475569',
+          surface: '#f8fafc',
+        },
       },
       fontFamily: {
         sans: ['"Inter"', 'system-ui', 'sans-serif'],

@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { FolderIcon, InsuranceIcon, MedicineIcon, PersonIcon } from './icons'
 
 interface Badge {
@@ -56,6 +56,10 @@ const badges: Badge[] = [
 const num = (pct: string) => Number.parseFloat(pct)
 
 export default function FloatingFeatureBadges() {
+  // App's <MotionConfig reducedMotion="user"> freezes the bobbing (a transform), but not the
+  // stroke-dash "flow" along the connectors, so stop that explicitly too.
+  const reduceMotion = useReducedMotion()
+
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0">
       {/* connector lines */}
@@ -88,7 +92,7 @@ export default function FloatingFeatureBadges() {
               strokeLinecap="round"
               strokeDasharray="3 2.5"
               vectorEffect="non-scaling-stroke"
-              animate={{ strokeDashoffset: [0, -11] }}
+              animate={reduceMotion ? undefined : { strokeDashoffset: [0, -11] }}
               transition={{ duration: badge.duration, repeat: Infinity, ease: 'linear' }}
             />
           )

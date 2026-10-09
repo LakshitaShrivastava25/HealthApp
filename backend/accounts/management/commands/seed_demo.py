@@ -9,6 +9,7 @@ Demo login: phone +919876500000 — use /api/auth/send-otp/ then check the
 server log (or the debug_otp field, since DEBUG=True) for the OTP.
 """
 
+import secrets
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -116,8 +117,13 @@ class Command(BaseCommand):
         )
 
         # -- Staff admin account for the Admin Portal ---------------------
+        # A fresh random password each time it is created, printed once. It
+        # used to be a fixed one written in the README, which made this a
+        # known superuser login on any database the command was run against.
+        admin_password = None
         if not Account.objects.filter(phone_number='+919876500099').exists():
-            admin_account = Account.objects.create_user(phone_number='+919876500099', password='ChangeMe123!')
+            admin_password = secrets.token_urlsafe(12)
+            admin_account = Account.objects.create_user(phone_number='+919876500099', password=admin_password)
             admin_account.role = Account.Role.ADMIN
             admin_account.is_staff = True
             admin_account.is_superuser = True
@@ -126,5 +132,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"\nDemo data seeded.\n"
             f"  Patient demo login: {DEMO_PHONE} (use send-otp/verify-otp)\n"
-            f"  Admin login: +919876500099 / ChangeMe123! (Django admin at /admin/)\n"
+            + (
+                f"  Admin login: +919876500099 / {admin_password} (Django admin at /admin/) — shown once\n"
+                if admin_password else
+                "  Admin login: +919876500099 already existed; its password is unchanged\n"
+            )
         ))

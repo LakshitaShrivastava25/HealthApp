@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { colors, spacing } from '../theme';
 import BeatingHeart from './BeatingHeart';
+import { ModeSwitchPill } from './ModeSwitch';
 import NotificationBell from './NotificationBell';
 import ProfileSwitcher from './ProfileSwitcher';
 
@@ -34,6 +35,8 @@ export default function AppHeader({ title, showBell }: { title: string; showBell
           </View>
         </View>
         <View style={styles.right}>
+          {/* User / Doctor switch, shown only once registered as a doctor. */}
+          <ModeSwitchPill />
           {bell && <NotificationBell />}
           <ProfileSwitcher variant="pill" />
         </View>

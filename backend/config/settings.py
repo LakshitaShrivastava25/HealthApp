@@ -14,13 +14,31 @@ from urllib.parse import urlparse
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-insecure-secret-key-change-in-production')
-DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
+TESTING = sys.argv[1:2] == ['test']
+
+# Off unless asked for. It used to default to on, so a server deployed
+# without DJANGO_DEBUG ran in debug mode: tracebacks to anyone, /media/
+# served publicly, and — with the SMS gateway unset — the login code for any
+# number returned in the send-otp response.
+DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+
+# Signs every JWT and every file link. The old fallback was a string in this
+# file, so a deploy missing DJANGO_SECRET_KEY let anyone mint a token for any
+# account. Outside DEBUG it is now required (a missing key fails the deploy
+# instead of quietly running on a public one).
+_PLACEHOLDER_KEYS = {'', 'dev-insecure-secret-key-change-in-production', 'change-this-in-production'}
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '')
+if SECRET_KEY in _PLACEHOLDER_KEYS:
+    if not (DEBUG or TESTING):
+        raise ImproperlyConfigured('Set DJANGO_SECRET_KEY to a long random value (DJANGO_DEBUG is off).')
+    SECRET_KEY = SECRET_KEY or 'dev-insecure-secret-key-change-in-production'
+
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
 INSTALLED_APPS = [
@@ -50,6 +68,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -57,9 +76,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -150,6 +166,32 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    # JSON only in production; the clickable browsable API is a dev aid.
+    'DEFAULT_RENDERER_CLASSES': (
+        ('rest_framework.renderers.JSONRenderer', 'rest_framework.renderers.BrowsableAPIRenderer')
+        if DEBUG else ('rest_framework.renderers.JSONRenderer',)
+    ),
+    # Global ceilings, plus tighter named budgets for the endpoints that cost
+    # money or guard something (config/throttling.py, accounts/views.py).
+    # The send-otp per-number limits in accounts/services.py still apply.
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': os.getenv('THROTTLE_ANON', '600/hour'),
+        'user': os.getenv('THROTTLE_USER', '5000/hour'),
+        'otp_send': os.getenv('THROTTLE_OTP_SEND', '30/hour'),
+        'otp_verify': os.getenv('THROTTLE_OTP_VERIFY', '60/hour'),
+        'ai': os.getenv('THROTTLE_AI', '60/hour'),
+        'uploads': os.getenv('THROTTLE_UPLOADS', '60/hour'),
+        'access_requests': os.getenv('THROTTLE_ACCESS_REQUESTS', '30/hour'),
+    } if not TESTING else {
+        # The suite makes hundreds of requests from one address; the
+        # throttle tests set their own low rates.
+        scope: '100000/hour'
+        for scope in ('anon', 'user', 'otp_send', 'otp_verify', 'ai', 'uploads', 'access_requests')
+    },
 }
 
 # Sessions end after 30 days of inactivity: every refresh hands out a new
@@ -158,11 +200,22 @@ REST_FRAMEWORK = {
 # POST /api/auth/logout/ blacklists the current one. Clients must store the
 # rotated token. Run `manage.py flushexpiredtokens` now and then to prune.
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=12),
+    # Short-lived: a copied access token can't be revoked, so its lifetime is
+    # the window. Both apps refresh transparently on a 401.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('JWT_ACCESS_MINUTES', '60'))),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
+
+# --- HTTPS (production) ----------------------------------------
+# Render terminates TLS and forwards X-Forwarded-Proto, so Django can tell a
+# request arrived over HTTPS. Plain-HTTP redirects are left to the platform.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_HSTS_SECONDS', '31536000'))
 
 # --- CORS -------------------------------------------------------
 # The React User Portal (Vite dev server / Vercel deployment) calls this

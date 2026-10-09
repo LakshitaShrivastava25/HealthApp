@@ -31,7 +31,8 @@ export default function NotificationSettingsCard({ note }: { note: string }) {
       setStatus(next);
       if (next.granted) {
         void registerForPush();
-        if (portal === 'patient') void syncMedicineReminders(profiles);
+        // The account's own family's medicines, in either mode.
+        if (portal && portal !== 'admin') void syncMedicineReminders(profiles);
       }
     } else {
       await Linking.openSettings();

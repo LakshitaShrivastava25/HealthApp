@@ -115,6 +115,48 @@ class DoctorDirectoryExposureTests(TestCase):
         response = self.api_as(self.patient).patch(
             f'/api/doctors/{self.verified.id}/', {'full_name': 'Hijacked'}, format='json'
         )
-        self.assertIn(response.status_code, (403, 404))
+        # Edits by id are refused for everyone now (405); a doctor edits
+        # themselves through /api/doctors/me/.
+        self.assertIn(response.status_code, (403, 404, 405))
         self.verified.refresh_from_db()
         self.assertEqual(self.verified.full_name, 'Verified Doctor')
+
+    def test_a_doctor_cannot_edit_their_record_by_id(self):
+        # The by-id route skipped the re-verification rule on credential edits.
+        response = self.api_as(self.verified_account).patch(
+            f'/api/doctors/{self.verified.id}/', {'registration_number': 'SWAPPED-1'}, format='json'
+        )
+        self.assertEqual(response.status_code, 405)
+        self.verified.refresh_from_db()
+        self.assertEqual(self.verified.registration_number, 'MCI-VERIFIED-12345')
+
+    def test_renaming_or_new_licence_sends_a_verified_doctor_back_for_review(self):
+        api = self.api_as(self.verified_account)
+        response = api.patch('/api/doctors/me/', {'clinic_name': 'New Clinic Name'}, format='multipart')
+        self.assertEqual(response.data['verification_status'], 'verified')
+
+        response = api.patch('/api/doctors/me/', {'full_name': 'Someone Famous'}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['verification_status'], 'pending')
+
+        self.verified.verification_status = Doctor.VerificationStatus.VERIFIED
+        self.verified.save()
+        response = api.patch(
+            '/api/doctors/me/',
+            {'license_document': SimpleUploadedFile('new.pdf', b'%PDF-1.4 new', content_type='application/pdf')},
+            format='multipart',
+        )
+        self.assertEqual(response.data['verification_status'], 'pending')
+
+    def test_licence_must_be_a_real_pdf_or_photo(self):
+        api = self.api_as(self.pending_account)
+        for name, body in (('licence.html', b'<script>alert(1)</script>'),
+                           ('licence.pdf', b'<html><script>alert(1)</script>'),
+                           ('licence.svg', b'<svg onload="alert(1)"/>')):
+            response = api.patch(
+                '/api/doctors/me/',
+                {'license_document': SimpleUploadedFile(name, body, content_type='application/pdf')},
+                format='multipart',
+            )
+            self.assertEqual(response.status_code, 400, name)
+            self.assertIn('license_document', response.data)

@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from documents.validators import validate_upload
+
 from .models import (
     ClaimEstimate, InsuranceChatMessage, InsurancePolicy,
     PolicyExclusion, PolicySubLimit, PolicyWaitingPeriod,
@@ -41,6 +43,8 @@ class InsurancePolicySerializer(serializers.ModelSerializer):
             'exclusions', 'waiting_periods', 'sub_limits', 'uploaded_at',
         ]
         read_only_fields = ['id', 'status', 'structured_data', 'uploaded_at']
+        # PDFs and photos only, checked by content (documents/validators.py).
+        extra_kwargs = {'file': {'validators': [validate_upload]}}
 
 
 class ClaimEstimateSerializer(serializers.ModelSerializer):
@@ -67,4 +71,6 @@ class InsuranceChatMessageSerializer(serializers.ModelSerializer):
 
 
 class AskInsuranceQuestionSerializer(serializers.Serializer):
-    question = serializers.CharField()
+    # Every question is a paid AI call; a chat question has no business
+    # being an essay.
+    question = serializers.CharField(max_length=1000)

@@ -63,8 +63,9 @@ API is now live at `http://localhost:8000/api/`. Django admin at
 - **Patient:** phone `+919876500000` — call `/api/auth/send-otp/`, then check
   the server log (or the `debug_otp` field in the response, since `DEBUG=True`)
   for the OTP, then `/api/auth/verify-otp/`.
-- **Admin (Django admin panel):** phone `+919876500099`, password `ChangeMe123!`
-  at `/admin/`.
+- **Admin (Django admin panel):** phone `+919876500099` at `/admin/`. The
+  password is generated when `seed_demo` first creates the account and printed
+  once in its output — there is no fixed default.
 
 ### Connecting the Neon database later
 Add to `.env`:
@@ -74,7 +75,8 @@ DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 Then:
 ```bash
 python manage.py migrate
-python manage.py seed_demo   # optional, if you want demo data on the real DB too
+# Don't run seed_demo against a production database: it creates demo
+# accounts there, including a superuser.
 ```
 
 ### Connecting the React User Portal frontend

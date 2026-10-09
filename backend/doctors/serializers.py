@@ -3,6 +3,7 @@ import uuid
 
 from rest_framework import serializers
 
+from documents.validators import validate_upload
 from family.models import Profile
 
 from .models import ConsultationNote, Doctor, DoctorPatientAccess
@@ -23,6 +24,9 @@ class DoctorSerializer(serializers.ModelSerializer):
             'available_days', 'clinic_open_time', 'clinic_close_time',
         ]
         read_only_fields = ['id', 'verification_status']
+        # A licence is a PDF or a photo (documents/validators.py). An admin
+        # opens it from the verification queue, so anything else is refused.
+        extra_kwargs = {'license_document': {'validators': [validate_upload]}}
 
     # What a NEW registration must supply. Enforced here rather than as a
     # database constraint: these columns are blank=True so that doctors
@@ -205,6 +209,7 @@ class DoctorProfileUpdateSerializer(AvailabilityValidationMixin, serializers.Mod
             'booking_phone_number', 'consultation_fee', 'license_document',
             'available_days', 'clinic_open_time', 'clinic_close_time',
         ]
+        extra_kwargs = {'license_document': {'validators': [validate_upload]}}
 
     # Reuse the exact name and phone rules the registration serializer
     # enforces, rather than letting the profile page be a back door around
@@ -214,8 +219,8 @@ class DoctorProfileUpdateSerializer(AvailabilityValidationMixin, serializers.Mod
 
     def update(self, instance, validated_data):
         """
-        Changing registration_number sends the doctor back to the admin
-        queue.
+        Changing registration_number, full_name or the licence document sends
+        the doctor back to the admin queue.
 
         That number is the credential an admin actually checked before
         approving. If it could be swapped afterwards, "verified" would be
@@ -223,16 +228,27 @@ class DoctorProfileUpdateSerializer(AvailabilityValidationMixin, serializers.Mod
         say verified while pointing at an unchecked licence. Re-verification
         is the honest consequence.
 
+        The name and the licence are the same kind of credential: the admin
+        checked the number against the register UNDER THAT NAME, and looked
+        at THAT document. A verified doctor renaming themselves after a
+        better-known doctor, or swapping the licence file, would otherwise
+        keep the badge on something nobody reviewed.
+
         Set through validated_data rather than a second .save() so the new
-        number and the reset status land in ONE write: there is no instant
-        where the record holds a fresh registration number while still
-        claiming to be verified.
+        values and the reset status land in ONE write: there is no instant
+        where the record holds a fresh credential while still claiming to be
+        verified.
         """
-        if 'registration_number' in validated_data:
-            new = (validated_data['registration_number'] or '').strip()
-            old = (instance.registration_number or '').strip()
-            if new != old:
-                validated_data['verification_status'] = Doctor.VerificationStatus.PENDING
+        changed = False
+        for field in ('registration_number', 'full_name'):
+            if field in validated_data:
+                new = (validated_data[field] or '').strip()
+                old = (getattr(instance, field) or '').strip()
+                changed = changed or new.casefold() != old.casefold()
+        if validated_data.get('license_document'):
+            changed = True
+        if changed:
+            validated_data['verification_status'] = Doctor.VerificationStatus.PENDING
         return super().update(instance, validated_data)
 
 
@@ -287,7 +303,14 @@ class DoctorPatientAccessSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorPatientAccess
         fields = ['id', 'doctor', 'doctor_detail', 'profile', 'status', 'requested_at', 'responded_at', 'expires_at']
-        read_only_fields = ['id', 'status', 'requested_at', 'responded_at']
+        # `doctor` is always the requesting doctor (perform_create sets it),
+        # so it is not writable. When it was, DRF ran the doctor+profile
+        # uniqueness check on whatever id the body named BEFORE the view
+        # could refuse a non-doctor — a 400 "must be unique" told any signed-in
+        # account that the named doctor already had a grant for that patient.
+        # expires_at too: it was the requesting doctor who could set how long
+        # their own access lasts.
+        read_only_fields = ['id', 'doctor', 'status', 'requested_at', 'responded_at', 'expires_at']
 
     def get_doctor_detail(self, obj):
         # A bare doctor UUID is useless for the patient's actual decision

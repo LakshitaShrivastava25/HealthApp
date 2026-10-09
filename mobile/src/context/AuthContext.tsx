@@ -1,20 +1,32 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import {
   authApi,
   doctorApi,
   profilesApi,
+  setActingAs,
   setSessionExpiredHandler,
   unwrap,
+  type Mode,
 } from '../lib/api';
-import { setApiBaseUrl } from '../lib/config';
+import { IS_PRODUCTION, setApiBaseUrl } from '../lib/config';
+import { preferredMode, rememberMode } from '../lib/mode';
 import { clearLocalNotifications, unregisterForPush } from '../lib/notifications';
 import { clearSessionCache, readSessionCache, writeSessionCache } from '../lib/sessionCache';
-import { clearTokens, getAccessToken, getRefreshToken, getStoredApiBaseUrl, setTokens } from '../lib/tokens';
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  getStoredApiBaseUrl,
+  setTokens,
+  storeApiBaseUrl,
+} from '../lib/tokens';
 
 export type Role = 'patient' | 'doctor' | 'admin' | 'ocr_reviewer' | 'claims_ops';
 
 export const STAFF_ROLES: Role[] = ['admin', 'ocr_reviewer', 'claims_ops'];
+
+export type { Mode };
 
 export type Account = {
   id: string;
@@ -57,14 +69,14 @@ export type DoctorRecord = {
 };
 
 /**
- * Which portal this session belongs in.
+ * Which portal this session is showing.
  *
- * The web app runs three portals with three separate token stores, because
- * they are three routes on one origin that one browser might hold open at
- * once. A phone is one person holding one session, so there is one login
- * here and the account's role decides where it lands. 'doctor-setup' is the
- * state where the account is flagged as a doctor but the Doctor record is
- * incomplete or unverified — the same gate DoctorApp.tsx applies on web.
+ * One login for everyone. Staff accounts go to the admin portal. Everyone
+ * else signs in to User mode ('patient' — their own family's records) and,
+ * once they have registered as a doctor, can switch to Doctor mode:
+ * 'doctor-setup' while that registration is pending or rejected, 'doctor'
+ * once an admin has verified it. The website follows the same flow
+ * (frontend/src/shared/session).
  */
 export type Portal = 'patient' | 'doctor' | 'doctor-setup' | 'admin';
 
@@ -73,6 +85,10 @@ type AuthValue = {
   isAuthenticated: boolean;
   account: Account | null;
   portal: Portal | null;
+
+  /** User ('patient') or Doctor mode. Doctor mode needs a Doctor record. */
+  mode: Mode;
+  switchMode: (mode: Mode) => void;
 
   // patient state
   profiles: Profile[];
@@ -92,11 +108,11 @@ type AuthValue = {
 
 const AuthContext = createContext<AuthValue | null>(null);
 
-function portalForAccount(account: Account | null, doctor: DoctorRecord | null): Portal | null {
+function portalFor(account: Account | null, doctor: DoctorRecord | null, mode: Mode): Portal | null {
   if (!account) return null;
   if (STAFF_ROLES.includes(account.role)) return 'admin';
-  if (account.role === 'doctor') {
-    return doctor && doctor.verification_status === 'verified' ? 'doctor' : 'doctor-setup';
+  if (mode === 'doctor' && doctor) {
+    return doctor.verification_status === 'verified' ? 'doctor' : 'doctor-setup';
   }
   return 'patient';
 }
@@ -105,6 +121,10 @@ function portalForAccount(account: Account | null, doctor: DoctorRecord | null):
 function isAuthRejection(err: unknown) {
   const status = (err as { response?: { status?: number } })?.response?.status;
   return status === 401 || status === 403;
+}
+
+function isNotFound(err: unknown) {
+  return (err as { response?: { status?: number } })?.response?.status === 404;
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -116,9 +136,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
   const [doctor, setDoctor] = useState<DoctorRecord | null>(null);
   const [hasRegistered, setHasRegistered] = useState(false);
+  const [mode, setMode] = useState<Mode>('patient');
+  // Whether a mode has been chosen for this signed-in session yet. A
+  // background reload must not override a switch the person just made.
+  const modeChosen = useRef(false);
+  // Mirrors of state that switchMode reads. A screen that has just
+  // registered calls refreshDoctor() and then switchMode('doctor') in the
+  // same handler, before React re-renders — the state it closed over would
+  // still say "not registered".
+  const doctorRef = useRef<DoctorRecord | null>(null);
+  const accountRef = useRef<Account | null>(null);
+
+  /** The one place the mode changes: requests switch before screens do. */
+  const applyMode = useCallback((next: Mode) => {
+    setActingAs(next);
+    setMode(next);
+    modeChosen.current = true;
+  }, []);
 
   const refreshProfiles = useCallback(async () => {
-    const { data } = await profilesApi.list();
+    // Always the account's own family, even from a Doctor-mode screen.
+    const { data } = await profilesApi.listOwn();
     const list = unwrap<Profile>(data);
     setProfiles(list);
     setActiveProfile((current) => {
@@ -130,29 +168,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return list;
   }, []);
 
-  const refreshDoctor = useCallback(async () => {
+  /** The account's Doctor record; null when it has not registered. */
+  const loadDoctor = useCallback(async () => {
     try {
       const { data } = await doctorApi.me();
+      doctorRef.current = data;
       setDoctor(data);
       setHasRegistered(true);
-    } catch {
+      return data as DoctorRecord;
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
       // 404 simply means this account has not registered as a doctor yet.
+      // Anything else (no signal, server asleep) keeps what we had, so a
+      // doctor is never bounced out of Doctor mode by a dropped request.
+      doctorRef.current = null;
       setDoctor(null);
       setHasRegistered(false);
+      return null;
     }
   }, []);
+
+  // Never throws, as before: a failed check keeps the record we already had.
+  const refreshDoctor = useCallback(async () => {
+    try {
+      await loadDoctor();
+    } catch {
+      // Offline or server asleep — try again later.
+    }
+  }, [loadDoctor]);
 
   const loadSession = useCallback(async () => {
     const { data } = await authApi.me();
     const me = data as Account;
+    accountRef.current = me;
     setAccount(me);
-    if (me.role === 'doctor') {
-      await refreshDoctor();
-    } else if (!STAFF_ROLES.includes(me.role)) {
-      await refreshProfiles();
+    if (STAFF_ROLES.includes(me.role)) return me;
+    const [list, record] = await Promise.all([refreshProfiles(), loadDoctor()]);
+    if (!modeChosen.current) {
+      applyMode(await preferredMode(me.id, !!record, list.length));
+    } else if (!record) {
+      // Doctor mode without a Doctor record has nothing to show.
+      applyMode('patient');
     }
     return me;
-  }, [refreshDoctor, refreshProfiles]);
+  }, [applyMode, loadDoctor, refreshProfiles]);
+
+  const switchMode = useCallback(
+    (next: Mode) => {
+      // Doctor mode needs a Doctor record; without one there is nothing to
+      // show and every request would act as a doctor for no reason.
+      if (next === 'doctor' && !doctorRef.current) return;
+      applyMode(next);
+      if (accountRef.current) void rememberMode(accountRef.current.id, next);
+    },
+    [applyMode]
+  );
 
   const logout = useCallback(async () => {
     // Unregister while the session can still authenticate the request, so
@@ -167,11 +237,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refresh = await getRefreshToken();
     if (refresh) void authApi.logout(refresh).catch(() => undefined);
     await clearTokens();
+    accountRef.current = null;
+    doctorRef.current = null;
     setAccount(null);
     setProfiles([]);
     setActiveProfile(null);
     setDoctor(null);
     setHasRegistered(false);
+    setActingAs('patient');
+    setMode('patient');
+    modeChosen.current = false;
   }, []);
 
   // Keep a copy of the loaded session so the next launch can open straight
@@ -194,8 +269,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void logout();
     });
     (async () => {
+      // The "Can't connect?" server override is a development aid. A value
+      // left behind by a development build must never redirect a release
+      // build's tokens and records to some other machine.
       const storedBaseUrl = await getStoredApiBaseUrl();
-      if (storedBaseUrl) setApiBaseUrl(storedBaseUrl);
+      if (storedBaseUrl && !IS_PRODUCTION) setApiBaseUrl(storedBaseUrl);
+      else if (storedBaseUrl) await storeApiBaseUrl(null);
 
       const token = await getAccessToken();
       if (!token) {
@@ -205,11 +284,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const cached = await readSessionCache<Account, Profile, DoctorRecord>();
       if (cached?.account) {
+        const cachedProfiles = cached.profiles ?? [];
+        accountRef.current = cached.account;
+        doctorRef.current = cached.doctor ?? null;
         setAccount(cached.account);
-        setProfiles(cached.profiles ?? []);
-        setActiveProfile(cached.profiles?.[0] ?? null);
+        setProfiles(cachedProfiles);
+        setActiveProfile(cachedProfiles[0] ?? null);
         setDoctor(cached.doctor ?? null);
         setHasRegistered(!!cached.doctor);
+        if (!STAFF_ROLES.includes(cached.account.role)) {
+          applyMode(await preferredMode(cached.account.id, !!cached.doctor, cachedProfiles.length));
+        }
         setIsLoading(false);
         loadSession().catch(() => {
           // Offline or server asleep: keep showing the saved session. A dead
@@ -247,10 +332,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (phone: string, otp: string) => {
       const { data } = await authApi.verifyOtp(phone, otp);
       await setTokens(data.access, data.refresh);
+      // A fresh sign-in picks its mode afresh (the last one this account
+      // used on this phone, else User mode).
+      modeChosen.current = false;
       // Read the session back through /auth/me/ rather than trusting the
-      // login payload alone, so a doctor's record is loaded before the
-      // router decides which portal to show and no frame renders the
-      // wrong one.
+      // login payload alone, so the profiles and any Doctor record are
+      // loaded before the router decides which portal to show and no frame
+      // renders the wrong one.
       return loadSession();
     },
     [loadSession]
@@ -261,7 +349,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated: !!account,
       account,
-      portal: portalForAccount(account, doctor),
+      portal: portalFor(account, doctor, mode),
+      mode,
+      switchMode,
       profiles,
       activeProfile,
       setActiveProfile,
@@ -274,7 +364,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
     }),
     [
-      isLoading, account, doctor, profiles, activeProfile,
+      isLoading, account, doctor, mode, switchMode, profiles, activeProfile,
       refreshProfiles, hasRegistered, refreshDoctor, sendOtp, verifyOtp, logout,
     ]
   );

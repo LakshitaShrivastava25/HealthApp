@@ -5,6 +5,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import DateField from '../src/components/DateField';
+import { ModeSwitchCard } from '../src/components/ModeSwitch';
 import { Button, Card, ErrorNote, Input } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { profilesApi } from '../src/lib/api';
@@ -32,6 +33,10 @@ function isoToday() {
  * First run for a brand-new account. Creates the 'self' Profile that every
  * other record in the system hangs off — without it the patient screens
  * have nothing to scope to.
+ *
+ * A doctor who registered without a profile of their own lands here the
+ * first time they switch to User mode, so the way back to Doctor mode is
+ * offered too.
  */
 export default function ProfileSetup() {
   useConfirmExit();
@@ -150,6 +155,8 @@ export default function ProfileSetup() {
               Continue
             </Button>
           </Card>
+
+          <ModeSwitchCard />
         </View>
       </KeyboardAwareScrollView>
     </SafeAreaView>

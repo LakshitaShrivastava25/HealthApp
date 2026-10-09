@@ -3,6 +3,7 @@ import { Bell, ChevronDown, Plus, UserPlus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, Button } from './ui';
 import { MobileMenuButton } from '@shared/layout/ResponsiveShell';
+import ModeSwitch from '@shared/session/ModeSwitch';
 import AmbientBackground from '@shared/components/AmbientBackground';
 import useClickOutside from '@shared/useClickOutside';
 import { todayIso } from '@shared/dates';
@@ -107,6 +108,10 @@ export default function Topbar({
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
           {action}
+
+          {/* User / Doctor switch — only once this account has registered
+              as a doctor; renders nothing before that. */}
+          <ModeSwitch />
 
           {/* The real bell, on every screen. It used to be the Dashboard's
               alone, passed in through `action`, while this header rendered a

@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   History,
@@ -14,7 +14,10 @@ import {
   LogOut,
   HeartPulse,
   UserCheck,
+  Stethoscope,
+  ChevronRight,
 } from 'lucide-react';
+import ModeSwitch from '@shared/session/ModeSwitch';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
@@ -33,21 +36,15 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const { logout } = useAuth();
+  const { logout, hasRegistered } = useAuth();
 
   function handleLogout() {
     logout();
-    // A hard navigation, not react-router's navigate(): clearing the tokens
-    // flips isAuthenticated, and the RequireAuth/Gate wrapper this button
-    // lives inside re-renders immediately and redirects to the portal's own
-    // login — winning the race against a client-side navigate and stranding
-    // the person there instead of on the landing selector.
-    //
-    // It is also the stronger choice for a logout on a shared machine: a
-    // full document load discards all in-memory auth state, any request
-    // still in flight, and the module-level refresh queue, so nothing can
-    // survive into the next person's session.
-    window.location.assign('/');
+    // A hard navigation, not react-router's navigate(): a full document
+    // load discards all in-memory auth state, any request still in flight
+    // and the refresh state, so nothing can survive into the next person's
+    // session on a shared machine.
+    window.location.assign('/login');
   }
 
   return (
@@ -67,7 +64,7 @@ export default function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/patient'}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive
@@ -82,7 +79,29 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-3 pb-5 pt-2 border-t border-border">
+      <div className="px-3 pb-5 pt-3 border-t border-border space-y-2">
+        {/* The way into Doctor mode, as on the app's More tab: register
+            first, then the switch takes this entry's place. */}
+        {hasRegistered ? (
+          <div className="flex items-center justify-between gap-2 px-3 py-1">
+            <span className="text-xs font-semibold text-ink-500">Mode</span>
+            <ModeSwitch />
+          </div>
+        ) : (
+          <Link
+            to="/doctor/register"
+            className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 transition-colors hover:border-brand-teal/50 hover:bg-surface"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-teal/10 text-brand-teal">
+              <Stethoscope size={16} strokeWidth={2.2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-ink-900">Register as a doctor</span>
+              <span className="block text-[11px] leading-snug text-ink-500">Verified by our team before approval</span>
+            </span>
+            <ChevronRight size={15} className="shrink-0 text-ink-300" />
+          </Link>
+        )}
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-ink-500 hover:bg-surface hover:text-danger transition-colors"

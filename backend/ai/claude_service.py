@@ -22,6 +22,7 @@ whether a key is configured — see text_extraction.py.
 """
 
 import json
+import logging
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -35,6 +36,8 @@ try:
     import anthropic
 except ImportError:
     anthropic = None
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_iso_date(value):
@@ -66,6 +69,9 @@ class ClaudeUnavailable(Exception):
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
+
+
+MAX_EXTRACTED_CHARS = 240_000
 
 
 class ClaudeService:
@@ -132,6 +138,12 @@ class ClaudeService:
         that dict as-is and mark the record 'needs review'.
         """
         system_prompt = (Path(__file__).parent / 'prompts' / prompt_filename).read_text(encoding='utf-8')
+        # A cap on what one upload can cost: roughly 60k tokens, well beyond
+        # a long policy wording (~60 pages) and far short of what a huge or
+        # padded PDF could otherwise send in a single paid call.
+        if len(raw_text) > MAX_EXTRACTED_CHARS:
+            logger.warning('Extracted text truncated from %d to %d characters', len(raw_text), MAX_EXTRACTED_CHARS)
+            raw_text = raw_text[:MAX_EXTRACTED_CHARS]
         try:
             raw = self._call(system_prompt, raw_text, max_tokens=max_tokens)
         except ClaudeUnavailable as exc:

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Sparkles, FileText, Pill as PillIcon, Stethoscope, ArrowRight, Bell } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, CardHeader, Button, ProgressRing, Badge, EmptyState } from '../components/ui';
@@ -21,10 +22,20 @@ const docBadgeTone: Record<string, 'info' | 'success' | 'warning' | 'neutral' | 
 type Doc = { id: string; title: string; category: string; status: string; document_date: string | null; hospital_name: string };
 type Med = { id: string; name: string; dosage: string; instructions: string; reminders: { id: string; time_of_day: string }[] };
 
+/** DRF pages its lists, so a page's length undercounts anything bigger than
+ *  one page; the envelope's `count` is the real total. */
+function totalOf(data: { count?: number; results?: unknown[] } | unknown[]) {
+  if (Array.isArray(data)) return data.length;
+  return data.count ?? data.results?.length ?? 0;
+}
+
 export default function Dashboard() {
   const { activeProfile, profiles } = useAuth();
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Doc[]>([]);
+  const [documentCount, setDocumentCount] = useState(0);
   const [medications, setMedications] = useState<Med[]>([]);
+  const [medicationCount, setMedicationCount] = useState(0);
   const [timelineCount, setTimelineCount] = useState(0);
   const [doctorAccessCount, setDoctorAccessCount] = useState(0);
   const [question, setQuestion] = useState('');
@@ -36,8 +47,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!activeProfile) return;
     loadDocuments();
-    medicinesApi.list(activeProfile.id).then((r) => setMedications(r.data.results ?? r.data));
-    timelineApi.list(activeProfile.id).then((r) => setTimelineCount((r.data.results ?? r.data).length));
+    medicinesApi.list(activeProfile.id).then((r) => {
+      setMedications(r.data.results ?? r.data);
+      setMedicationCount(totalOf(r.data));
+    });
+    timelineApi.list(activeProfile.id).then((r) => setTimelineCount(totalOf(r.data)));
     doctorAccessApi
       .listForProfile(activeProfile.id)
       .then((r) => {
@@ -49,7 +63,10 @@ export default function Dashboard() {
 
   function loadDocuments() {
     if (!activeProfile) return;
-    documentsApi.list(activeProfile.id).then((r) => setDocuments((r.data.results ?? r.data).slice(0, 5)));
+    documentsApi.list(activeProfile.id).then((r) => {
+      setDocuments((r.data.results ?? r.data).slice(0, 5));
+      setDocumentCount(totalOf(r.data));
+    });
   }
 
   async function handleAsk() {
@@ -89,7 +106,7 @@ export default function Dashboard() {
         title={`Welcome back, ${firstName || '...'} 👋`}
         subtitle="Here's your health summary for today"
         action={
-          <Button onClick={() => window.location.assign('/patient/locker')} ariaLabel="Add Record">
+          <Button onClick={() => navigate('/patient/locker')} ariaLabel="Add Record">
             <Plus size={16} /> <span className="hidden sm:inline">Add Record</span>
           </Button>
         }
@@ -169,27 +186,34 @@ export default function Dashboard() {
         <div>
           <h2 className="text-sm font-semibold text-ink-700 mb-3">Health at a Glance</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {/* In-app links under /patient. These used to point at /medicines,
+                /locker, /timeline and /find-care — paths that do not exist —
+                via a full page load, so every box fell through to the
+                catch-all route and dropped the person back at the sign-in
+                selector instead of the page it named. */}
             {[
-              { label: 'Active Medicines', value: medications.length, icon: PillIcon, href: '/medicines' },
-              { label: 'Documents on file', value: documents.length, icon: FileText, href: '/locker' },
-              { label: 'Timeline Events', value: timelineCount, icon: Bell, href: '/timeline' },
-              { label: 'Doctors with access', value: doctorAccessCount, icon: Stethoscope, href: '/find-care' },
+              { label: 'Active Medicines', value: medicationCount, icon: PillIcon, href: '/patient/medicines' },
+              { label: 'Documents on file', value: documentCount, icon: FileText, href: '/patient/locker' },
+              { label: 'Timeline Events', value: timelineCount, icon: Bell, href: '/patient/timeline' },
+              { label: 'Doctors with access', value: doctorAccessCount, icon: Stethoscope, href: '/patient/doctor-access' },
             ].map((s) => (
-              <Card
+              <Link
                 key={s.label}
-                className="p-4 flex items-start gap-3 cursor-pointer hover:border-accent transition-colors"
-                onClick={() => window.location.assign(s.href)}
+                to={s.href}
+                className="block rounded-xl2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
-                <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
-                  <s.icon size={18} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tracking-tight text-ink-900 leading-tight">
-                    <CountUp value={s.value} />
-                  </p>
-                  <p className="text-xs text-ink-500 mt-0.5">{s.label}</p>
-                </div>
-              </Card>
+                <Card interactive className="h-full p-4 flex items-start gap-3 hover:border-accent transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
+                    <s.icon size={18} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold tracking-tight text-ink-900 leading-tight">
+                      <CountUp value={s.value} />
+                    </p>
+                    <p className="text-xs text-ink-500 mt-0.5">{s.label}</p>
+                  </div>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>
@@ -226,7 +250,7 @@ export default function Dashboard() {
               {medications.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => window.location.assign('/patient/medicines')}
+                  onClick={() => navigate('/patient/medicines')}
                   className="w-full flex items-center gap-3 py-2.5 border-b border-border last:border-0 text-left hover:bg-surface -mx-2 px-2 rounded-lg transition-colors"
                 >
                   <div>

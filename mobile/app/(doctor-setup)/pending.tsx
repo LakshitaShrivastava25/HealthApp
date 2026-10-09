@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import { ModeSwitchCard } from '../../src/components/ModeSwitch';
 import { Badge, Button, Card, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { colors, radius, spacing, type } from '../../src/theme';
@@ -11,9 +12,12 @@ import { useConfirmExit } from '../../src/lib/useBackHandler';
 /**
  * Where a registered-but-unverified doctor waits.
  *
- * Also where a rejected doctor lands, which is why editing the profile
+ * Also where a rejected doctor lands, which is why editing the registration
  * stays reachable from here: a rejection is only actionable if the details
  * that caused it can be corrected.
+ *
+ * The rest of the account keeps working meanwhile — "Switch to user mode"
+ * returns to the person's own records on the same sign-in.
  */
 export default function PendingVerification() {
   useConfirmExit();
@@ -76,11 +80,17 @@ export default function PendingVerification() {
         </Card>
       )}
 
+      <Button variant="secondary" onPress={() => router.push('/(doctor-setup)/register')}>
+        {rejected ? 'Correct my details' : 'Edit my details'}
+      </Button>
+
       <Card>
         <Text style={type.caption}>
           Pull down to check whether an administrator has reviewed your registration.
         </Text>
       </Card>
+
+      <ModeSwitchCard />
 
       <Button
         variant="secondary"

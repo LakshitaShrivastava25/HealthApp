@@ -9,6 +9,7 @@ import { useAuth } from '../../../src/context/AuthContext';
 import { doctorApi } from '../../../src/lib/api';
 import { colors, radius, spacing, type } from '../../../src/theme';
 import NotificationSettingsCard from '../../../src/components/NotificationSettingsCard';
+import { ModeSwitchCard } from '../../../src/components/ModeSwitch';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -246,6 +247,8 @@ export default function DoctorProfile() {
       </Card>
 
       <NotificationSettingsCard note="Patient approvals and verification updates" />
+
+      <ModeSwitchCard />
 
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>

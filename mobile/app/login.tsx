@@ -125,7 +125,10 @@ export default function Login() {
     setBusy(true);
     try {
       const result = await sendOtp(fullNumber);
-      setDebugOtp(result.debug_otp ?? null);
+      // Only a development backend includes this. A release build never
+      // shows it, so a misconfigured server fails loudly instead of quietly
+      // handing out codes.
+      setDebugOtp(__DEV__ ? (result.debug_otp ?? null) : null);
       setOtp('');
       setResendAt(Date.now() + RESEND_SECONDS * 1000);
       setSecondsLeft(RESEND_SECONDS);
@@ -160,6 +163,10 @@ export default function Login() {
 
   async function saveBaseUrl() {
     const trimmed = baseUrlDraft.trim();
+    if (trimmed && !/^https?:\/\/[^\s/]+/i.test(trimmed)) {
+      setError('Enter a full address starting with http:// or https://');
+      return;
+    }
     setApiBaseUrl(trimmed || null);
     await storeApiBaseUrl(trimmed || null);
     setShowConnection(false);
@@ -209,8 +216,8 @@ export default function Login() {
                 <>
                   <Text style={type.h2}>Sign in</Text>
                   <Text style={[type.caption, styles.stepNote]}>
-                    We'll text you a 6-digit code. The same number works for patients, doctors and
-                    staff — your account decides what you see.
+                    We'll text you a 6-digit code. Doctors sign in here too, then register from
+                    More → Register as a doctor and switch between User and Doctor mode.
                   </Text>
                   <PhoneInput
                     ref={phoneInputRef}
@@ -288,7 +295,7 @@ export default function Login() {
                     autoFocus
                   />
 
-                  {!!debugOtp && (
+                  {__DEV__ && !!debugOtp && (
                     <View style={styles.debugChip}>
                       <Feather name="info" size={13} color={colors.info} />
                       <Text style={styles.debugText}>

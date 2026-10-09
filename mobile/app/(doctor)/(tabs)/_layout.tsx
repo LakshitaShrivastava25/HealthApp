@@ -1,7 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { View } from 'react-native';
 
-import { colors } from '../../../src/theme';
+import { ModeSwitchPill } from '../../../src/components/ModeSwitch';
+import { colors, spacing } from '../../../src/theme';
 import { useConfirmExit } from '../../../src/lib/useBackHandler';
 
 export default function DoctorTabs() {
@@ -23,6 +25,12 @@ export default function DoctorTabs() {
         headerTintColor: colors.ink900,
         headerTitleStyle: { fontWeight: '700', fontSize: 17 },
         headerShadowVisible: false,
+        // The way back to the person's own records, on every doctor tab.
+        headerRight: () => (
+          <View style={{ marginRight: spacing.lg }}>
+            <ModeSwitchPill />
+          </View>
+        ),
         sceneStyle: { backgroundColor: colors.surface },
       }}
     >

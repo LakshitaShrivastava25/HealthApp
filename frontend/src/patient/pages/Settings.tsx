@@ -137,7 +137,7 @@ export default function Settings() {
 
   function handleLogout() {
     logout();
-    window.location.assign('/');
+    window.location.assign('/login');
   }
 
   async function handleDeleteAccount() {
@@ -145,7 +145,7 @@ export default function Settings() {
     try {
       await authApi.deleteAccount();
       logout();
-      window.location.assign('/');
+      window.location.assign('/login');
     } finally {
       setDeleting(false);
     }

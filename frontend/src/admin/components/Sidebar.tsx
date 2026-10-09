@@ -29,17 +29,12 @@ export default function Sidebar() {
 
   function handleLogout() {
     logout();
-    // A hard navigation, not react-router's navigate(): clearing the tokens
-    // flips isAuthenticated, and the RequireAuth/Gate wrapper this button
-    // lives inside re-renders immediately and redirects to the portal's own
-    // login — winning the race against a client-side navigate and stranding
-    // the person there instead of on the landing selector.
-    //
-    // It is also the stronger choice for a logout on a shared machine: a
-    // full document load discards all in-memory auth state, any request
-    // still in flight, and the module-level refresh queue, so nothing can
-    // survive into the next person's session.
-    window.location.assign('/');
+    // A hard navigation, not react-router's navigate(): a full document
+    // load discards all in-memory auth state, any request still in flight
+    // and the module-level refresh queue, so nothing can survive into the
+    // next person's session on a shared machine. /login is the one sign-in
+    // screen for everyone, staff included.
+    window.location.assign('/login');
   }
 
   return (

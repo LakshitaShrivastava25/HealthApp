@@ -4,8 +4,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ai.claude_service import ClaudeService
+from config.throttling import ActionThrottleMixin
 from ai.text_extraction import extract_text
-from family.permissions import assert_owns_profile
+from family.permissions import assert_owns_profile, profile_id_param
 from .claim_estimator import estimate_claim
 from .models import ClaimEstimate, InsuranceChatMessage, InsurancePolicy, PolicyExclusion, PolicySubLimit, PolicyWaitingPeriod
 from .serializers import (
@@ -14,16 +15,28 @@ from .serializers import (
 )
 
 
-class InsurancePolicyViewSet(viewsets.ModelViewSet):
+# Messages of earlier conversation sent along with each new question.
+CHAT_HISTORY_LIMIT = 20
+
+
+class InsurancePolicyViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
     serializer_class = InsurancePolicySerializer
     permission_classes = [IsAuthenticated]
+    action_throttle_scopes = {'create': 'uploads', 'chat': 'ai', 'estimate': 'ai'}
 
     def get_queryset(self):
         qs = InsurancePolicy.objects.filter(profile__account=self.request.user)
-        profile_id = self.request.query_params.get('profile_id')
+        profile_id = profile_id_param(self.request)
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
         return qs
+
+    def perform_update(self, serializer):
+        # Without this a PATCH could move one's own policy onto anyone else's
+        # profile (its id is the patient reference code doctors are given).
+        if 'profile' in serializer.validated_data:
+            assert_owns_profile(self.request.user, serializer.validated_data['profile'])
+        serializer.save()
 
     def perform_create(self, serializer):
         assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
@@ -140,7 +153,10 @@ class InsurancePolicyViewSet(viewsets.ModelViewSet):
             question = serializer.validated_data['question']
 
             InsuranceChatMessage.objects.create(policy=policy, role='user', content=question)
-            history = list(policy.chat_messages.values('role', 'content'))
+            # The recent conversation only: re-sending the whole history made
+            # every question cost more than the last, without end.
+            recent = policy.chat_messages.order_by('-created_at', '-id').values('role', 'content')[:CHAT_HISTORY_LIMIT]
+            history = list(reversed(list(recent)))
             result = ClaudeService().answer_insurance_question(policy, question, history)
             ai_message = InsuranceChatMessage.objects.create(policy=policy, role='ai', content=result['answer'])
 

@@ -23,4 +23,10 @@ class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = ['id', 'phone_number', 'email', 'role', 'date_joined']
-        read_only_fields = ['id', 'role', 'date_joined']
+        # phone_number is the login itself. Writable here, an account could
+        # PATCH its number to someone else's not-yet-registered one and keep
+        # its session: that person's first sign-in would then land in the
+        # attacker's account, and everything they uploaded would be shared
+        # with it. Changing a number needs an OTP to the new one — a flow of
+        # its own, not a profile edit.
+        read_only_fields = ['id', 'phone_number', 'role', 'date_joined']

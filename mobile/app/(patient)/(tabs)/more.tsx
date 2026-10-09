@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ModeSwitchCard } from '../../../src/components/ModeSwitch';
 import { Card, Row, Screen, SectionTitle } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { colors, radius, spacing, type } from '../../../src/theme';
@@ -61,7 +62,7 @@ const ACCOUNT: Item[] = [
 
 export default function More() {
   const router = useRouter();
-  const { account, logout } = useAuth();
+  const { account, logout, hasRegistered } = useAuth();
 
   function confirmLogout() {
     Alert.alert('Sign out?', 'You will need your phone number and a new code to sign back in.', [
@@ -98,22 +99,27 @@ export default function More() {
       <SectionTitle>Account</SectionTitle>
       <Card style={{ paddingVertical: spacing.xs }}>{ACCOUNT.map(renderItem)}</Card>
 
-      {/* The web app exposes /doctor/register as an open route; this is the
-          same door on mobile. Registering does not grant anything — an
-          admin still has to verify the registration before the account can
-          request access to any patient's records. */}
-      <Card onPress={() => router.push('/(doctor-setup)/register')}>
-        <Row>
-          <View style={styles.icon}>
-            <Feather name="briefcase" size={17} color={colors.brandTeal} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={type.label}>I'm a doctor</Text>
-            <Text style={type.micro}>Register your practice — an admin verifies it before approval</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color={colors.ink300} />
-        </Row>
-      </Card>
+      {/* Doctor mode lives on this same account. Before registering, this
+          is the way in (the website's "Register as a doctor" does the same);
+          afterwards it becomes the User / Doctor switch. Registering grants
+          nothing by itself — an admin verifies the registration before the
+          account can request access to any patient's records. */}
+      {hasRegistered ? (
+        <ModeSwitchCard />
+      ) : (
+        <Card onPress={() => router.push('/(doctor-setup)/register')}>
+          <Row>
+            <View style={styles.icon}>
+              <Feather name="briefcase" size={17} color={colors.brandTeal} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={type.label}>Register as a doctor</Text>
+              <Text style={type.micro}>Add your registration number — an admin verifies it before approval</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.ink300} />
+          </Row>
+        </Card>
+      )}
 
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>

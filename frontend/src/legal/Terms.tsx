@@ -7,7 +7,7 @@ export default function Terms() {
       <Section title="Agreement">
         <p>
           CuraPath is provided by {COMPANY}, Jabalpur, Madhya Pradesh, India (“we”, “us”). These terms
-          apply to your use of CuraPath on Android and at web.curapath.in. By creating an
+          apply to your use of CuraPath on Android and at curapath.in. By creating an
           account or using the service, you agree to them and to our{' '}
           <Link to="/privacy" className="font-medium text-brand-purple underline underline-offset-2">Privacy Policy</Link>.
           If you don’t agree, please don’t use CuraPath.

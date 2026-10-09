@@ -1,11 +1,15 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from config.throttling import ActionThrottleMixin
+from family.permissions import profile_id_param
+
+from .access import acting_doctor, active_grants
 from .models import ConsultationNote, Doctor, DoctorPatientAccess
 from .serializers import (
     ConsultationNoteSerializer, DoctorAvailabilitySerializer, PublicDoctorSerializer,
@@ -116,26 +120,23 @@ class DoctorViewSet(viewsets.ModelViewSet):
         serializer.save()
         return Response(DoctorSerializer(doctor).data)
 
-    # -- ownership guards -------------------------------------------------
-    # This viewset is IsAuthenticated over every verified doctor, so without
-    # these any logged-in account — including a patient — could PATCH or
-    # DELETE another doctor's record by id. Admin approve/reject goes through
-    # admin_portal's own staff-gated viewset, so nothing legitimate needs
-    # write access here except a doctor editing themselves.
-    def _assert_own_record(self, instance):
-        if instance.account_id != self.request.user.id:
-            raise PermissionDenied("You can only edit your own doctor record.")
+    # -- no edits by id ------------------------------------------------------
+    # A doctor edits their own record through /doctors/me/ (and
+    # /doctors/availability/), resolved from the token. PUT/PATCH on
+    # /doctors/<id>/ went through the full DoctorSerializer instead, which
+    # skipped DoctorProfileUpdateSerializer's rule that a new registration
+    # number, name or licence sends the doctor back for verification — a
+    # verified doctor could swap credentials and keep the badge. Deleting the
+    # record would strand the account as a "doctor" with no registration.
+    # Admin approve/reject has its own staff-gated viewset in admin_portal.
+    def update(self, request, *args, **kwargs):
+        raise MethodNotAllowed(request.method, detail='Edit your profile through /api/doctors/me/.')
 
-    def perform_update(self, serializer):
-        self._assert_own_record(serializer.instance)
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        self._assert_own_record(instance)
-        instance.delete()
+    def destroy(self, request, *args, **kwargs):
+        raise MethodNotAllowed(request.method)
 
 
-class DoctorPatientAccessViewSet(viewsets.ModelViewSet):
+class DoctorPatientAccessViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
     """
     Consent flow: doctor requests → patient approves/denies from their side.
 
@@ -147,38 +148,60 @@ class DoctorPatientAccessViewSet(viewsets.ModelViewSet):
     all. get_queryset alone does NOT prevent this, because a doctor's own
     queryset legitimately includes their own pending requests — the object
     lookup succeeds, so the block has to happen in the action itself.
+
+    Which side the caller is on follows the request's mode (doctors/access.py),
+    not merely whether the account has a Doctor record: a doctor in user mode
+    sees and answers the requests made for their own family's profiles, and
+    only those — the patient-side queryset is scoped to profiles they own.
     """
     serializer_class = DoctorPatientAccessSerializer
     permission_classes = [IsAuthenticated]
+    # Read, request, and the approve/deny/revoke actions — nothing else. As a
+    # full ModelViewSet this also served PUT/PATCH/DELETE, and `profile` is
+    # writable for the request itself: a doctor holding one APPROVED grant
+    # could PATCH it onto any other patient's reference code and walk away
+    # with approved access nobody consented to. No client edits a grant.
+    http_method_names = ['get', 'post', 'head', 'options']
+    # Each request tries a patient reference code; a budget keeps a doctor
+    # account from sweeping the code space.
+    action_throttle_scopes = {'create': 'access_requests'}
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'doctor_profile'):
-            qs = DoctorPatientAccess.objects.filter(doctor=user.doctor_profile)
+        doctor = acting_doctor(self.request)
+        if doctor:
+            qs = DoctorPatientAccess.objects.filter(doctor=doctor)
         else:
-            qs = DoctorPatientAccess.objects.filter(profile__account=user)
-        profile_id = self.request.query_params.get('profile_id')
+            qs = DoctorPatientAccess.objects.filter(profile__account=self.request.user)
+        profile_id = profile_id_param(self.request)
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
-        return qs
+        # Ordered so pagination cannot repeat or skip a request.
+        return qs.order_by('-requested_at')
 
     def perform_create(self, serializer):
         # Only a verified doctor may initiate an access request, and only
         # for themselves — the 'doctor' field from the request body is
         # never trusted, even if the caller is a doctor, so one doctor
         # can't submit a request naming a different doctor.
-        user = self.request.user
-        doctor = getattr(user, 'doctor_profile', None)
+        doctor = acting_doctor(self.request)
         if not doctor:
             raise PermissionDenied('Only doctors can request patient access.')
         if doctor.verification_status != Doctor.VerificationStatus.VERIFIED:
             raise PermissionDenied('Your account is not yet verified — you cannot request patient access.')
-        serializer.save(doctor=doctor)
+        profile = serializer.validated_data['profile']
+        if DoctorPatientAccess.objects.filter(doctor=doctor, profile=profile).exists():
+            raise ValidationError({'detail': 'You have already requested access to this patient.'})
+        try:
+            with transaction.atomic():
+                serializer.save(doctor=doctor)
+        except IntegrityError:
+            # Two submissions racing past the check above.
+            raise ValidationError({'detail': 'You have already requested access to this patient.'})
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         grant = self.get_object()
-        if hasattr(request.user, 'doctor_profile'):
+        if acting_doctor(request):
             raise PermissionDenied('Only the patient can approve access to their own records.')
         grant.status = DoctorPatientAccess.Status.APPROVED
         grant.responded_at = timezone.now()
@@ -188,7 +211,7 @@ class DoctorPatientAccessViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def deny(self, request, pk=None):
         grant = self.get_object()
-        if hasattr(request.user, 'doctor_profile'):
+        if acting_doctor(request):
             raise PermissionDenied('Only the patient can deny access to their own records.')
         grant.status = DoctorPatientAccess.Status.DENIED
         grant.responded_at = timezone.now()
@@ -211,25 +234,28 @@ class DoctorPatientAccessViewSet(viewsets.ModelViewSet):
 class ConsultationNoteViewSet(viewsets.ModelViewSet):
     serializer_class = ConsultationNoteSerializer
     permission_classes = [IsAuthenticated]
+    # Notes are written once and read; nothing edits or deletes one. Left
+    # open, PATCH let a doctor move a note onto a patient they have no grant
+    # for (perform_create's check never runs on update), and let a patient
+    # rewrite a doctor's diagnosis while it still carried the doctor's name.
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'doctor_profile'):
-            return ConsultationNote.objects.filter(doctor=user.doctor_profile)
-        return ConsultationNote.objects.filter(profile__account=user)
+        doctor = acting_doctor(self.request)
+        if doctor:
+            return ConsultationNote.objects.filter(doctor=doctor)
+        return ConsultationNote.objects.filter(profile__account=self.request.user)
 
     def perform_create(self, serializer):
         # Only allowed if an APPROVED access grant exists — enforced here, not just in the UI.
         # Uses DRF's PermissionDenied (not the Python builtin PermissionError)
         # so this correctly returns HTTP 403 instead of a 500 server error.
-        user = self.request.user
-        doctor = getattr(user, 'doctor_profile', None)
+        doctor = acting_doctor(self.request)
         if not doctor:
             raise PermissionDenied('Only doctors can add consultation notes.')
         profile = serializer.validated_data['profile']
-        has_access = DoctorPatientAccess.objects.filter(
-            doctor=doctor, profile=profile, status=DoctorPatientAccess.Status.APPROVED
-        ).exists()
-        if not has_access:
+        # active_grants also requires the doctor to still be verified and the
+        # grant to be unexpired — the same rule every read path applies.
+        if not active_grants(doctor).filter(profile=profile).exists():
             raise PermissionDenied('No approved access grant for this patient.')
         serializer.save(doctor=doctor)

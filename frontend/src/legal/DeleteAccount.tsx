@@ -15,7 +15,7 @@ export default function DeleteAccount() {
           items={[
             <>In the CuraPath Android app: open <strong>Settings</strong>, scroll to <strong>Account</strong>, tap <strong>Delete account</strong>, and confirm.</>,
             <>On the web: sign in at{' '}
-              <Link to="/patient/login" className="font-medium text-brand-purple underline underline-offset-2">web.curapath.in</Link>,
+              <Link to="/login" className="font-medium text-brand-purple underline underline-offset-2">curapath.in</Link>,
               open <strong>Settings</strong>, choose <strong>Delete Account</strong>, and confirm.</>,
           ]}
         />

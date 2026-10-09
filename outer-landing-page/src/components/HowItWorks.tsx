@@ -5,7 +5,7 @@ const steps = [
   {
     icon: PersonPlusIcon,
     title: 'Create Profile',
-    description: 'Add your and your family members.',
+    description: 'Add yourself and your family members.',
   },
   {
     icon: UploadIcon,
@@ -35,7 +35,7 @@ export default function HowItWorks() {
           </p>
         </Reveal>
 
-        <div className="mt-16 grid grid-cols-1 gap-10 lg:grid-cols-4 lg:gap-6">
+        <div className="mt-16 grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
           {steps.map((step, i) => (
             <div
               key={step.title}

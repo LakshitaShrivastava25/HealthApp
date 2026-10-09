@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Avatar, Badge } from './ui';
 import { MobileMenuButton } from '@shared/layout/ResponsiveShell';
+import ModeSwitch from '@shared/session/ModeSwitch';
 import AmbientBackground from '@shared/components/AmbientBackground';
 
 const statusTone: Record<string, 'success' | 'warning' | 'danger'> = {
@@ -35,6 +36,7 @@ export default function Topbar({ title, subtitle, action }: { title: string; sub
         </div>
       )}
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <ModeSwitch />
         {doctor && (
           <Link
             to="/doctor/profile"

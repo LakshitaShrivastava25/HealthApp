@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -25,6 +26,10 @@ VERIFY_ERRORS = {
 
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
+    # On top of request_otp's per-number limits: those stop one number being
+    # flooded, this stops one client walking through many numbers.
+    throttle_classes = [AnonRateThrottle, ScopedRateThrottle]
+    throttle_scope = 'otp_send'
 
     def post(self, request):
         serializer = SendOTPSerializer(data=request.data)
@@ -48,6 +53,8 @@ class SendOTPView(APIView):
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle, ScopedRateThrottle]
+    throttle_scope = 'otp_verify'
 
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)

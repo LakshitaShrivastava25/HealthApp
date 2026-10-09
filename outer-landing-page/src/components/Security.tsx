@@ -1,16 +1,18 @@
 import Reveal from './Reveal'
 import { KeyIcon, LockIcon, ShieldCheckIcon } from './icons'
 
+// Keep these claims literal: uploads are read server-side for AI/OCR (so this is not end-to-end
+// encryption), and there is no HIPAA certification. Say only what the platform actually does.
 const points = [
   {
     icon: ShieldCheckIcon,
-    title: 'HIPAA-Compliant Infrastructure',
-    description: 'Built on infrastructure designed to meet strict healthcare data-handling standards.',
+    title: 'Private by Default',
+    description: 'Your files are stored privately and opened only through short-lived, signed links.',
   },
   {
     icon: LockIcon,
-    title: 'End-to-End Encryption',
-    description: 'Your records are encrypted in transit and at rest, so only you can read them.',
+    title: 'Encrypted in Transit',
+    description: 'Every connection between your device and CuraPath uses HTTPS.',
   },
   {
     icon: KeyIcon,
@@ -27,12 +29,10 @@ export default function Security() {
           <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Your Health Data, Protected
           </h2>
-          <p className="mt-4 text-lg text-slate-300">
-            Every record is guarded with the same rigor a hospital would demand of its own systems.
-          </p>
+          <p className="mt-4 text-lg text-slate-300">Built so your family&apos;s records stay yours.</p>
         </Reveal>
 
-        <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div className="mx-auto mt-16 grid max-w-xl grid-cols-1 gap-6 md:max-w-none md:grid-cols-3">
           {points.map((point, i) => (
             <Reveal key={point.title} delay={i * 0.1}>
               <div className="h-full rounded-3xl border border-white/10 bg-white/5 p-7 backdrop-blur-sm transition hover:-translate-y-1 hover:border-white/20">

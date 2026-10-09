@@ -40,7 +40,7 @@ export default function Benefits() {
         <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-2">
           {benefits.map((benefit, i) => (
             <Reveal key={benefit.title} delay={(i % 2) * 0.1}>
-              <div className="flex h-full items-start gap-5 rounded-3xl border border-slate-100 bg-white/80 p-7 shadow-sm shadow-slate-200/50 backdrop-blur-sm transition hover:-translate-y-1 hover:shadow-lg hover:shadow-accent/10">
+              <div className="flex h-full flex-col items-start gap-4 rounded-3xl border border-slate-100 bg-white/80 p-6 shadow-sm xs:flex-row xs:gap-5 sm:p-7 shadow-slate-200/50 backdrop-blur-sm transition hover:-translate-y-1 hover:shadow-lg hover:shadow-accent/10">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-light text-accent-dark">
                   <benefit.icon className="h-6 w-6" />
                 </div>

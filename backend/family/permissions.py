@@ -1,4 +1,6 @@
-from rest_framework.exceptions import PermissionDenied
+import uuid
+
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 
 def assert_owns_profile(user, profile):
@@ -16,3 +18,21 @@ def assert_owns_profile(user, profile):
     """
     if profile is None or profile.account_id != user.id:
         raise PermissionDenied('That profile does not belong to this account.')
+
+
+def profile_id_param(request):
+    """
+    The ?profile_id= filter as a canonical UUID string, or None when absent.
+
+    Passed straight into a queryset filter, a malformed value raised a
+    Django ValidationError that DRF does not handle — a 500 for what is a
+    bad request.
+    """
+    raw = request.query_params.get('profile_id')
+    if not raw:
+        return None
+    try:
+        return str(uuid.UUID(str(raw)))
+    except ValueError:
+        raise ValidationError({'profile_id': 'Not a valid profile id.'})
+

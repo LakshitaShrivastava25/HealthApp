@@ -1,11 +1,10 @@
-import mimetypes
-
 from django.core import signing
 from django.core.files.storage import default_storage
 from django.http import Http404, HttpResponse
 from django.views.decorators.http import require_GET
 
 from .storage import FILE_URL_MAX_AGE, FILE_URL_SALT
+from .validators import served_content_type
 
 
 @require_GET
@@ -28,10 +27,23 @@ def serve_stored_file(request):
     except FileNotFoundError:
         raise Http404('File not found.')
 
-    content_type = mimetypes.guess_type(name)[0] or 'application/octet-stream'
-    response = HttpResponse(data, content_type=content_type)
     filename = name.rsplit('/', 1)[-1].replace('"', '')
-    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    content_type = served_content_type(name)
+    if content_type:
+        # A PDF or photo — the only things uploads accept now
+        # (documents/validators.py) — opens in the browser as before.
+        response = HttpResponse(data, content_type=content_type)
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+    else:
+        # Anything else, e.g. a file stored before uploads were restricted,
+        # is only ever a download. Served inline with a type guessed from
+        # its name, an .html or .svg "document" ran as a page on this API's
+        # origin; as an opaque, sandboxed attachment it cannot.
+        response = HttpResponse(data, content_type='application/octet-stream')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Security-Policy'] = "default-src 'none'; sandbox"
     response['Cache-Control'] = 'private, max-age=3600'
     response['X-Content-Type-Options'] = 'nosniff'
+    # The signed link is the credential; don't hand it to whatever the file links to.
+    response['Referrer-Policy'] = 'no-referrer'
     return response

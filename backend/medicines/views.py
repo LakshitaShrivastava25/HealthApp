@@ -2,7 +2,8 @@ from rest_framework import viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 
-from family.permissions import assert_owns_profile
+from doctors.access import acting_doctor, readable_profile_ids
+from family.permissions import assert_owns_profile, profile_id_param
 from .models import DoseLog, Medication, ReminderSchedule
 from .serializers import (
     DoctorMedicationSerializer,
@@ -23,13 +24,15 @@ class MedicationViewSet(viewsets.ModelViewSet):
     the patient is currently taking — a real safety gap when reasoning
     about a new prescription. Doctors get the narrower
     DoctorMedicationSerializer (no personal reminder schedule) and can
-    never create/update/delete a patient's medication.
+    never create/update/delete a patient's medication. "Doctor" here means
+    a request acting in doctor mode (doctors/access.py) — the same account
+    in user mode manages its own family's medicines like any patient.
     """
     serializer_class = MedicationSerializer
     permission_classes = [IsAuthenticated]
 
     def _is_doctor(self):
-        return hasattr(self.request.user, 'doctor_profile')
+        return acting_doctor(self.request) is not None
 
     def get_serializer_class(self):
         if self._is_doctor():
@@ -37,18 +40,14 @@ class MedicationViewSet(viewsets.ModelViewSet):
         return MedicationSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        if self._is_doctor():
-            from doctors.models import DoctorPatientAccess
-            approved_profile_ids = DoctorPatientAccess.objects.filter(
-                doctor=user.doctor_profile, status=DoctorPatientAccess.Status.APPROVED
-            ).values_list('profile_id', flat=True)
+        doctor = acting_doctor(self.request)
+        if doctor:
             # Only what the patient is currently taking — a discontinued
             # medicine shown as current would be actively misleading.
-            qs = Medication.objects.filter(profile_id__in=approved_profile_ids, is_active=True)
+            qs = Medication.objects.filter(profile_id__in=readable_profile_ids(doctor), is_active=True)
         else:
-            qs = Medication.objects.filter(profile__account=user)
-        profile_id = self.request.query_params.get('profile_id')
+            qs = Medication.objects.filter(profile__account=self.request.user)
+        profile_id = profile_id_param(self.request)
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
         # Stable order so pagination cannot repeat or skip a medicine.
@@ -103,7 +102,7 @@ class DoseLogViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = DoseLog.objects.filter(reminder__medication__profile__account=self.request.user)
-        profile_id = self.request.query_params.get('profile_id')
+        profile_id = profile_id_param(self.request)
         if profile_id:
             qs = qs.filter(reminder__medication__profile_id=profile_id)
         return qs

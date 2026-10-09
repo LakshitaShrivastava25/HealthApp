@@ -5,8 +5,9 @@ import {
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   Award,
   BadgeCheck,
   Briefcase,
@@ -82,8 +83,13 @@ function TextAreaField({
 
 /** A booking number may be a mobile or a landline, so its length varies. */
 
+/**
+ * /doctor/register — "Register as a doctor", opened from User mode on the
+ * signed-in account (the mobile app's doctor-setup/register screen). The
+ * same account then switches between User and Doctor mode.
+ */
 export default function Register() {
-  const { refreshDoctor } = useAuth();
+  const { refreshDoctor, account } = useAuth();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
   const [specialization, setSpecialization] = useState('');
@@ -127,11 +133,11 @@ export default function Register() {
         license_document: licenseDocument,
       });
       await refreshDoctor();
-      navigate('/doctor');
+      navigate('/doctor/pending', { replace: true });
     } catch (err: any) {
       if (err?.response?.status === 401) {
         setError('Your session expired. Redirecting you to sign in again...');
-        setTimeout(() => navigate('/doctor/login'), 1800);
+        setTimeout(() => navigate('/login', { state: { from: '/doctor/register' } }), 1800);
       } else {
         // Show the backend's actual validation message when there is one,
         // instead of a generic guess. DRF returns either
@@ -161,13 +167,30 @@ export default function Register() {
   return (
     <AuthShell>
       <AuthCard>
+        <Link
+          to="/patient"
+          className="mb-4 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-500 transition-colors hover:text-ink-900"
+        >
+          <ArrowLeft size={14} /> Back to my account
+        </Link>
+
         <div className="mb-6">
           <CuraPathLogo portal="doctor" />
         </div>
 
         <StepHeading
-          title="Complete your registration"
-          subtitle="Your account needs admin approval before you can open patient records."
+          title="Register as a doctor"
+          subtitle={
+            <>
+              {account?.phone_number && (
+                <>
+                  Signed in as <span className="font-medium text-ink-700">{account.phone_number}</span>.{' '}
+                </>
+              )}
+              An admin verifies your registration number before you can open patient records. You can
+              keep using your own account meanwhile.
+            </>
+          }
         />
 
         <form onSubmit={handleSubmit} noValidate={false}>

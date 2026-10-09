@@ -13,9 +13,10 @@ import urllib.request
 from datetime import timedelta
 
 from django.conf import settings
+from django.db.models import F, Q
 from django.utils import timezone
 
-from .models import OTPConfig, OTPRequest
+from .models import Account, OTPConfig, OTPRequest
 
 OTP_TTL_MINUTES = 10  # the approved SMS text says "valid for 10 minutes"
 OTP_RATE_LIMIT_PER_HOUR = 5
@@ -28,6 +29,11 @@ TWILIO_VERIFY_URL = 'https://verify.twilio.com/v2'
 # Twilio error codes meaning "this number can't get an SMS": invalid To,
 # landline, invalid phone number, not a mobile number.
 TWILIO_BAD_NUMBER_CODES = {60200, 60205, 21211, 21614}
+
+# OTPConfig.master_otp's built-in value. It ships in the code and in
+# .env.example, so outside DEBUG it is not accepted as a master code at all.
+DEFAULT_MASTER_OTP = '555555'
+STAFF_ROLES = (Account.Role.ADMIN, Account.Role.OCR_REVIEWER, Account.Role.CLAIMS_OPS)
 
 SEND_FAILED_ERROR = "Couldn't send the OTP SMS. Please try again."
 BAD_NUMBER_ERROR = 'Check the mobile number and try again.'
@@ -235,6 +241,10 @@ def master_otp_mode() -> tuple[bool, str]:
     """
     (is master mode on, master code). USE_MASTER_OTP / MASTER_OTP from env win
     when set; otherwise the admin-portal OTPConfig row decides.
+
+    Outside DEBUG, master mode with the built-in default code counts as off:
+    that code is published in this repository, so it would let anyone who has
+    read it into any account.
     """
     config = OTPConfig.load()
     on = settings.USE_MASTER_OTP
@@ -246,7 +256,32 @@ def master_otp_mode() -> tuple[bool, str]:
     if code and not (code.isdigit() and len(code) == 6):
         logger.error('MASTER_OTP in env is not 6 digits; using the admin-portal master code instead')
         code = ''
-    return on, code or config.master_otp
+    code = code or config.master_otp
+    if on and not settings.DEBUG and code == DEFAULT_MASTER_OTP:
+        logger.error('Master OTP mode is on with the default code; ignoring it. Set your own master code.')
+        on = False
+    return on, code
+
+
+def _is_privileged(phone_number: str) -> bool:
+    """
+    Whether this number signs in to an account that can read OTHER people's
+    records: staff, or a verified doctor. A shared or fixed code must never
+    open one of those — outside DEBUG they always get a real SMS.
+    """
+    from doctors.models import Doctor
+
+    return Account.objects.filter(phone_number=phone_number).filter(
+        Q(role__in=STAFF_ROLES) | Q(doctor_profile__verification_status=Doctor.VerificationStatus.VERIFIED)
+    ).exists()
+
+
+def master_otp_for(phone_number: str) -> tuple[bool, str]:
+    """master_otp_mode(), narrowed to whether it applies to this number."""
+    on, code = master_otp_mode()
+    if on and not settings.DEBUG and _is_privileged(phone_number):
+        return False, code
+    return on, code
 
 
 def reviewer_otp(phone_number: str) -> str:
@@ -260,6 +295,12 @@ def reviewer_otp(phone_number: str) -> str:
     code = settings.REVIEWER_OTP
     if not re.fullmatch(r'[0-9]{6}', code):
         logger.error('REVIEWER_OTP is not 6 digits; reviewer login is off')
+        return ''
+    # A review account may register as a doctor while testing that flow, but
+    # once it is verified (or made staff) a fixed, never-changing code is a
+    # standing way in to other people's records.
+    if not settings.DEBUG and _is_privileged(phone_number):
+        logger.error('REVIEWER_PHONE belongs to a staff or verified-doctor account; reviewer login is off')
         return ''
     return code
 
@@ -293,7 +334,7 @@ def request_otp(phone_number: str) -> dict:
     if recent_count >= OTP_RATE_LIMIT_PER_HOUR:
         return {'ok': False, 'error': 'Too many OTP requests. Try again later.'}
 
-    if master_otp_mode()[0]:
+    if master_otp_for(phone_number)[0]:
         # Master mode: nothing is sent, verify_otp accepts the master code.
         # The code itself is never returned to the client.
         logger.info('OTP master mode: skipping SMS for %s', _mask_phone(phone_number))
@@ -392,7 +433,7 @@ def verify_otp(phone_number: str, otp: str) -> str:
     VERIFY_EXPIRED (no live code), VERIFY_LOCKED (more than OTP_MAX_ATTEMPTS
     checks) or VERIFY_UNAVAILABLE (Twilio couldn't judge it; no attempt used).
     """
-    master_on, master_code = master_otp_mode()
+    master_on, master_code = master_otp_for(phone_number)
     if master_on:
         return VERIFY_OK if hmac.compare_digest(otp, master_code) else VERIFY_WRONG
 
@@ -403,20 +444,23 @@ def verify_otp(phone_number: str, otp: str) -> str:
     )
     if not candidate or candidate.expires_at < timezone.now():
         return VERIFY_EXPIRED
-    candidate.attempt_count += 1
-    candidate.save(update_fields=['attempt_count'])
-    if candidate.attempt_count > OTP_MAX_ATTEMPTS:
+    # One conditional UPDATE, not read-then-save: concurrent guesses all read
+    # the same count before any save landed, so a burst of parallel requests
+    # got far more than OTP_MAX_ATTEMPTS tries at the code.
+    counted = OTPRequest.objects.filter(
+        pk=candidate.pk, attempt_count__lt=OTP_MAX_ATTEMPTS,
+    ).update(attempt_count=F('attempt_count') + 1)
+    if not counted:
         return VERIFY_LOCKED
     # Twilio never issued the reviewer's code, so that row is checked locally.
     if _uses_twilio() and not reviewer_otp(phone_number):
         result = _check_via_twilio(phone_number, otp)
         if result == VERIFY_UNAVAILABLE:
             # Twilio never saw the check, so it mustn't cost the user a try.
-            candidate.attempt_count -= 1
-            candidate.save(update_fields=['attempt_count'])
+            OTPRequest.objects.filter(pk=candidate.pk).update(attempt_count=F('attempt_count') - 1)
         if result != VERIFY_OK:
             return result
-    elif candidate.otp_hash != _hash_otp(otp, phone_number):
+    elif not hmac.compare_digest(candidate.otp_hash, _hash_otp(otp, phone_number)):
         return VERIFY_WRONG
     candidate.is_used = True
     candidate.save(update_fields=['is_used'])

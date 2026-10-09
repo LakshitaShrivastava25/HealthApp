@@ -11,7 +11,11 @@ import { colors } from '../src/theme';
  * The single entry point. Everything about where a person lands is decided
  * here from the session, so no screen has to guard itself individually.
  *
- * A patient with no Profile yet goes to profile setup rather than to an
+ * Everyone signs in to User mode; an account that has registered as a
+ * doctor can switch to Doctor mode, which opens the doctor tabs once an
+ * admin has verified the registration and the pending screen until then.
+ *
+ * User mode with no Profile yet goes to profile setup rather than to an
  * empty dashboard: every record in this system hangs off a profile, so an
  * account without one has nothing any patient screen can render.
  */
@@ -40,7 +44,7 @@ export default function Index() {
     case 'doctor':
       return <Redirect href="/(doctor)/(tabs)" />;
     case 'doctor-setup':
-      return <Redirect href="/(doctor-setup)/register" />;
+      return <Redirect href="/(doctor-setup)/pending" />;
     case 'patient':
       return profiles.length === 0 ? (
         <Redirect href="/profile-setup" />

@@ -1,28 +1,25 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, UserPlus, LogOut, Stethoscope } from 'lucide-react';
+import { LayoutDashboard, UserPlus, LogOut, Stethoscope, UserCog } from 'lucide-react';
+import ModeSwitch from '@shared/session/ModeSwitch';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { to: '/doctor', label: 'My Patients', icon: LayoutDashboard },
   { to: '/doctor/request-access', label: 'Request Access', icon: UserPlus },
+  { to: '/doctor/profile', label: 'My Profile', icon: UserCog },
 ];
 
 export default function Sidebar() {
   const { logout, doctor } = useAuth();
+  const verified = doctor?.verification_status === 'verified';
 
   function handleLogout() {
     logout();
-    // A hard navigation, not react-router's navigate(): clearing the tokens
-    // flips isAuthenticated, and the RequireAuth/Gate wrapper this button
-    // lives inside re-renders immediately and redirects to the portal's own
-    // login — winning the race against a client-side navigate and stranding
-    // the person there instead of on the landing selector.
-    //
-    // It is also the stronger choice for a logout on a shared machine: a
-    // full document load discards all in-memory auth state, any request
-    // still in flight, and the module-level refresh queue, so nothing can
-    // survive into the next person's session.
-    window.location.assign('/');
+    // A hard navigation, not react-router's navigate(): a full document
+    // load discards all in-memory auth state, any request still in flight
+    // and the refresh state, so nothing can survive into the next person's
+    // session on a shared machine.
+    window.location.assign('/login');
   }
 
   return (
@@ -40,11 +37,13 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {/* Patients and requests need a verified registration; the profile
+            stays reachable so a pending or rejected doctor can fix it. */}
+        {navItems.filter(({ to }) => verified || to === '/doctor/profile').map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/doctor'}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all border-l-[3px] ${
                 isActive
@@ -59,7 +58,11 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-3 pb-5 pt-2 border-t border-border">
+      <div className="px-3 pb-5 pt-3 border-t border-border space-y-2">
+        <div className="flex items-center justify-between gap-2 px-3 py-1">
+          <span className="text-xs font-semibold text-ink-500">Mode</span>
+          <ModeSwitch />
+        </div>
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-ink-500 hover:bg-surface hover:text-danger transition-colors"

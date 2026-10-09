@@ -1,5 +1,6 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 
+import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme';
 
 /**
@@ -11,6 +12,13 @@ import { colors } from '../../src/theme';
  * nested group rather than at this level.
  */
 export default function PatientLayout() {
+  const { isLoading, portal } = useAuth();
+  // Only this portal's session may open these screens. index.tsx routes
+  // everyone correctly, but a deep link or notification can land here
+  // directly; the server refuses the data either way, this just sends the
+  // person home instead of showing an empty screen.
+  if (!isLoading && portal !== 'patient') return <Redirect href="/" />;
+
   return (
     <Stack
       screenOptions={{

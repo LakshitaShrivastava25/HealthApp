@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
@@ -19,30 +19,34 @@ function stripHonorific(name: string) {
 
 type FieldErrors = Record<string, string[]>;
 
+/**
+ * "Register as a doctor", opened from More in User mode — the same account
+ * then switches between User and Doctor mode. Opened again from the pending
+ * screen it edits the registration instead, which is how a doctor corrects
+ * the details behind a rejection.
+ */
 export default function DoctorRegister() {
   useConfirmExit();
-  const { doctor, hasRegistered, refreshDoctor, account } = useAuth();
+  const { doctor, refreshDoctor, account, switchMode } = useAuth();
   const router = useRouter();
+  // Decided once, on open: the record appears mid-submit when registering,
+  // and the form must not flip to "edit" under the person's thumb.
+  const [editing] = useState(() => !!doctor);
 
-  const [fullName, setFullName] = useState('');
-  const [specialization, setSpecialization] = useState('');
-  const [qualification, setQualification] = useState('');
-  const [experience, setExperience] = useState('');
-  const [clinicName, setClinicName] = useState('');
-  const [registrationNumber, setRegistrationNumber] = useState('');
-  const [clinicAddress, setClinicAddress] = useState('');
-  const [bookingPhone, setBookingPhone] = useState('');
-  const [fee, setFee] = useState('');
+  const [fullName, setFullName] = useState(doctor?.full_name ?? '');
+  const [specialization, setSpecialization] = useState(doctor?.specialization ?? '');
+  const [qualification, setQualification] = useState(doctor?.qualification ?? '');
+  const [experience, setExperience] = useState(doctor ? String(doctor.experience_years ?? '') : '');
+  const [clinicName, setClinicName] = useState(doctor?.clinic_name ?? '');
+  const [registrationNumber, setRegistrationNumber] = useState(doctor?.registration_number ?? '');
+  const [clinicAddress, setClinicAddress] = useState(doctor?.clinic_address ?? '');
+  const [bookingPhone, setBookingPhone] = useState(doctor?.booking_phone_number ?? '');
+  const [fee, setFee] = useState(doctor?.consultation_fee ?? '');
   const [license, setLicense] = useState<UploadFile | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-
-  // An account that already has a Doctor record has nothing to do here.
-  useEffect(() => {
-    if (hasRegistered) router.replace('/(doctor-setup)/pending');
-  }, [hasRegistered, router]);
 
   async function attachLicense(pick: () => Promise<UploadFile | null>) {
     try {
@@ -72,9 +76,19 @@ export default function DoctorRegister() {
       if (fee.trim()) form.append('consultation_fee', fee.trim());
       if (license) form.append('license_document', license as unknown as Blob);
 
+      if (editing) {
+        await doctorApi.updateProfile(form);
+        await refreshDoctor();
+        router.back();
+        return;
+      }
+
       await doctorApi.register(form);
       await refreshDoctor();
-      router.replace('/(doctor-setup)/pending');
+      // Straight into Doctor mode: the index route opens the pending screen
+      // until an admin verifies the registration.
+      switchMode('doctor');
+      router.replace('/');
     } catch (err) {
       const response = (err as { response?: { data?: Record<string, string[] | string> } })?.response;
       const data = response?.data;
@@ -89,7 +103,11 @@ export default function DoctorRegister() {
           setError('Please correct the highlighted fields.');
         }
       } else {
-        setError("Couldn't submit your registration. Check your connection and try again.");
+        setError(
+          editing
+            ? "Couldn't save your changes. Check your connection and try again."
+            : "Couldn't submit your registration. Check your connection and try again."
+        );
       }
     } finally {
       setSaving(false);
@@ -108,8 +126,12 @@ export default function DoctorRegister() {
     <Screen>
       <Card>
         <CardHeader
-          title="Register as a doctor"
-          subtitle={`Signed in as ${account?.phone_number ?? ''}. An admin verifies your credentials before you can request patient access.`}
+          title={editing ? 'Update your registration' : 'Register as a doctor'}
+          subtitle={
+            editing
+              ? 'Changing your registration number, name or licence sends your registration back to an admin for review.'
+              : `Signed in as ${account?.phone_number ?? ''}. An admin verifies your credentials before you can request patient access. Your own records stay on this same account.`
+          }
         />
 
         <Input
@@ -188,7 +210,10 @@ export default function DoctorRegister() {
       </Card>
 
       <Card>
-        <CardHeader title="Licence document" subtitle="Helps an admin verify you faster" />
+        <CardHeader
+          title="Licence document"
+          subtitle={editing ? 'Attach a new file only to replace the one on record' : 'Helps an admin verify you faster'}
+        />
         {license ? (
           <Row>
             <View style={styles.fileIcon}>
@@ -216,7 +241,7 @@ export default function DoctorRegister() {
       {!!error && <ErrorNote message={error} />}
 
       <Button onPress={handleSubmit} disabled={!canSubmit} loading={saving}>
-        Submit registration
+        {editing ? 'Save changes' : 'Submit registration'}
       </Button>
     </Screen>
   );

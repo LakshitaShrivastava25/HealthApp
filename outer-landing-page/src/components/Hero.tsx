@@ -2,19 +2,19 @@ import Reveal from './Reveal'
 import DashboardMockup from './DashboardMockup'
 import PhoneMockup from './PhoneMockup'
 import FloatingFeatureBadges from './FloatingFeatureBadges'
-import { ArrowRightIcon, LockIcon, ShieldCheckIcon, SmartphoneIcon, SparkleIcon, UsersIcon } from './icons'
-import { MAIN_APP_URL } from '../config'
+import VisitWebAppButton from './VisitWebAppButton'
+import { LockIcon, ShieldCheckIcon, SparkleIcon, UsersIcon } from './icons'
 
 const trustIndicators = [
   {
     icon: ShieldCheckIcon,
-    label: 'HIPAA Compliant',
-    sub: 'Your data is 100% safe',
+    label: 'Consent-based doctor access',
+    sub: 'You approve every request',
   },
   {
     icon: LockIcon,
-    label: 'End-to-End Encryption',
-    sub: 'Privacy is our priority',
+    label: 'Encrypted in transit',
+    sub: 'HTTPS on every connection',
   },
   {
     icon: UsersIcon,
@@ -25,8 +25,8 @@ const trustIndicators = [
 
 export default function Hero() {
   return (
-    <section id="hero" className="relative overflow-hidden px-6 pt-20 pb-24 sm:pt-28 sm:pb-32">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 xl:grid-cols-2 xl:gap-12">
+    <section id="hero" className="relative overflow-hidden px-6 pt-14 pb-20 sm:pt-20 sm:pb-28 xl:pt-24 xl:pb-32">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 xl:grid-cols-2 xl:gap-12">
         {/* left column */}
         <div className="text-center xl:text-left">
           <Reveal>
@@ -38,75 +38,63 @@ export default function Hero() {
 
           <Reveal delay={0.1}>
             <h1 className="mt-6 text-4xl font-bold leading-[1.08] tracking-tight text-ink sm:text-5xl md:text-6xl">
+              <span className="block">Your Health.</span>
               <span className="block">
-                <span className="text-ink">Your </span>
-                <span className="text-brand">Health.</span>
+                <span className="bg-linear-to-r from-brand to-accent-dark bg-clip-text text-transparent">
+                  Organized.
+                </span>
               </span>
-              <span className="block text-brand">Organized.</span>
-              <span className="block">
-                <span className="text-brand">Intelligently</span>
-                <span className="text-ink"> Yours.</span>
-              </span>
+              <span className="block">Intelligently Yours.</span>
             </h1>
           </Reveal>
 
           <Reveal delay={0.2}>
-            <p className="mx-auto mt-6 max-w-xl text-lg text-body xl:mx-0">
+            <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-body sm:text-xl xl:mx-0">
               Store medical records, understand insurance, track medicines, and connect with doctors —
               all in one secure platform.
             </p>
           </Reveal>
 
           <Reveal delay={0.3}>
-            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row xl:items-start xl:justify-start">
-              <a
-                href={MAIN_APP_URL}
-                className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-dark hover:shadow-xl sm:w-auto"
-              >
-                Use Web App
-                <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-1" strokeWidth={2.2} />
-              </a>
-              <a
-                href="#"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-8 py-3.5 text-base font-semibold text-ink transition hover:border-brand/40 hover:text-brand sm:w-auto"
-              >
-                <SmartphoneIcon className="h-4 w-4" strokeWidth={2} />
-                Get the App
-              </a>
+            <div className="mt-10 flex flex-col items-center gap-3 xl:items-start">
+              <VisitWebAppButton size="lg" className="w-full sm:w-auto" />
+              <p className="text-sm text-body">Runs in your browser — nothing to install.</p>
             </div>
           </Reveal>
 
           <Reveal delay={0.4}>
-            <div className="mx-auto mt-12 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-3 xl:mx-0 xl:max-w-none">
+            <ul className="mx-auto mt-10 grid w-fit grid-cols-1 gap-x-6 gap-y-4 border-t border-slate-200/70 pt-8 text-left sm:w-auto sm:grid-cols-3 xl:mx-0">
               {trustIndicators.map((item) => (
-                <div key={item.label} className="flex items-center gap-3 xl:items-start">
+                <li key={item.label} className="flex items-start gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-light/70 text-brand">
                     <item.icon className="h-4 w-4" strokeWidth={1.9} />
                   </span>
-                  <div className="text-left">
-                    <p className="text-xs font-semibold text-ink">{item.label}</p>
-                    <p className="text-[11px] text-body">{item.sub}</p>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">{item.label}</p>
+                    <p className="mt-0.5 text-xs text-body">{item.sub}</p>
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </Reveal>
         </div>
 
-        {/* right column — dashboard + phone mockup centerpiece */}
+        {/* right column: product mockups (decorative, so hidden from assistive tech) */}
         <Reveal delay={0.2} className="relative">
-          {/* full composition: desktop+ only */}
-          <div className="relative mx-auto hidden w-full max-w-[560px] xl:block">
-            <div className="pl-16 pt-8 pb-12 pr-4">
-              <DashboardMockup />
+          <div aria-hidden="true">
+            {/* full composition: tablet and up */}
+            <div className="relative mx-auto hidden w-full max-w-[560px] md:block">
+              <div className="pl-16 pt-8 pb-12 pr-4">
+                <DashboardMockup />
+              </div>
+              <PhoneMockup tilted className="absolute top-[49%] left-[82%] z-20" />
+              <FloatingFeatureBadges />
             </div>
-            <PhoneMockup tilted className="absolute top-[49%] left-[82%] z-20" />
-            <FloatingFeatureBadges />
-          </div>
 
-          {/* simplified composition: below desktop */}
-          <div className="flex justify-center xl:hidden">
-            <PhoneMockup className="shadow-2xl" />
+            {/* simplified composition: phones */}
+            <div className="flex justify-center md:hidden">
+              <PhoneMockup className="shadow-2xl" />
+            </div>
           </div>
         </Reveal>
       </div>

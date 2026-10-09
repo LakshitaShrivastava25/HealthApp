@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 
 @theme {
+  /* 360px: below this the floating "Get the App" button collapses to its icon. */
+  --breakpoint-xs: 22.5rem;
+
   --color-brand: #2563eb;
   --color-brand-dark: #1d4ed8;
   --color-brand-light: #dbeafe;
@@ -17,7 +20,23 @@
     scroll-behavior: smooth;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
   body {
     @apply bg-white text-body antialiased;
+    /* index.html uses viewport-fit=cover so the floating button can honour the bottom safe-area
+       inset; this keeps content out from under notches in landscape, matching the default. */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* One consistent, clearly visible keyboard-focus ring for every link and button. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 3px;
   }
 }

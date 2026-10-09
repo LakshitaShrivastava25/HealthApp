@@ -11,6 +11,9 @@ from accounts.models import Account, OTPConfig
 from admin_portal.models import AuditLog
 
 PHONE = '+919876500001'
+# A master code of our own. Outside DEBUG — and the test runner forces DEBUG
+# off — the built-in default 555555 is refused (services.master_otp_mode).
+MASTER = '246810'
 
 
 @override_settings(USE_TWOFACTOR=True, TWOFACTOR_API_KEY='')
@@ -22,15 +25,15 @@ class MasterOTPTests(TestCase):
         return self.client.post('/api/auth/verify-otp/', {'phone_number': PHONE, 'otp': otp}, format='json')
 
     def test_master_mode_accepts_master_code_and_sends_nothing(self):
-        OTPConfig.objects.create(mode=OTPConfig.Mode.MASTER)
+        OTPConfig.objects.create(mode=OTPConfig.Mode.MASTER, master_otp=MASTER)
         with mock.patch.object(services, '_send_via_2factor') as sender:
             r = self.client.post('/api/auth/send-otp/', {'phone_number': PHONE}, format='json')
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('debug_otp', r.data)
-        self.assertNotIn('555555', str(r.data))
+        self.assertNotIn(MASTER, str(r.data))
         sender.assert_not_called()
         self.assertEqual(self._verify('111111').status_code, 400)
-        r = self._verify('555555')
+        r = self._verify(MASTER)
         self.assertEqual(r.status_code, 200)
         self.assertIn('access', r.data)
 
@@ -245,10 +248,10 @@ class TwilioOTPTests(TestCase):
         self.assertEqual(r.data['detail'], 'This code has expired. Tap Resend to get a new one.')
 
     def test_master_mode_still_overrides_twilio(self):
-        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
+        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER, master_otp=MASTER)
         with mock.patch.object(services, '_twilio_verify_post') as post:
             self.assertEqual(self._send().status_code, 200)
-            self.assertEqual(self._verify('555555').status_code, 200)
+            self.assertEqual(self._verify(MASTER).status_code, 200)
         post.assert_not_called()
 
     @override_settings(TWILIO_API_KEY_SID='SKkey', TWILIO_API_KEY_SECRET='secret')
@@ -389,9 +392,9 @@ class SendOTPErrorTests(OTPAPIMixin, TestCase):
 
     @override_settings(TWILIO_VERIFY_SERVICE_SID='', DEBUG=False)
     def test_master_mode_needs_no_gateway(self):
-        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
+        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER, master_otp=MASTER)
         self.assertEqual(self._send().status_code, 200)
-        self.assertEqual(self._verify('555555').status_code, 200)
+        self.assertEqual(self._verify(MASTER).status_code, 200)
 
     def test_twilio_error_code_in_details(self):
         with mock.patch.object(services, '_twilio_verify_post',
@@ -470,7 +473,7 @@ class TwilioVerifyErrorTests(OTPAPIMixin, TestCase):
         self.assertEqual(r.status_code, 200)
 
     def test_master_mode_wrong_code(self):
-        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
+        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER, master_otp=MASTER)
         r, post = self._check(200, {'status': 'approved'}, otp='111111')
         self._assert_error(r, 400, WRONG)
         post.assert_not_called()
@@ -710,7 +713,7 @@ class ResendCooldownTests(OTPAPIMixin, TestCase):
 
     def test_master_mode_skips_cooldown(self):
         self._send()
-        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER)
+        OTPConfig.objects.update(mode=OTPConfig.Mode.MASTER, master_otp=MASTER)
         self.assertEqual(self._send().status_code, 200)
         self.assertEqual(self._send().status_code, 200)
         self.assertEqual(self.post.call_count, 1)
@@ -792,3 +795,78 @@ class ReviewerLoginTests(TestCase):
     @override_settings(REVIEWER_OTP='12ab56')
     def test_malformed_code_is_ignored(self):
         self.assertEqual(services.reviewer_otp(REVIEWER), '')
+
+
+@override_settings(USE_MASTER_OTP=None, MASTER_OTP='', REVIEWER_PHONE='', REVIEWER_OTP='',
+                   TWILIO_VERIFY_SERVICE_SID='', USE_TWOFACTOR=False)
+class MasterOTPHardeningTests(TestCase):
+    """Master mode cannot open the accounts that can read other people's records."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def _send(self, phone=PHONE):
+        return self.client.post('/api/auth/send-otp/', {'phone_number': phone}, format='json')
+
+    def _verify(self, otp, phone=PHONE):
+        return self.client.post('/api/auth/verify-otp/', {'phone_number': phone, 'otp': otp}, format='json')
+
+    def test_default_code_is_refused_outside_debug(self):
+        OTPConfig.objects.create(mode=OTPConfig.Mode.MASTER)  # default code
+        self.assertFalse(services.master_otp_mode()[0])
+        self.assertEqual(services.verify_otp(PHONE, services.DEFAULT_MASTER_OTP), services.VERIFY_EXPIRED)
+
+    @override_settings(DEBUG=True)
+    def test_default_code_still_works_in_debug(self):
+        OTPConfig.objects.create(mode=OTPConfig.Mode.MASTER)
+        self.assertEqual(services.verify_otp(PHONE, services.DEFAULT_MASTER_OTP), services.VERIFY_OK)
+
+    def test_staff_accounts_never_use_the_master_code(self):
+        OTPConfig.objects.create(mode=OTPConfig.Mode.MASTER, master_otp=MASTER)
+        Account.objects.create_user(PHONE, role=Account.Role.ADMIN)
+        self.assertEqual(services.verify_otp(PHONE, MASTER), services.VERIFY_EXPIRED)
+        # A patient on the same server still can.
+        self.assertEqual(services.verify_otp('+919812300000', MASTER), services.VERIFY_OK)
+
+    def test_verified_doctors_never_use_the_master_code(self):
+        from doctors.models import Doctor
+
+        OTPConfig.objects.create(mode=OTPConfig.Mode.MASTER, master_otp=MASTER)
+        account = Account.objects.create_user(PHONE, role=Account.Role.DOCTOR)
+        doctor = Doctor.objects.create(
+            account=account, full_name='Verified', specialization='GP', registration_number='R1',
+            clinic_name='C', clinic_address='A', booking_phone_number='+912212345678',
+            verification_status=Doctor.VerificationStatus.VERIFIED,
+        )
+        self.assertEqual(services.verify_otp(PHONE, MASTER), services.VERIFY_EXPIRED)
+        # Still pending (e.g. a tester trying the doctor flow): master applies.
+        doctor.verification_status = Doctor.VerificationStatus.PENDING
+        doctor.save()
+        self.assertEqual(services.verify_otp(PHONE, MASTER), services.VERIFY_OK)
+
+    @override_settings(REVIEWER_PHONE=PHONE, REVIEWER_OTP='123456')
+    def test_reviewer_code_never_opens_a_staff_account(self):
+        self.assertEqual(services.reviewer_otp(PHONE), '123456')
+        Account.objects.create_user(PHONE, role=Account.Role.ADMIN)
+        self.assertEqual(services.reviewer_otp(PHONE), '')
+
+    def test_admin_cannot_switch_on_master_mode_with_the_default_code(self):
+        admin = Account.objects.create_user('+919000000077', role=Account.Role.ADMIN)
+        self.client.force_authenticate(admin)
+        r = self.client.patch('/api/admin/otp-settings/', {'mode': 'master'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(OTPConfig.load().mode, OTPConfig.Mode.SMS)
+        r = self.client.patch('/api/admin/otp-settings/', {'mode': 'master', 'master_otp': MASTER}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['mode'], 'master')
+
+    def test_attempts_never_exceed_the_limit(self):
+        with override_settings(DEBUG=True):
+            code = self._send().data['debug_otp']
+        wrong = '000000' if code != '000000' else '111111'
+        for _ in range(services.OTP_MAX_ATTEMPTS + 3):
+            services.verify_otp(PHONE, wrong)
+        row = services.OTPRequest.objects.get(phone_number=PHONE)
+        self.assertEqual(row.attempt_count, services.OTP_MAX_ATTEMPTS)
+        self.assertEqual(services.verify_otp(PHONE, code), services.VERIFY_LOCKED)
+

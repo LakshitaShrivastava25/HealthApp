@@ -1,7 +1,6 @@
 import { Outlet, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AppLayout from './layouts/AppLayout';
-import Login from './pages/Login';
 import Overview from './pages/Overview';
 import DocumentReview from './pages/DocumentReview';
 import InsurancePolicyReview from './pages/InsurancePolicyReview';
@@ -17,7 +16,8 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     return <div className="min-h-screen flex items-center justify-center text-ink-500 text-sm">Loading...</div>;
   }
   if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace />;
+    // One sign-in screen for everyone; a staff number is sent back here.
+    return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
@@ -34,7 +34,8 @@ function AdminShell() {
 export default function adminRoutes() {
   return (
     <Route path="/admin" element={<AdminShell />}>
-      <Route path="login" element={<Login />} />
+      {/* The old Admin Portal sign-in; everyone signs in at /login now. */}
+      <Route path="login" element={<Navigate to="/login" replace />} />
       <Route
         element={
           <RequireAuth>

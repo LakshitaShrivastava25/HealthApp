@@ -16,9 +16,8 @@ import './landing.css';
 /**
  * The public landing page — "/" for anyone not signed in.
  *
- * It used to be a separate site (outer-landing-page, at www.curapath.in)
- * that linked across to web.curapath.in. Living in this app instead puts
- * the whole journey on one address:
+ * It lives in the web app rather than as a separate site, which puts the
+ * whole journey on one address:
  *
  *   curapath.in  →  curapath.in/login  →  sign in  →  the app
  *

@@ -243,6 +243,14 @@ TWOFACTOR_TEMPLATE_NAME = os.getenv('TWOFACTOR_TEMPLATE_NAME', 'CuraPathOTP')
 TWOFACTOR_DLT_PE_ID = os.getenv('TWOFACTOR_DLT_PE_ID', '')
 TWOFACTOR_DLT_TEMPLATE_ID = os.getenv('TWOFACTOR_DLT_TEMPLATE_ID', '')
 
+# The only phone number(s) allowed to use the Admin Portal, comma-separated
+# with country code. An account on this list is promoted to admin when it
+# signs in; no other number gets staff access, whatever role is set on it
+# in the database.
+ADMIN_PHONE_NUMBERS = [
+    n.strip() for n in os.getenv('ADMIN_PHONE_NUMBERS', '+918962900701').split(',') if n.strip()
+]
+
 # Which gateway sends OTP SMS: true -> 2Factor (above), false -> Twilio Verify
 # (below). Master OTP mode overrides both — nothing is sent at all.
 USE_TWOFACTOR = os.getenv('USE_TWOFACTOR', 'false').strip().lower() in ('true', '1', 'yes', 'on')

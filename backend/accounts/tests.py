@@ -61,6 +61,7 @@ class MasterOTPTests(TestCase):
 
 
 @override_settings(USE_TWOFACTOR=True, TWOFACTOR_API_KEY='', OTP_DEFAULT_MODE='sms', USE_MASTER_OTP=None, MASTER_OTP='')
+@override_settings(ADMIN_PHONE_NUMBERS=['+919000000001'])
 class OTPSettingsAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -138,6 +139,7 @@ TWILIO_SETTINGS = dict(
 
 
 @override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+@override_settings(ADMIN_PHONE_NUMBERS=['+919000000001'])
 class TwilioTestSMSHintTests(TestCase):
     """POST /api/admin/otp-settings/ turns common Twilio Verify errors into a hint."""
 
@@ -596,6 +598,7 @@ class TwoFactorVerifyTests(OTPAPIMixin, TestCase):
 
 
 @override_settings(**TWILIO_SETTINGS, USE_MASTER_OTP=None, MASTER_OTP='')
+@override_settings(ADMIN_PHONE_NUMBERS=['+919000000001'])
 class TwilioHintMatchingTests(TestCase):
     """Admin test-SMS hints match on Twilio's error code, not digits in the message."""
 

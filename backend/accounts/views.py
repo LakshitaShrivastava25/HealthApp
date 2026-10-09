@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -83,6 +84,10 @@ class VerifyOTPView(APIView):
                 {'detail': 'This account has been deleted. Contact support if this was a mistake.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if account.phone_number in settings.ADMIN_PHONE_NUMBERS and account.role != Account.Role.ADMIN:
+            account.role = Account.Role.ADMIN
+            account.is_staff = True
+            account.save(update_fields=['role', 'is_staff'])
         refresh = RefreshToken.for_user(account)
         return Response({
             'access': str(refresh.access_token),

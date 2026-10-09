@@ -853,6 +853,8 @@ class MasterOTPHardeningTests(TestCase):
         Account.objects.create_user(PHONE, role=Account.Role.ADMIN)
         self.assertEqual(services.reviewer_otp(PHONE), '')
 
+    # The Admin Portal also needs the number on the allow-list.
+    @override_settings(ADMIN_PHONE_NUMBERS=['+919000000077'])
     def test_admin_cannot_switch_on_master_mode_with_the_default_code(self):
         admin = Account.objects.create_user('+919000000077', role=Account.Role.ADMIN)
         self.client.force_authenticate(admin)

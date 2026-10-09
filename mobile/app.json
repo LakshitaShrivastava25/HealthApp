@@ -2,7 +2,7 @@
   "expo": {
     "name": "CuraPath",
     "slug": "healthnow-mobile",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "scheme": "healthnow",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
         "backgroundColor": "#6D5BD0"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 10,
+      "versionCode": 11,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.RECORD_AUDIO"

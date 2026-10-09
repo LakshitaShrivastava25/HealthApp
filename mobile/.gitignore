@@ -5,3 +5,9 @@ web-build/
 *.log
 .DS_Store
 expo-env.d.ts
+
+# Firebase client config for Android push. Not a secret in itself, but it
+# carries a Google API key that GitHub's secret scanning blocks on push.
+# Builds still get it: .easignore leaves it in, or set the EAS file variable
+# GOOGLE_SERVICES_JSON (see app.config.js).
+google-services.json

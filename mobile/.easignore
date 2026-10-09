@@ -1,0 +1,15 @@
+# What EAS leaves out of a build upload. When this file exists EAS uses it
+# instead of .gitignore — it matches .gitignore except that it KEEPS
+# google-services.json, which the Android build needs for push and git
+# deliberately does not track.
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+expo-env.d.ts
+.env
+.env.*
+*firebase-adminsdk*.json
+*service-account*.json

@@ -81,7 +81,8 @@ api.interceptors.response.use(
       const refresh = getRefreshToken();
       if (!refresh) {
         clearTokens();
-        window.location.href = '/login';
+        // The Admin Portal's own sign-in (email + password) lives at /admin.
+        window.location.replace('/admin');
         return Promise.reject(error);
       }
       if (isRefreshing) {
@@ -126,8 +127,12 @@ api.interceptors.response.use(
         // that logout already cleaned up, and clearing again here could end
         // the next person's session.
         if (generationAtRefresh !== sessionGeneration) return Promise.reject(error);
+        // Only a refused refresh token ends the session; the server being
+        // unavailable (no response, 5xx, 429) keeps the staff member signed in.
+        const status = axios.isAxiosError(refreshError) ? refreshError.response?.status : undefined;
+        if (status !== 400 && status !== 401 && status !== 403) return Promise.reject(error);
         clearTokens();
-        window.location.href = '/login';
+        window.location.replace('/admin');
         return Promise.reject(refreshError);
       } finally {
         // After a logout clearTokens() already released the lock, and a newer
@@ -139,9 +144,14 @@ api.interceptors.response.use(
   }
 );
 
-// -- auth (staff sign in at /login, which hands the session to this store;
-// permission checks on the backend are what actually gate admin endpoints) --
+// -- auth: staff sign in at /admin with email + password, or at /login with
+// OTP (which hands the session to this store). Permission checks on the
+// backend are what actually gate admin endpoints. --
 export const authApi = {
+  // Plain axios: a 401 here means "wrong password", not an expired session
+  // for the interceptor above to refresh.
+  staffLogin: (email: string, password: string) =>
+    axios.post(`${BASE_URL}/auth/staff-login/`, { email, password }),
   me: () => api.get('/auth/me/'),
   // Blacklists the refresh token server-side. Plain axios: a 401 here must
   // not kick off a refresh of the session being ended.

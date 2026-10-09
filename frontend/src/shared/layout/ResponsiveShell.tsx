@@ -1,7 +1,10 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, Suspense, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Menu, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useLocation, useNavigationType, useOutlet } from 'react-router-dom';
+import { useBackToClose } from '../hooks/useBackToClose';
+import { prefetchPages } from '../lazyPage';
+import PageFallback from '../components/PageFallback';
 
 /**
  * The app shell: a persistent sidebar on large screens, an off-canvas drawer
@@ -61,12 +64,31 @@ export default function ResponsiveShell({
 }) {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const navigationType = useNavigationType();
+  const outlet = useOutlet();
 
   // Navigating from inside the drawer should close it — otherwise the new
   // page loads behind a drawer the person has to dismiss by hand.
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
+
+  // A new page starts at the top; Back/Forward (POP) keeps the browser's
+  // own scroll restoration.
+  useEffect(() => {
+    if (navigationType !== 'POP') window.scrollTo(0, 0);
+  }, [location.pathname, navigationType]);
+
+  // On a phone, Back closes the open drawer instead of leaving the page.
+  useBackToClose(open, () => setOpen(false));
+
+  // With the first page on screen, fetch this portal's other pages in the
+  // background so moving between them is instant.
+  useEffect(() => {
+    prefetchPages(portal);
+  }, [portal]);
+
+  const navValue = useMemo(() => ({ open, setOpen }), [open]);
 
   // Escape closes it, and the page behind must not scroll while it's open.
   useEffect(() => {
@@ -84,7 +106,7 @@ export default function ResponsiveShell({
   }, [open]);
 
   return (
-    <MobileNavContext.Provider value={{ open, setOpen }}>
+    <MobileNavContext.Provider value={navValue}>
       <div data-portal={portal} className="flex min-h-screen bg-surface">
         {/* Scrim. Below lg only — at lg+ the sidebar is part of the layout and
             there is nothing to dismiss. */}
@@ -118,18 +140,21 @@ export default function ResponsiveShell({
         {/* min-w-0 is what stops a wide child (a table, a long unbroken
             string) from forcing the whole page wider than the viewport. */}
         <div className="min-w-0 flex-1">
-          {/* Page transition, applied once here rather than per page. Keyed on
-              pathname so each route fades in; opacity + a 4px rise only, and
-              short enough (180ms) that navigation still feels immediate. */}
-          <AnimatePresence mode="wait" initial={false}>
+          {/* Page transition, applied once here rather than per page: a
+              short fade-in only. The outlet element is captured per
+              pathname — rendering a live <Outlet/> inside AnimatePresence
+              made the NEW page mount inside the leaving wrapper too, so
+              every navigation mounted (and fetched) each page twice and it
+              visibly appeared, vanished and reappeared. No exit animation
+              and no "wait": the new page shows immediately. */}
+          <AnimatePresence initial={false}>
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
             >
-              <Outlet />
+              <Suspense fallback={<PageFallback />}>{outlet}</Suspense>
             </motion.div>
           </AnimatePresence>
         </div>

@@ -22,6 +22,7 @@ import {
 } from '@shared/auth';
 import { usePhoneInput } from '@shared/components/PhoneInput';
 import { useSession } from '@shared/session/SessionContext';
+import { useBackToClose } from '@shared/hooks/useBackToClose';
 
 type StepName = 'phone' | 'otp' | 'staff';
 
@@ -93,7 +94,6 @@ export default function Login() {
         const result = await verifyOtp(fullNumber, code);
         if (result.kind === 'staff') {
           setStep('staff');
-          setTimeout(() => navigate('/admin', { replace: true }), 1400);
           return;
         }
         setTarget(from ?? result.home);
@@ -114,6 +114,22 @@ export default function Login() {
     const id = setTimeout(() => navigate(target, { replace: true }), SUCCESS_HOLD_MS);
     return () => clearTimeout(id);
   }, [target, navigate]);
+
+  // Staff: the same beat, then the Admin Portal. Cleared if the page goes
+  // away first, so it can never pull someone back from elsewhere.
+  useEffect(() => {
+    if (step !== 'staff') return;
+    const id = setTimeout(() => navigate('/admin', { replace: true }), 1400);
+    return () => clearTimeout(id);
+  }, [step, navigate]);
+
+  // On the code step, Back returns to the phone-number step (number kept)
+  // instead of leaving the login page.
+  useBackToClose(step === 'otp', () => {
+    setOtp('');
+    setError(null);
+    setStep('phone');
+  });
 
   function backToPhone() {
     resetPhone();

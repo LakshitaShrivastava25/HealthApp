@@ -1,14 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen, SectionTitle } from '../../../src/components/ui';
 import { notesApi, patientDataApi, profilesApi, unwrap } from '../../../src/lib/api';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { openFile } from '../../../src/lib/viewer';
 
 type TimelineEvent = { id: string; event_date: string; title: string; summary: string; event_type: string };
-type Doc = { id: string; title: string; category: string; document_date: string | null };
+type Doc = { id: string; title: string; category: string; document_date: string | null; file: string | null; file_type?: string };
 type Allergy = { id: string; substance: string; reaction: string; kind: string };
 type Med = {
   id: string;
@@ -183,18 +184,25 @@ export default function PatientRecordView() {
           <Text style={type.caption}>No documents uploaded by this patient.</Text>
         ) : (
           documents.map((d) => (
-            <Row key={d.id} style={styles.listRow}>
-              <View style={styles.fileIcon}>
-                <Feather name="file-text" size={15} color={colors.brandPurple} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={type.label} numberOfLines={1}>
-                  {d.title || 'Untitled document'}
-                </Text>
-                <Text style={type.micro}>{d.document_date || 'No date recorded'}</Text>
-              </View>
-              <Badge tone="neutral">{d.category}</Badge>
-            </Row>
+            <Pressable
+              key={d.id}
+              disabled={!d.file}
+              onPress={() => openFile(d.file, d.file_type, d.title)}
+              accessibilityLabel={d.file ? `Open ${d.title || 'document'}` : undefined}
+            >
+              <Row style={styles.listRow}>
+                <View style={styles.fileIcon}>
+                  <Feather name="file-text" size={15} color={colors.brandPurple} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[type.label, !!d.file && { color: colors.brandPurple }]} numberOfLines={1}>
+                    {d.title || 'Untitled document'}
+                  </Text>
+                  <Text style={type.micro}>{d.document_date || 'No date recorded'}</Text>
+                </View>
+                <Badge tone="neutral">{d.category}</Badge>
+              </Row>
+            </Pressable>
           ))
         )}
       </Card>

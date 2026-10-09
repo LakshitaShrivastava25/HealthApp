@@ -34,8 +34,6 @@ export default function Patients() {
     adminApi.patients(search).then((r) => setPatients(r.data.results ?? r.data));
   }
 
-  useEffect(() => load(), []);
-
   useEffect(() => {
     // Debounced so typing doesn't fire a request per keystroke — same
     // pattern the Users & Accounts search already uses.

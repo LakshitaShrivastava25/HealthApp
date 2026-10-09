@@ -37,6 +37,8 @@ export default function RootLayout() {
                 <Stack.Screen name="(doctor)" options={{ headerShown: false }} />
                 <Stack.Screen name="(doctor-setup)" options={{ headerShown: false }} />
                 <Stack.Screen name="(admin)" options={{ headerShown: false }} />
+                {/* Uploaded files open here, inside the app (src/lib/viewer.ts). */}
+                <Stack.Screen name="viewer" options={{ animation: 'slide_from_bottom', title: 'Document' }} />
               </Stack>
             </AnimatedSplash>
           </AuthProvider>

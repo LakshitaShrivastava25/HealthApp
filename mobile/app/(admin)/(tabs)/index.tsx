@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter, type Href } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 
@@ -7,6 +7,7 @@ import { Badge, Card, CardHeader, ErrorNote, Row, Screen, SectionTitle } from '.
 import { useAuth } from '../../../src/context/AuthContext';
 import { adminApi } from '../../../src/lib/api';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
 type Summary = {
   total_users: number;
@@ -38,11 +39,8 @@ export default function AdminOverview() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
+  // Not on every tab switch: see useFocusRefresh.
+  useFocusRefresh(load, 'admin-overview');
 
   async function onRefresh() {
     setRefreshing(true);

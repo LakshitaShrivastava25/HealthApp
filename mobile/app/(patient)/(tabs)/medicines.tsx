@@ -1,14 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import { Badge, Button, Card, EmptyState, ErrorNote, Input, Row, Screen, SectionTitle } from '../../../src/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorNote, Input, Row, Screen, SectionTitle, Loading } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { medicinesApi, unwrap } from '../../../src/lib/api';
 import { syncMedicineReminders } from '../../../src/lib/notifications';
 import { colors, radius, spacing, type, type ToneName } from '../../../src/theme';
+import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
 type Reminder = { id: string; time_of_day: string; days_of_week: string };
 type HistoryEntry = {
@@ -94,11 +95,14 @@ function needsAttention(m: Medication) {
 
 export default function Medicines() {
   const { activeProfile, profiles } = useAuth();
+  const profileId = activeProfile?.id ?? null;
   const router = useRouter();
 
   const [medications, setMedications] = useState<Medication[]>([]);
   const [takenToday, setTakenToday] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  // False until the first load finishes: a loader, not "nothing here yet".
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showPast, setShowPast] = useState(false);
 
@@ -115,13 +119,13 @@ export default function Medicines() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     setError(null);
     try {
       // Current and past together: one request, split on screen.
       const [meds, logs] = await Promise.all([
-        medicinesApi.list(activeProfile.id, 'all'),
-        medicinesApi.listDoseLogs(activeProfile.id),
+        medicinesApi.list(profileId, 'all'),
+        medicinesApi.listDoseLogs(profileId),
       ]);
       setMedications(unwrap<Medication>(meds.data));
       const today = todayIso();
@@ -134,14 +138,13 @@ export default function Medicines() {
       );
     } catch {
       setError("Couldn't load your medicines. Pull down to retry.");
+    } finally {
+      setLoaded(true);
     }
-  }, [activeProfile]);
+  }, [profileId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
+  // Not on every tab switch: see useFocusRefresh.
+  useFocusRefresh(load, profileId ? `medicines:${profileId}` : null);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -313,7 +316,8 @@ export default function Medicines() {
         </Card>
       )}
 
-      {medications.length === 0 && !showForm && !error && (
+      {!loaded && !error && <Loading />}
+      {loaded && medications.length === 0 && !showForm && !error && (
         <EmptyState
           title="No medicines on file"
           note="Medicines are added automatically when a prescription is processed, or add one above."

@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { emergencyApi, allergiesApi, medicinesApi } from '../lib/api';
 import PhoneInput, { usePhoneInput } from '@shared/components/PhoneInput';
 import { API_BASE_URL } from '@shared/apiConfig';
+import { useCachedState } from '@shared/hooks/useCachedState';
+import PageFallback from '@shared/components/PageFallback';
 
 type EmergencyProfile = {
   id: string;
@@ -24,7 +26,11 @@ type ToggleKey = 'include_blood_group' | 'include_allergies' | 'include_medicati
 
 export default function EmergencyCard() {
   const { activeProfile } = useAuth();
-  const [ep, setEp] = useState<EmergencyProfile | null>(null);
+  const profileId = activeProfile?.id ?? null;
+  // Remembered per profile, and nothing (not the "set up your card" form) is
+  // shown until it is known whether a card already exists.
+  const [ep, setEp, epLoaded] = useCachedState<EmergencyProfile | null>(profileId ? `emergency:${profileId}` : null, null);
+  const [epError, setEpError] = useState('');
   const [contactName, setContactName] = useState('');
   const { country, setCountry, digits, setDigits, isComplete, fullNumber } = usePhoneInput();
   const [creating, setCreating] = useState(false);
@@ -33,22 +39,28 @@ export default function EmergencyCard() {
   const [toggleError, setToggleError] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [allergies, setAllergies] = useState<string[]>([]);
-  const [medications, setMedications] = useState<string[]>([]);
+  const [allergies, setAllergies] = useCachedState<string[]>(profileId ? `emergency-allergies:${profileId}` : null, []);
+  const [medications, setMedications] = useCachedState<string[]>(profileId ? `emergency-medicines:${profileId}` : null, []);
 
   async function load() {
-    if (!activeProfile) return;
-    const { data } = await emergencyApi.list(activeProfile.id);
-    const list = data.results ?? data;
-    setEp(list[0] || null);
+    if (!profileId) return;
+    try {
+      const { data } = await emergencyApi.list(profileId);
+      const list = data.results ?? data;
+      setEp(list[0] || null);
+      setEpError('');
+    } catch {
+      setEpError("Couldn't load your emergency card. Check your connection and try again.");
+    }
   }
 
   async function loadMedicalSummary() {
-    if (!activeProfile) return;
+    if (!profileId) return;
     const [allergyRes, medRes] = await Promise.all([
-      allergiesApi.list(activeProfile.id),
-      medicinesApi.list(activeProfile.id),
-    ]);
+      allergiesApi.list(profileId),
+      medicinesApi.list(profileId),
+    ]).catch(() => [null, null] as const);
+    if (!allergyRes || !medRes) return;
     const allergyList = allergyRes.data.results ?? allergyRes.data;
     const medList = medRes.data.results ?? medRes.data;
     setAllergies(allergyList.map((a: { substance: string }) => a.substance));
@@ -59,7 +71,7 @@ export default function EmergencyCard() {
     load();
     loadMedicalSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfile]);
+  }, [profileId]);
 
   const publicUrl = ep ? `${API_BASE_URL}/public/emergency/${ep.public_token}/` : '';
 
@@ -150,7 +162,10 @@ export default function EmergencyCard() {
       <Topbar title="Emergency Health Card" subtitle="Show this QR in any medical emergency" />
 
       <main className="p-4 sm:p-6 lg:p-8">
-        {!ep ? (
+        {epError && <p className="mb-4 text-sm text-danger" role="alert">{epError}</p>}
+        {!epLoaded ? (
+          !epError && <PageFallback />
+        ) : !ep ? (
           <Card className="p-6 max-w-lg">
             <p className="text-sm font-semibold text-ink-900 mb-1">Set up your Emergency Card</p>
             <p className="text-xs text-ink-500 mb-4">

@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
@@ -8,6 +8,7 @@ import { Badge, ErrorNote, Loading, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { timelineApi, unwrap } from '../../src/lib/api';
 import { colors, radius, shadow, spacing, type, type ToneName } from '../../src/theme';
+import { useFocusRefresh } from '../../src/hooks/useFocusRefresh';
 
 type TimelineEvent = {
   id: string;
@@ -39,6 +40,7 @@ const toneDot: Record<ToneName, string> = {
 /** Every dated health event for the active profile, newest first, grouped by year. */
 export default function Timeline() {
   const { activeProfile } = useAuth();
+  const profileId = activeProfile?.id ?? null;
   const router = useRouter();
 
   const [events, setEvents] = useState<TimelineEvent[] | null>(null);
@@ -46,22 +48,19 @@ export default function Timeline() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     setError(null);
     try {
-      const { data } = await timelineApi.list(activeProfile.id);
+      const { data } = await timelineApi.list(profileId);
       setEvents(unwrap<TimelineEvent>(data));
     } catch {
       setError("Couldn't load the timeline. Pull down to retry.");
       setEvents((prev) => prev ?? []);
     }
-  }, [activeProfile]);
+  }, [profileId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
+  // Not on every tab switch: see useFocusRefresh.
+  useFocusRefresh(load, profileId ? `timeline:${profileId}` : null);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -89,7 +88,15 @@ export default function Timeline() {
           <Text style={[type.caption, { textAlign: 'center' }]}>
             Timeline events are built automatically from reports and prescriptions you upload to the Locker.
           </Text>
-          <Pressable onPress={() => router.push('/(patient)/(tabs)/locker')} style={styles.emptyCta}>
+          <Pressable
+            onPress={() => {
+              // Back to the tabs and switch to Locker — pushing a tab URL from
+              // here used to stack a second set of tabs.
+              if (router.canDismiss()) router.dismissAll();
+              router.navigate('/(patient)/(tabs)/locker');
+            }}
+            style={styles.emptyCta}
+          >
             <Feather name="upload" size={15} color={colors.white} />
             <Text style={styles.emptyCtaText}>Upload a document</Text>
           </Pressable>

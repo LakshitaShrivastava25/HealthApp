@@ -189,11 +189,15 @@ REST_FRAMEWORK = {
         # The registration form's "Verify" button looks a number up on the NMC
         # register; a budget keeps it from becoming a free register scraper.
         'nmc_precheck': os.getenv('THROTTLE_NMC_PRECHECK', '10/min'),
+        # Admin Portal email + password. Each credential also locks itself
+        # for 15 minutes after 5 wrong passwords (accounts/services.py).
+        'staff_login': os.getenv('THROTTLE_STAFF_LOGIN', '20/hour'),
     } if not TESTING else {
         # The suite makes hundreds of requests from one address; the
         # throttle tests set their own low rates.
         scope: '100000/hour'
-        for scope in ('anon', 'user', 'otp_send', 'otp_verify', 'ai', 'uploads', 'access_requests', 'nmc_precheck')
+        for scope in ('anon', 'user', 'otp_send', 'otp_verify', 'ai', 'uploads', 'access_requests', 'nmc_precheck',
+                      'staff_login')
     },
 }
 

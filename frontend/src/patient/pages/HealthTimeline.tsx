@@ -5,6 +5,8 @@ import { Card, Badge, EmptyState } from '../components/ui';
 import DocumentDetailModal from '../components/DocumentDetailModal';
 import { useAuth } from '../context/AuthContext';
 import { timelineApi } from '../lib/api';
+import { useCachedState } from '@shared/hooks/useCachedState';
+import PageFallback from '@shared/components/PageFallback';
 
 const docBadgeTone: Record<string, 'info' | 'success' | 'warning' | 'neutral' | 'danger'> = {
   report: 'info',
@@ -37,18 +39,26 @@ type TimelineEvent = {
 
 export default function HealthTimeline() {
   const { activeProfile } = useAuth();
-  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const profileId = activeProfile?.id ?? null;
+  const [events, setEvents, loaded] = useCachedState<TimelineEvent[]>(profileId ? `timeline:${profileId}` : null, []);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState('');
 
   function loadEvents() {
-    if (!activeProfile) return;
-    timelineApi.list(activeProfile.id).then((r) => setEvents(r.data.results ?? r.data));
+    if (!profileId) return;
+    timelineApi
+      .list(profileId)
+      .then((r) => {
+        setEvents(r.data.results ?? r.data);
+        setLoadError('');
+      })
+      .catch(() => setLoadError("Couldn't load your timeline. Check your connection and try again."));
   }
 
   useEffect(() => {
     loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfile]);
+  }, [profileId]);
 
   const grouped = events.reduce<Record<string, TimelineEvent[]>>((acc, e) => {
     const year = e.event_date.slice(0, 4);
@@ -63,7 +73,9 @@ export default function HealthTimeline() {
       <Topbar title="Health Timeline" subtitle="Your health journey in chronological order" />
 
       <main className="p-4 sm:p-6 lg:p-8 max-w-3xl">
-        {years.length === 0 && (
+        {loadError && <p className="mb-4 text-sm text-danger" role="alert">{loadError}</p>}
+        {!loaded && !loadError && <PageFallback />}
+        {loaded && years.length === 0 && (
           <Card>
             <EmptyState
               icon={<Activity size={22} />}

@@ -1,12 +1,13 @@
 import { Feather } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import DateField, { toIsoDate } from '../../../src/components/DateField';
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Loading, Row, Screen } from '../../../src/components/ui';
 import { documentsApi } from '../../../src/lib/api';
 import { absoluteUrl } from '../../../src/lib/config';
+import { openFile } from '../../../src/lib/viewer';
 import { colors, radius, spacing, type } from '../../../src/theme';
 
 type Doc = {
@@ -18,6 +19,7 @@ type Doc = {
   hospital_name: string;
   document_date: string | null;
   file: string | null;
+  file_type?: string;
   structured_data: Record<string, unknown>;
   uploaded_at: string;
   original_filename?: string;
@@ -204,24 +206,28 @@ export default function DocumentDetail() {
   }, [load]);
 
   // While the server is still reading the file, poll quietly until the
-  // status moves on. A failed poll is ignored; the next tick tries again.
+  // status moves on — only while this screen is on show, not from under
+  // another screen pushed on top of it. A failed poll is ignored; the next
+  // tick tries again.
   const status = doc?.status;
-  useEffect(() => {
-    if (status !== 'processing' || !id) return;
-    let cancelled = false;
-    const timer = setInterval(async () => {
-      try {
-        const { data } = await documentsApi.get(id);
-        if (!cancelled && data.status !== 'processing') applyDoc(data);
-      } catch {
-        // keep polling
-      }
-    }, POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [status, id, applyDoc]);
+  useFocusEffect(
+    useCallback(() => {
+      if (status !== 'processing' || !id) return;
+      let cancelled = false;
+      const timer = setInterval(async () => {
+        try {
+          const { data } = await documentsApi.get(id);
+          if (!cancelled && data.status !== 'processing') applyDoc(data);
+        } catch {
+          // keep polling
+        }
+      }, POLL_MS);
+      return () => {
+        cancelled = true;
+        clearInterval(timer);
+      };
+    }, [status, id, applyDoc])
+  );
 
   /** Confirms or rejects a duplicate link; medicines and timeline follow server-side. */
   async function handleDuplicate(run: () => Promise<{ data: Doc }>) {
@@ -326,7 +332,9 @@ export default function DocumentDetail() {
   }
 
   const fileUrl = absoluteUrl(doc.file);
-  const isImage = !!doc.file && /\.(jpe?g|png)$/i.test(doc.file);
+  // From the API, not the URL: a signed /api/files/?t=... link never ends
+  // in the file's extension, so guessing from it always said "PDF".
+  const isImage = doc.file_type === 'image';
 
   return (
     <Screen>
@@ -492,12 +500,20 @@ export default function DocumentDetail() {
         <Card>
           <CardHeader title="Original file" />
           {isImage ? (
-            <Image source={{ uri: fileUrl }} style={styles.preview} resizeMode="contain" />
+            <Pressable onPress={() => openFile(doc.file, doc.file_type, doc.title)} accessibilityLabel="Open the photo">
+              <Image source={{ uri: fileUrl }} style={styles.preview} resizeMode="contain" />
+            </Pressable>
           ) : (
-            <Text style={type.caption}>This document is a PDF.</Text>
+            <Text style={type.caption}>
+              {doc.file_type === 'pdf' ? 'This document is a PDF.' : 'Open it to see the original file.'}
+            </Text>
           )}
-          <Button variant="secondary" onPress={() => Linking.openURL(fileUrl)} style={{ marginTop: spacing.md }}>
-            Open original
+          <Button
+            variant="secondary"
+            onPress={() => openFile(doc.file, doc.file_type, doc.title)}
+            style={{ marginTop: spacing.md }}
+          >
+            {isImage ? 'View full photo' : 'View original'}
           </Button>
         </Card>
       )}

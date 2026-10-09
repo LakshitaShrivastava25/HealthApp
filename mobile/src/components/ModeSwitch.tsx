@@ -1,11 +1,11 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, type Mode } from '../context/AuthContext';
 import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '../lib/councils';
 import { colors, radius, spacing, type } from '../theme';
 import { Badge, Card, Row } from './ui';
+import { resetTo } from '../lib/navigation';
 
 const MODES: Record<Mode, { label: string; icon: keyof typeof Feather.glyphMap; color: string; bg: string }> = {
   patient: { label: 'User', icon: 'user', color: colors.brandPurple, bg: colors.brandLavender },
@@ -23,14 +23,15 @@ const MODES: Record<Mode, { label: string; icon: keyof typeof Feather.glyphMap; 
  */
 export function useModeSwitch() {
   const { mode, switchMode, hasRegistered } = useAuth();
-  const router = useRouter();
   const target: Mode = mode === 'doctor' ? 'patient' : 'doctor';
   return {
     available: hasRegistered,
     target,
     switchTo: (next: Mode = target) => {
       switchMode(next);
-      router.replace('/');
+      // The whole previous area goes, not just its top screen, so Back can't
+      // land on a stale copy of it.
+      resetTo('/');
     },
   };
 }

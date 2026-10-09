@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ShieldCheck, Check } from 'lucide-react';
+import { ShieldCheck, Check, Eye } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import { adminApi } from '../lib/api';
+import FileViewer from '@shared/components/FileViewer';
 
 type Policy = {
   id: string;
@@ -10,10 +11,13 @@ type Policy = {
   policy_number: string;
   status: string;
   structured_data: Record<string, unknown>;
+  file?: string | null;
+  file_type?: string;
 };
 
 export default function InsurancePolicyReview() {
   const [policies, setPolicies] = useState<Policy[]>([]);
+  const [viewing, setViewing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [insurer, setInsurer] = useState('');
   const [policyNumber, setPolicyNumber] = useState('');
@@ -74,6 +78,14 @@ export default function InsurancePolicyReview() {
             {open && (
               <Card className="p-5 h-fit sticky top-24">
                 <p className="text-sm font-semibold text-ink-900 mb-3">Confirm extracted fields</p>
+                {open.file && (
+                  <button onClick={() => setViewing(true)} className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:underline">
+                    <Eye size={13} /> View the policy document
+                  </button>
+                )}
+                {viewing && open.file && (
+                  <FileViewer url={open.file} type={open.file_type} title={open.insurer || 'Policy document'} onClose={() => setViewing(false)} />
+                )}
                 <label className="text-xs text-ink-500 block mb-1">Insurer</label>
                 <input
                   value={insurer}

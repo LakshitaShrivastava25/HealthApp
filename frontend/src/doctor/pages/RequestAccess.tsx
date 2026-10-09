@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserPlus } from 'lucide-react';
 import Topbar from '../components/Topbar';
@@ -9,6 +9,14 @@ import { useAuth } from '../context/AuthContext';
 export default function RequestAccess() {
   const { doctor } = useAuth();
   const navigate = useNavigate();
+  // After a successful request, return to My Patients — replacing this page,
+  // and only if the doctor is still here (the timer is cleared otherwise).
+  const [returnHome, setReturnHome] = useState(false);
+  useEffect(() => {
+    if (!returnHome) return;
+    const id = setTimeout(() => navigate('/doctor', { replace: true }), 1500);
+    return () => clearTimeout(id);
+  }, [returnHome, navigate]);
   const [profileId, setProfileId] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -21,7 +29,7 @@ export default function RequestAccess() {
     try {
       await accessApi.request(doctor.id, profileId);
       setSuccess(true);
-      setTimeout(() => navigate('/doctor'), 1500);
+      setReturnHome(true);
     } catch {
       setError(
         "Could not send the request. Double-check the patient's reference ID — it's 6 characters, like AB1234."

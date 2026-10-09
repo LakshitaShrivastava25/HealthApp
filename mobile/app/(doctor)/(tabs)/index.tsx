@@ -1,12 +1,13 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import { Badge, Card, CardHeader, EmptyState, ErrorNote, Row, Screen, SectionTitle } from '../../../src/components/ui';
+import { Badge, Card, CardHeader, EmptyState, ErrorNote, Row, Screen, SectionTitle, Loading } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { accessApi, profilesApi, unwrap } from '../../../src/lib/api';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
 type Grant = {
   id: string;
@@ -23,18 +24,19 @@ export default function MyPatients() {
   const [grants, setGrants] = useState<Grant[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  // False until the first load finishes: a loader, not "nothing here yet".
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const { data } = await accessApi.list();
-      setGrants(unwrap<Grant>(data));
-
       // Names come from /api/profiles/, which includes any profile this
       // doctor has an APPROVED grant for — so the list is exactly the
-      // patients whose names the doctor is allowed to know.
-      const profileRes = await profilesApi.list();
+      // patients whose names the doctor is allowed to know. Both requests
+      // at once, not one after the other.
+      const [{ data }, profileRes] = await Promise.all([accessApi.list(), profilesApi.list()]);
+      setGrants(unwrap<Grant>(data));
       const map: Record<string, string> = {};
       unwrap<{ id: string; full_name: string }>(profileRes.data).forEach((p) => {
         map[p.id] = p.full_name;
@@ -42,14 +44,13 @@ export default function MyPatients() {
       setNames(map);
     } catch {
       setError("Couldn't load your patients. Pull down to retry.");
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
+  // Not on every tab switch: see useFocusRefresh.
+  useFocusRefresh(load, 'doctor-home');
 
   async function onRefresh() {
     setRefreshing(true);
@@ -83,7 +84,9 @@ export default function MyPatients() {
       </Card>
 
       <SectionTitle>Patients who approved you ({approved.length})</SectionTitle>
-      {approved.length === 0 ? (
+      {!loaded ? (
+        <Loading />
+      ) : approved.length === 0 ? (
         <EmptyState
           title="No patients yet"
           note="Ask a patient for their reference ID, then send a request from the Request tab. They must approve before you see anything."

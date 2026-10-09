@@ -1,10 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Badge, Card, Row, Screen, SectionTitle } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { useConfirmLogout } from '../../../src/hooks/useConfirmLogout';
 
 // Typed as Href, not string: experiments.typedRoutes checks these
 // against the real route tree, so a typo'd path fails the build rather
@@ -38,21 +39,9 @@ const ITEMS: { icon: keyof typeof Feather.glyphMap; label: string; note: string;
 
 export default function AdminMore() {
   const router = useRouter();
-  const { account, logout } = useAuth();
+  const { account } = useAuth();
 
-  function confirmLogout() {
-    Alert.alert('Sign out?', 'You will need a new code to sign back in.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/login');
-        },
-      },
-    ]);
-  }
+  const confirmLogout = useConfirmLogout();
 
   return (
     <Screen>

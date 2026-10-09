@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { ModeSwitchCard } from '../../src/components/ModeSwitch';
@@ -9,6 +9,8 @@ import { useAuth } from '../../src/context/AuthContext';
 import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '../../src/lib/councils';
 import { colors, radius, spacing, type } from '../../src/theme';
 import { useConfirmExit } from '../../src/lib/useBackHandler';
+import { useConfirmLogout } from '../../src/hooks/useConfirmLogout';
+import { resetTo } from '../../src/lib/navigation';
 
 /**
  * Where a registered-but-unverified doctor waits.
@@ -22,7 +24,8 @@ import { useConfirmExit } from '../../src/lib/useBackHandler';
  */
 export default function PendingVerification() {
   useConfirmExit();
-  const { doctor, refreshDoctor, logout } = useAuth();
+  const { doctor, refreshDoctor } = useAuth();
+  const confirmLogout = useConfirmLogout();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -33,10 +36,13 @@ export default function PendingVerification() {
     setRefreshing(true);
     await refreshDoctor();
     setRefreshing(false);
-    // A doctor approved since the last check should not have to restart the
-    // app to notice — the index route re-evaluates the portal for them.
-    router.replace('/');
   }
+
+  // A doctor approved since the last check goes straight to Doctor mode —
+  // only then, rather than rebuilding this screen on every pull-to-refresh.
+  useEffect(() => {
+    if (status === 'verified') resetTo('/');
+  }, [status]);
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPurple} />}>
@@ -125,10 +131,7 @@ export default function PendingVerification() {
 
       <Button
         variant="secondary"
-        onPress={async () => {
-          await logout();
-          router.replace('/login');
-        }}
+        onPress={confirmLogout}
       >
         Sign out
       </Button>

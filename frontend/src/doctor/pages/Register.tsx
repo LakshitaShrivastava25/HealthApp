@@ -147,7 +147,7 @@ export default function Register() {
     } catch (err: any) {
       if (err?.response?.status === 401) {
         setError('Your session expired. Redirecting you to sign in again...');
-        setTimeout(() => navigate('/login', { state: { from: '/doctor/register' } }), 1800);
+        setTimeout(() => navigate('/login', { replace: true, state: { from: '/doctor/register' } }), 1800);
       } else {
         // Show the backend's actual validation message when there is one,
         // instead of a generic guess. DRF returns either

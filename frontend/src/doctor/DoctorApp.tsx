@@ -1,13 +1,15 @@
-import { Route, Navigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AppLayout from './layouts/AppLayout';
 import SessionStatus from '../auth/SessionStatus';
-import Register from './pages/Register';
-import PendingVerification from './pages/PendingVerification';
-import MyPatients from './pages/MyPatients';
-import Profile from './pages/Profile';
-import RequestAccess from './pages/RequestAccess';
-import PatientRecordView from './pages/PatientRecordView';
+import { lazyPage } from '@shared/lazyPage';
+
+const Register = lazyPage('doctor', () => import('./pages/Register'));
+const PendingVerification = lazyPage('doctor', () => import('./pages/PendingVerification'));
+const MyPatients = lazyPage('doctor', () => import('./pages/MyPatients'));
+const Profile = lazyPage('doctor', () => import('./pages/Profile'));
+const RequestAccess = lazyPage('doctor', () => import('./pages/RequestAccess'));
+const PatientRecordView = lazyPage('doctor', () => import('./pages/PatientRecordView'));
 
 /**
  * Doctor mode — the same signed-in account as User mode, switched over.
@@ -63,20 +65,8 @@ export default function doctorRoutes() {
           </DoctorGate>
         }
       />
-      <Route
-        element={
-          <DoctorGate need="verified">
-            <AppLayout />
-          </DoctorGate>
-        }
-      >
-        <Route index element={<MyPatients />} />
-        <Route path="request-access" element={<RequestAccess />} />
-        <Route path="patients/:profileId" element={<PatientRecordView />} />
-      </Route>
-      {/* Reachable before verification: editing the registration number
-          resets the account to pending, and a rejected doctor needs a way
-          to correct the details that got them rejected. */}
+      {/* One shell for every doctor page: moving between Profile and the
+          rest no longer tears the sidebar and layout down and rebuilds them. */}
       <Route
         element={
           <DoctorGate need="registered">
@@ -84,8 +74,23 @@ export default function doctorRoutes() {
           </DoctorGate>
         }
       >
+        <Route
+          element={
+            <DoctorGate need="verified">
+              <Outlet />
+            </DoctorGate>
+          }
+        >
+          <Route index element={<MyPatients />} />
+          <Route path="request-access" element={<RequestAccess />} />
+          <Route path="patients/:profileId" element={<PatientRecordView />} />
+        </Route>
+        {/* Reachable before verification: editing the registration number
+            resets the account to pending, and a rejected doctor needs a way
+            to correct the details that got them rejected. */}
         <Route path="profile" element={<Profile />} />
       </Route>
+      <Route path="*" element={<Navigate to="/doctor" replace />} />
     </Route>
   );
 }

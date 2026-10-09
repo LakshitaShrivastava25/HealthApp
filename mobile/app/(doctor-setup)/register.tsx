@@ -11,6 +11,7 @@ import { doctorApi, type UploadFile } from '../../src/lib/api';
 import { pickDocument, pickFromCamera } from '../../src/lib/pickFile';
 import { colors, radius, spacing, type } from '../../src/theme';
 import { useConfirmExit } from '../../src/lib/useBackHandler';
+import { resetTo } from '../../src/lib/navigation';
 
 /** Strips a leading "Dr." — every screen prepends it, so a stored one reads
  *  as "Dr. Dr. Priya". Same rule the backend enforces in DoctorSerializer,
@@ -96,7 +97,9 @@ export default function DoctorRegister() {
       // Straight into Doctor mode: the index route opens the pending screen
       // until an admin verifies the registration.
       switchMode('doctor');
-      router.replace('/');
+      // resetTo, not replace: the patient screens this form was pushed from
+      // must not stay underneath (Back used to bounce off them).
+      resetTo('/');
     } catch (err) {
       const response = (err as { response?: { data?: Record<string, string[] | string> } })?.response;
       const data = response?.data;

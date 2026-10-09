@@ -7,6 +7,7 @@ import { Card, Badge, Button, EmptyState } from '../components/ui';
 import { adminApi } from '../lib/api';
 import { formatDays, formatHours } from '@shared/availability';
 import { DOCTOR_STATUS_LABEL } from '@shared/councils';
+import FileViewer from '@shared/components/FileViewer';
 
 type Doctor = {
   id: string;
@@ -28,6 +29,7 @@ type Doctor = {
   clinic_close_time: string | null;
   verification_status: string;
   license_document: string | null;
+  license_document_type?: string;
   submitted_at: string;
   nmc_result: '' | 'found' | 'not_found' | 'ambiguous' | 'unavailable';
   nmc_checked_at: string | null;
@@ -377,9 +379,7 @@ export default function DoctorVerification() {
 
                 <div className="border-t border-border mt-3 pt-3">
                   {d.license_document ? (
-                    <a href={d.license_document} target="_blank" rel="noopener noreferrer" className="text-xs text-accent-ink">
-                      View license document →
-                    </a>
+                    <LicenceLink url={d.license_document} type={d.license_document_type} name={d.full_name} />
                   ) : (
                     <p className="text-xs text-ink-300">No license document uploaded</p>
                   )}
@@ -436,6 +436,19 @@ export default function DoctorVerification() {
           }}
         />
       )}
+    </>
+  );
+}
+
+/** Opens a doctor's licence in the in-app viewer rather than a new tab. */
+function LicenceLink({ url, type, name }: { url: string; type?: string; name: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="text-xs text-accent-ink hover:underline">
+        View license document →
+      </button>
+      {open && <FileViewer url={url} type={type} title={`Licence — ${name}`} onClose={() => setOpen(false)} />}
     </>
   );
 }

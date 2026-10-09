@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 
@@ -69,6 +69,33 @@ async function fetchDoctor(): Promise<DoctorRecord | null> {
   }
 }
 
+const ACTIVE_PROFILE_KEY = 'curapath_active_profile';
+
+/** The family member last viewed on this browser, per account. */
+function rememberedProfileId(accountId: string | undefined): string | null {
+  if (!accountId) return null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(ACTIVE_PROFILE_KEY) ?? 'null');
+    return saved?.account === accountId ? saved.profile : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberProfileId(accountId: string | undefined, profileId: string) {
+  if (!accountId) return;
+  try {
+    localStorage.setItem(ACTIVE_PROFILE_KEY, JSON.stringify({ account: accountId, profile: profileId }));
+  } catch {
+    // Storage blocked: the first profile is still a sensible default.
+  }
+}
+
+/** Same values as before? Then keep the old object, so effects keyed on it don't re-run. */
+function sameProfile(a: Profile | null | undefined, b: Profile | null | undefined) {
+  return !!a && !!b && JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** Moves a staff session into the Admin Portal's own store. */
 function handOffToAdmin(access: string, refresh: string) {
   setAdminTokens(access, refresh);
@@ -82,33 +109,55 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
+  const [activeProfile, setActiveProfileState] = useState<Profile | null>(null);
   const [doctor, setDoctor] = useState<DoctorRecord | null>(null);
 
-  const applyProfiles = useCallback((list: Profile[]) => {
-    setProfiles(list);
-    // Keep the same person selected but pull their latest values, so an edit
-    // in Settings shows up without a reload. A removed profile falls back
-    // to the first one rather than lingering on screen.
-    setActiveProfile((current) =>
-      current ? (list.find((p) => p.id === current.id) ?? list[0] ?? null) : (list[0] ?? null)
+  const applyProfiles = useCallback((list: Profile[], accountId?: string) => {
+    // Unchanged profiles keep their identity: every page keyed on the active
+    // profile would otherwise refetch after any profile refresh.
+    setProfiles((current) =>
+      current.length === list.length && list.every((p, i) => sameProfile(p, current[i])) ? current : list
     );
+    // Keep the same person selected (or the one last viewed on this browser)
+    // but pull their latest values, so an edit in Settings shows up without
+    // a reload. A removed profile falls back to the first one.
+    setActiveProfileState((current) => {
+      const wanted = current?.id ?? rememberedProfileId(accountId);
+      const next = list.find((p) => p.id === wanted) ?? list[0] ?? null;
+      return sameProfile(next, current) ? current : next;
+    });
+  }, []);
+
+  const accountRef = useRef<Account | null>(null);
+  accountRef.current = account;
+
+  const setActiveProfile = useCallback((profile: Profile) => {
+    setActiveProfileState(profile);
+    rememberProfileId(accountRef.current?.id, profile.id);
   }, []);
 
   const load = useCallback(async (): Promise<Snapshot | null> => {
     setLoadFailed(false);
+    // A retry must look like loading to the route guards, or they treat the
+    // still-empty session as "no profile / not a doctor" and redirect away
+    // from the page the person was on.
+    setIsLoading(true);
+    let handedOff = false;
     try {
       const { data: me } = await userApi.get<Account>('/auth/me/');
       if (STAFF_ROLES.includes(me.role)) {
         const access = getAccessToken();
         const refresh = getRefreshToken();
         if (access && refresh) handOffToAdmin(access, refresh);
-        window.location.assign('/admin');
+        // Stay "loading" until the Admin Portal takes over, so no patient
+        // page flashes in between; replace, so Back does not return here.
+        handedOff = true;
+        window.location.replace('/admin');
         return null;
       }
       const [list, doc] = await Promise.all([fetchProfiles(), fetchDoctor()]);
       setAccount(me);
-      applyProfiles(list);
+      applyProfiles(list, me.id);
       setDoctor(doc);
       return { account: me, profiles: list, doctor: doc };
     } catch {
@@ -119,7 +168,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       else setIsAuthenticated(false);
       return null;
     } finally {
-      setIsLoading(false);
+      if (!handedOff) setIsLoading(false);
     }
   }, [applyProfiles]);
 
@@ -139,9 +188,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const refreshProfiles = useCallback(async () => {
     const list = await fetchProfiles();
-    applyProfiles(list);
+    applyProfiles(list, account?.id);
     return list;
-  }, [applyProfiles]);
+  }, [applyProfiles, account?.id]);
 
   const refreshDoctor = useCallback(async () => {
     const doc = await fetchDoctor();
@@ -179,11 +228,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    // End the session on the server too; fire-and-forget so signing out
-    // never waits on the network. Plain axios: a 401 here must not start a
-    // refresh of the session being ended.
+    // End the session on the server too, without waiting on the network.
+    // keepalive lets the request finish even though the page navigates to
+    // /login straight after; plain fetch, so a 401 cannot start a refresh
+    // of the session being ended.
     const refresh = getRefreshToken();
-    if (refresh) axios.post(`${API_BASE_URL}/auth/logout/`, { refresh }).catch(() => undefined);
+    if (refresh) {
+      fetch(`${API_BASE_URL}/auth/logout/`, {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh }),
+      }).catch(() => undefined);
+    }
     clearTokens();
     // Every piece of session state, not just the flag, so nothing can paint
     // the previous person's name or records for a frame.
@@ -191,7 +248,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setLoadFailed(false);
     setAccount(null);
     setProfiles([]);
-    setActiveProfile(null);
+    setActiveProfileState(null);
     setDoctor(null);
   }, []);
 
@@ -216,7 +273,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }),
     [
       isLoading, isAuthenticated, loadFailed, load, account, profiles, activeProfile,
-      refreshProfiles, doctor, refreshDoctor, mode, sendOtp, verifyOtp, logout,
+      refreshProfiles, doctor, refreshDoctor, mode, sendOtp, verifyOtp, logout, setActiveProfile,
     ]
   );
 

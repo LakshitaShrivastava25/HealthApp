@@ -53,7 +53,7 @@ export default function Overview() {
         <Card className="!bg-gradient-to-br from-brand-teal to-brand-purple !border-0 text-white p-6 flex items-center justify-between overflow-hidden relative">
           <div className="relative z-10">
             <div className="flex items-center gap-2 text-sm font-medium opacity-90 mb-2">
-              <Sparkles size={16} /> Welcome back{staff?.phone_number ? `, ${formatPhone(staff.phone_number)}` : ''}
+              <Sparkles size={16} /> Welcome back{staff?.email ? `, ${staff.email}` : staff?.phone_number ? `, ${formatPhone(staff.phone_number)}` : ''}
             </div>
             <p className="text-2xl font-bold">
               {pendingTotal === 0 ? "You're all caught up 🎉" : `${pendingTotal} item${pendingTotal === 1 ? '' : 's'} need your attention`}

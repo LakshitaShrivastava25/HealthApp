@@ -120,10 +120,21 @@ function refreshSession(sentWith: unknown): Promise<boolean> {
   return attempt;
 }
 
-/** The session is gone for good: clear it and go to the sign-in screen. */
+/** The session is gone for good: clear it and go to the sign-in screen
+ *  (replace, so Back does not walk into pages of the session just ended). */
 function endSession() {
   clearTokens();
-  if (window.location.pathname !== LOGIN_PATH) window.location.assign(LOGIN_PATH);
+  if (window.location.pathname !== LOGIN_PATH) window.location.replace(LOGIN_PATH);
+}
+
+/**
+ * Did the server actually refuse the refresh token? Only then is the
+ * session over. A 5xx or 429 — Render waking up, a deploy in progress — is
+ * the server being unavailable, and used to sign people out at random.
+ */
+function refreshRejected(err: unknown) {
+  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+  return status === 400 || status === 401 || status === 403;
 }
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
@@ -163,9 +174,9 @@ export function createApiClient(mode: Mode): AxiosInstance {
         // it again here could end the next person's session.
         if (generation !== sessionGeneration) return Promise.reject(error);
         // The server refused the refresh token: the session is over. No
-        // response at all is a network problem — fail this request but
-        // keep the person signed in for when the connection comes back.
-        if (axios.isAxiosError(refreshError) && refreshError.response) endSession();
+        // response, or a server error, is a connection problem — fail this
+        // request but keep the person signed in for when it comes back.
+        if (refreshRejected(refreshError)) endSession();
         return Promise.reject(error);
       }
       if (!refreshed) {

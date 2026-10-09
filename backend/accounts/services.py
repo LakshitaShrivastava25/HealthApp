@@ -541,3 +541,70 @@ def send_test_sms(phone_number: str) -> tuple[bool, str, str]:
             if status:
                 break
     return ok, details, status
+
+
+# --- Admin Portal email + password sign-in ---------------------------------
+
+STAFF_LOGIN_OK = 'ok'
+STAFF_LOGIN_INVALID = 'invalid'
+STAFF_LOGIN_LOCKED = 'locked'
+STAFF_LOGIN_NOT_ALLOWED = 'not_allowed'
+
+
+def staff_can_use_portal(account):
+    """The same rule admin_portal/permissions.py applies on every request."""
+    return bool(
+        account.is_active
+        and account.role in STAFF_ROLES
+        and account.phone_number in settings.ADMIN_PHONE_NUMBERS
+    )
+
+
+def staff_password_login(email, password):
+    """
+    Checks an Admin Portal email + password. Returns (result, account,
+    locked_until).
+
+    Five wrong passwords lock the credential for 15 minutes — counted in the
+    database, so the limit holds across server processes and restarts. An
+    unknown email costs the same hashing work as a real check, so response
+    time does not reveal which emails exist.
+    """
+    from django.contrib.auth.hashers import make_password
+    from django.db import transaction
+
+    from .models import StaffCredential
+
+    email = (email or '').strip().lower()
+    with transaction.atomic():
+        credential = (
+            StaffCredential.objects.select_for_update().select_related('account').filter(email=email).first()
+        )
+        if credential is None:
+            make_password(password)
+            return STAFF_LOGIN_INVALID, None, None
+
+        now = timezone.now()
+        if credential.is_locked(now):
+            return STAFF_LOGIN_LOCKED, credential.account, credential.locked_until
+
+        if not credential.check_password(password):
+            credential.failed_attempts += 1
+            if credential.failed_attempts >= StaffCredential.MAX_FAILURES:
+                credential.locked_until = now + StaffCredential.LOCK_DURATION
+                credential.failed_attempts = 0
+            credential.save(update_fields=['failed_attempts', 'locked_until'])
+            if credential.is_locked(now):
+                logger.warning('Admin Portal sign-in locked for %s after repeated failures', email)
+                return STAFF_LOGIN_LOCKED, credential.account, credential.locked_until
+            return STAFF_LOGIN_INVALID, credential.account, None
+
+        account = credential.account
+        if not staff_can_use_portal(account):
+            return STAFF_LOGIN_NOT_ALLOWED, account, None
+
+        credential.failed_attempts = 0
+        credential.locked_until = None
+        credential.last_login_at = now
+        credential.save(update_fields=['failed_attempts', 'locked_until', 'last_login_at'])
+        return STAFF_LOGIN_OK, account, None

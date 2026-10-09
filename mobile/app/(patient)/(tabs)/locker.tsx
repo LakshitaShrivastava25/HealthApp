@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,11 +13,12 @@ import {
   View,
 } from 'react-native';
 
-import { Badge, Card, EmptyState, ErrorNote, Row, Screen } from '../../../src/components/ui';
+import { Badge, Card, EmptyState, ErrorNote, Row, Screen, Loading } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { documentsApi, unwrap, type UploadFile } from '../../../src/lib/api';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../../src/lib/pickFile';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
 type Doc = {
   id: string;
@@ -56,12 +57,15 @@ const statusTone = {
 
 export default function Locker() {
   const { activeProfile } = useAuth();
+  const profileId = activeProfile?.id ?? null;
   const router = useRouter();
 
   const [tab, setTab] = useState('');
   const [query, setQuery] = useState('');
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // False until the first load finishes: a loader, not "nothing here yet".
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -70,21 +74,20 @@ export default function Locker() {
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     setError(null);
     try {
-      const { data } = await documentsApi.list(activeProfile.id, tab || undefined);
+      const { data } = await documentsApi.list(profileId, tab || undefined);
       setDocuments(unwrap<Doc>(data));
     } catch {
       setError("Couldn't load your documents. Pull down to retry.");
+    } finally {
+      setLoaded(true);
     }
-  }, [activeProfile, tab]);
+  }, [profileId, tab]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
+  // Not on every tab switch: see useFocusRefresh.
+  useFocusRefresh(load, profileId ? `locker:${profileId}:${tab}` : null);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -189,7 +192,8 @@ export default function Locker() {
           </Card>
         )}
 
-        {!error && filtered.length === 0 && !uploading && (
+        {!loaded && !error && <Loading />}
+        {loaded && !error && filtered.length === 0 && !uploading && (
           <EmptyState
             title={query ? 'Nothing matches that search' : 'No documents here yet'}
             note={

@@ -12,7 +12,11 @@ const roleTone: Record<string, string> = {
 
 export default function Topbar({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   const { staff } = useAuth();
-  const initials = staff?.phone_number ? staff.phone_number.slice(-2) : '?';
+  const initials = staff?.email
+    ? staff.email.slice(0, 2).toUpperCase()
+    : staff?.phone_number
+      ? staff.phone_number.slice(-2)
+      : '?';
 
   return (
     <header className="relative overflow-hidden sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between gap-2">
@@ -32,7 +36,7 @@ export default function Topbar({ title, subtitle, action }: { title: string; sub
           <div className="flex items-center gap-2.5 pl-3 border-l border-border">
             <Avatar initials={initials} size={34} />
             <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-ink-900 leading-tight">{staff.phone_number}</p>
+              <p className="text-sm font-semibold text-ink-900 leading-tight">{staff.email || staff.phone_number}</p>
               <span
                 className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold capitalize ${
                   roleTone[staff.role] || 'bg-surface text-ink-500'

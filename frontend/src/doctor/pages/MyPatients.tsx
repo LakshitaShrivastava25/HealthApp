@@ -22,8 +22,21 @@ export default function MyPatients() {
   const navigate = useNavigate();
 
   async function load() {
-    const { data } = await accessApi.list();
-    const list: Grant[] = data.results ?? data;
+    // Grants and the names of the patients they cover, fetched together —
+    // names used to be fetched once with no grants and again after them.
+    // Profile names come from GET /api/profiles/: the backend includes any
+    // profile the doctor has an APPROVED grant for, so this list is exactly
+    // the patients whose names we're allowed to know.
+    const [grantsRes, profilesRes] = await Promise.all([accessApi.list(), api.get('/profiles/')]).catch(
+      () => [null, null] as const
+    );
+    if (!grantsRes || !profilesRes) return;
+    const list: Grant[] = grantsRes.data.results ?? grantsRes.data;
+    const map: Record<string, string> = {};
+    (profilesRes.data.results ?? profilesRes.data).forEach((p: { id: string; full_name: string }) => {
+      map[p.id] = p.full_name;
+    });
+    setProfileNames(map);
     setGrants(list);
   }
 
@@ -39,19 +52,6 @@ export default function MyPatients() {
     );
   }, []);
 
-  useEffect(() => {
-    // Profile names come from GET /api/profiles/ — the backend now includes
-    // any profile the doctor has an APPROVED grant for, so this list is
-    // exactly the patients whose names we're allowed to know.
-    api.get('/profiles/').then((r) => {
-      const list = r.data.results ?? r.data;
-      const map: Record<string, string> = {};
-      list.forEach((p: { id: string; full_name: string }) => {
-        map[p.id] = p.full_name;
-      });
-      setProfileNames(map);
-    });
-  }, [grants]);
 
   const approved = grants.filter((g) => g.status === 'approved');
   const pending = grants.filter((g) => g.status === 'pending');

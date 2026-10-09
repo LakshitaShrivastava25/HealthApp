@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from documents.validators import validate_upload
+from documents.validators import FileKindField, validate_upload
 
 from .models import (
     ClaimEstimate, InsuranceChatMessage, InsurancePolicy,
@@ -29,6 +29,7 @@ class PolicySubLimitSerializer(serializers.ModelSerializer):
 
 
 class InsurancePolicySerializer(serializers.ModelSerializer):
+    file_type = FileKindField(source='file')
     exclusions = PolicyExclusionSerializer(many=True, read_only=True)
     waiting_periods = PolicyWaitingPeriodSerializer(many=True, read_only=True)
     sub_limits = PolicySubLimitSerializer(many=True, read_only=True)
@@ -36,7 +37,7 @@ class InsurancePolicySerializer(serializers.ModelSerializer):
     class Meta:
         model = InsurancePolicy
         fields = [
-            'id', 'profile', 'file', 'status', 'insurer', 'policy_number', 'plan_name',
+            'id', 'profile', 'file', 'file_type', 'status', 'insurer', 'policy_number', 'plan_name',
             'policy_type', 'sum_insured', 'premium_amount', 'premium_due_date',
             'coverage_start', 'coverage_end',
             'room_rent_limit', 'co_payment_percent', 'structured_data',

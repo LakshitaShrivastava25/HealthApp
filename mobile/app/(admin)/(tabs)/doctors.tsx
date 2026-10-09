@@ -1,5 +1,4 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
@@ -19,6 +18,8 @@ import { adminApi, unwrap } from '../../../src/lib/api';
 import { absoluteUrl } from '../../../src/lib/config';
 import { DOCTOR_STATUS_LABEL } from '../../../src/lib/councils';
 import { colors, radius, spacing, type, type ToneName } from '../../../src/theme';
+import { openFile } from '../../../src/lib/viewer';
+import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
 type AdminDoctor = {
   id: string;
@@ -36,6 +37,7 @@ type AdminDoctor = {
   booking_phone_number: string;
   account_phone_number: string;
   license_document: string | null;
+  license_document_type?: string;
   verification_status: 'pending' | 'manual_review' | 'failed' | 'verified' | 'rejected';
   submitted_at: string | null;
   // What the NMC register said — the evidence the admin decides on.
@@ -113,11 +115,10 @@ export default function AdminDoctors() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load(filterRef.current);
-    }, [load])
-  );
+  // Not on every tab switch (that reloaded page 1 and dropped any pages the
+  // admin had loaded with "load more"): see useFocusRefresh.
+  const loadCurrent = useCallback(() => load(filterRef.current), [load]);
+  useFocusRefresh(loadCurrent, 'admin-doctors'); // changeFilter loads the new filter itself
 
   function changeFilter(value: string) {
     filterRef.current = value;
@@ -235,7 +236,7 @@ export default function AdminDoctors() {
             <RegisterEvidence d={d} />
 
             {licenceUrl ? (
-              <Pressable onPress={() => Linking.openURL(licenceUrl)} style={styles.licenceRow}>
+              <Pressable onPress={() => openFile(d.license_document, d.license_document_type, `Licence — ${d.full_name}`)} style={styles.licenceRow}>
                 <Feather name="paperclip" size={15} color={colors.brandPurple} />
                 <Text style={styles.licenceText}>Open licence document</Text>
               </Pressable>

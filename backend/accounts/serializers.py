@@ -19,6 +19,12 @@ class VerifyOTPSerializer(serializers.Serializer):
     otp = serializers.CharField(max_length=6, validators=[OTP_CODE])
 
 
+class StaffLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+    # Passwords are compared exactly as typed: no trimming.
+    password = serializers.CharField(max_length=128, trim_whitespace=False)
+
+
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account

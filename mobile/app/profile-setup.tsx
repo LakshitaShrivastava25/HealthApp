@@ -11,6 +11,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { profilesApi } from '../src/lib/api';
 import { colors, radius, spacing, type } from '../src/theme';
 import { useConfirmExit } from '../src/lib/useBackHandler';
+import { useConfirmLogout } from '../src/hooks/useConfirmLogout';
 
 const GENDERS = [
   { label: 'Male', value: 'male' },
@@ -41,6 +42,7 @@ function isoToday() {
 export default function ProfileSetup() {
   useConfirmExit();
   const { refreshProfiles } = useAuth();
+  const confirmLogout = useConfirmLogout();
   const router = useRouter();
 
   const [fullName, setFullName] = useState('');
@@ -157,6 +159,14 @@ export default function ProfileSetup() {
           </Card>
 
           <ModeSwitchCard />
+
+          {/* Signed in with the wrong number? Without this the only way out
+              was to close the app. */}
+          <Pressable onPress={confirmLogout} hitSlop={8} style={{ alignSelf: 'center' }}>
+            <Text style={[type.caption, { color: colors.ink500, textDecorationLine: 'underline' }]}>
+              Not you? Sign out
+            </Text>
+          </Pressable>
         </View>
       </KeyboardAwareScrollView>
     </SafeAreaView>

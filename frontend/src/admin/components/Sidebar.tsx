@@ -12,6 +12,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLogoutConfirm } from '@shared/hooks/useLogoutConfirm';
 
 const navItems = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard },
@@ -27,15 +28,9 @@ const navItems = [
 export default function Sidebar() {
   const { logout, staff } = useAuth();
 
-  function handleLogout() {
-    logout();
-    // A hard navigation, not react-router's navigate(): a full document
-    // load discards all in-memory auth state, any request still in flight
-    // and the module-level refresh queue, so nothing can survive into the
-    // next person's session on a shared machine. /login is the one sign-in
-    // screen for everyone, staff included.
-    window.location.assign('/login');
-  }
+  // Asks first, then ends the session with a hard navigation back to the
+  // Admin Portal's own sign-in at /admin.
+  const { requestLogout, dialog: logoutDialog } = useLogoutConfirm(logout, '/admin');
 
   return (
     <aside className="w-64 shrink-0 h-screen sticky top-0 bg-card border-r border-border flex flex-col">
@@ -54,7 +49,7 @@ export default function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/admin'}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all border-l-[3px] ${
                 isActive
@@ -70,8 +65,9 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-3 pb-5 pt-2 border-t border-border">
+        {logoutDialog}
         <button
-          onClick={handleLogout}
+          onClick={requestLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-ink-500 hover:bg-surface hover:text-danger transition-colors"
         >
           <LogOut size={18} strokeWidth={2} />

@@ -39,6 +39,7 @@ const TOGGLES: { key: ToggleKey; label: string; note: string }[] = [
 
 export default function EmergencyCard() {
   const { activeProfile } = useAuth();
+  const profileId = activeProfile?.id ?? null;
 
   const [ep, setEp] = useState<EmergencyProfile | null>(null);
   const [allergies, setAllergies] = useState<string[]>([]);
@@ -52,23 +53,23 @@ export default function EmergencyCard() {
   const [savedFlash, setSavedFlash] = useState(false);
 
   const load = useCallback(async () => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     setError(null);
     try {
       const [cards, allergyRes, medRes] = await Promise.all([
         emergencyApi.list(),
-        allergiesApi.list(activeProfile.id),
-        medicinesApi.list(activeProfile.id),
+        allergiesApi.list(profileId),
+        medicinesApi.list(profileId),
       ]);
       // The endpoint returns every card on the account, so the one for the
       // profile in view is picked here rather than server-side.
-      setEp(unwrap<EmergencyProfile>(cards.data).find((c) => c.profile === activeProfile.id) ?? null);
+      setEp(unwrap<EmergencyProfile>(cards.data).find((c) => c.profile === profileId) ?? null);
       setAllergies(unwrap<{ substance: string }>(allergyRes.data).map((a) => a.substance));
       setMedications(unwrap<{ name: string }>(medRes.data).map((m) => m.name));
     } catch {
       setError("Couldn't load your emergency card. Pull down to retry.");
     }
-  }, [activeProfile]);
+  }, [profileId]);
 
   useEffect(() => {
     void load();

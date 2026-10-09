@@ -5,6 +5,8 @@ import { Card, Badge, Button, EmptyState } from '../components/ui';
 import DocumentDetailModal from '../components/DocumentDetailModal';
 import { useAuth } from '../context/AuthContext';
 import { medicinesApi } from '../lib/api';
+import { useCachedState } from '@shared/hooks/useCachedState';
+import PageFallback from '@shared/components/PageFallback';
 
 type Reminder = { id: string; time_of_day: string; days_of_week: string };
 type HistoryEntry = {
@@ -88,7 +90,12 @@ function needsAttention(m: Medication) {
 
 export default function Medicines() {
   const { activeProfile } = useAuth();
-  const [medications, setMedications] = useState<Medication[]>([]);
+  const profileId = activeProfile?.id ?? null;
+  // Remembered per profile: coming back shows the list at once while it refreshes.
+  const [medications, setMedications, loaded] = useCachedState<Medication[]>(
+    profileId ? `medicines:${profileId}` : null,
+    []
+  );
   const [takenReminderIds, setTakenReminderIds] = useState<Set<string>>(new Set());
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -106,10 +113,10 @@ export default function Medicines() {
   const [openDocId, setOpenDocId] = useState<string | null>(null);
 
   async function loadMedications() {
-    if (!activeProfile) return;
+    if (!profileId) return;
     try {
       // Current and past together: one request, split on the page.
-      const { data } = await medicinesApi.list(activeProfile.id, 'all');
+      const { data } = await medicinesApi.list(profileId, 'all');
       setMedications(data.results ?? data);
       setLoadError('');
     } catch {
@@ -118,8 +125,13 @@ export default function Medicines() {
   }
 
   async function loadTodaysDoseLogs() {
-    if (!activeProfile) return;
-    const { data } = await medicinesApi.listDoseLogs(activeProfile.id);
+    if (!profileId) return;
+    let data;
+    try {
+      ({ data } = await medicinesApi.listDoseLogs(profileId));
+    } catch {
+      return;
+    }
     const logs: DoseLog[] = data.results ?? data;
     const today = todayISODate();
     const taken = new Set(
@@ -132,7 +144,7 @@ export default function Medicines() {
     loadMedications();
     loadTodaysDoseLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfile]);
+  }, [profileId]);
 
   async function markTaken(reminderId: string) {
     await medicinesApi.logDose(reminderId, 'taken', new Date().toISOString());
@@ -267,7 +279,9 @@ export default function Medicines() {
         {loadError && <p className="mb-4 text-sm text-danger">{loadError}</p>}
         {actionError && <p className="mb-4 text-sm text-danger">{actionError}</p>}
 
-        {medications.length === 0 && !showAddForm && !loadError && (
+        {!loaded && !loadError && <PageFallback />}
+
+        {loaded && medications.length === 0 && !showAddForm && !loadError && (
           <Card>
             <EmptyState
               icon={<Pill size={22} />}

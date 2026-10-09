@@ -43,3 +43,23 @@ export async function preferredMode(accountId: string, hasDoctor: boolean, profi
   if (remembered === 'patient') return 'patient';
   return hasDoctor && profileCount === 0 ? 'doctor' : 'patient';
 }
+
+const ACTIVE_PROFILE_KEY = 'curapath_active_profile';
+
+/** The family member last viewed on this phone, per account. */
+export async function rememberActiveProfile(accountId: string, profileId: string) {
+  try {
+    await SecureStore.setItemAsync(ACTIVE_PROFILE_KEY, JSON.stringify({ account: accountId, profile: profileId }));
+  } catch {
+    // Not remembered: the first profile is still a sensible default.
+  }
+}
+
+export async function rememberedActiveProfile(accountId: string): Promise<string | null> {
+  try {
+    const saved = JSON.parse((await SecureStore.getItemAsync(ACTIVE_PROFILE_KEY)) ?? 'null');
+    return saved?.account === accountId && typeof saved.profile === 'string' ? saved.profile : null;
+  } catch {
+    return null;
+  }
+}

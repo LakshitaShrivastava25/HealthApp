@@ -4,12 +4,13 @@ import { FileText, AlertTriangle, History, Plus, X, Pill, ExternalLink } from 'l
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import { patientDataApi, notesApi, api } from '../lib/api';
+import FileViewer from '@shared/components/FileViewer';
 
 type TimelineEvent = { id: string; event_date: string; title: string; summary: string; event_type: string };
 // `file` is the uploaded document's URL. The serializer already returned it;
 // this view simply never asked for it, so a doctor could see titles but not
 // open anything.
-type Doc = { id: string; title: string; category: string; document_date: string | null; file: string | null };
+type Doc = { id: string; title: string; category: string; document_date: string | null; file: string | null; file_type?: string };
 type Medication = {
   id: string;
   name: string;
@@ -25,6 +26,7 @@ type Medication = {
 type Allergy = { id: string; substance: string; reaction: string };
 
 export default function PatientRecordView() {
+  const [viewingDoc, setViewingDoc] = useState<Doc | null>(null);
   const { profileId } = useParams<{ profileId: string }>();
   const [patientName, setPatientName] = useState('');
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
@@ -146,15 +148,13 @@ export default function PatientRecordView() {
                           gated server-side by the approved grant that let
                           this page load at all. */}
                       {d.file ? (
-                        <a
-                          href={d.file}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-medium text-accent-ink hover:underline inline-flex items-center gap-1"
+                        <button
+                          onClick={() => setViewingDoc(d)}
+                          className="text-left text-xs font-medium text-accent-ink hover:underline inline-flex items-center gap-1"
                         >
                           {d.title}
                           <ExternalLink size={11} className="shrink-0" />
-                        </a>
+                        </button>
                       ) : (
                         <p className="text-xs text-ink-700">{d.title}</p>
                       )}
@@ -168,6 +168,10 @@ export default function PatientRecordView() {
             )}
           </Card>
         </div>
+
+        {viewingDoc?.file && (
+          <FileViewer url={viewingDoc.file} type={viewingDoc.file_type} title={viewingDoc.title} onClose={() => setViewingDoc(null)} />
+        )}
 
         <Card className="p-5">
           <p className="text-sm font-semibold text-ink-900 flex items-center gap-2 mb-3">

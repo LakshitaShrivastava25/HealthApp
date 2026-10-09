@@ -1,6 +1,5 @@
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -11,6 +10,7 @@ import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '../../../src/lib/counci
 import { colors, radius, spacing, type } from '../../../src/theme';
 import NotificationSettingsCard from '../../../src/components/NotificationSettingsCard';
 import { ModeSwitchCard } from '../../../src/components/ModeSwitch';
+import { useConfirmLogout } from '../../../src/hooks/useConfirmLogout';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -30,8 +30,8 @@ function dateToTime(d: Date) {
 }
 
 export default function DoctorProfile() {
-  const { doctor, account, refreshDoctor, logout } = useAuth();
-  const router = useRouter();
+  const { doctor, account, refreshDoctor } = useAuth();
+  const confirmLogout = useConfirmLogout();
 
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(doctor?.full_name ?? '');
@@ -255,10 +255,7 @@ export default function DoctorProfile() {
             <Text style={type.label}>{account?.phone_number}</Text>
           </View>
           <Pressable
-            onPress={async () => {
-              await logout();
-              router.replace('/login');
-            }}
+            onPress={confirmLogout}
             style={styles.signOut}
           >
             <Feather name="log-out" size={14} color={colors.danger} />

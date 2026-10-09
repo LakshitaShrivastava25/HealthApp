@@ -12,7 +12,7 @@ from doctors.models import DoctorPatientAccess
 from emergency.models import EmergencyProfile
 
 from .models import Account
-from .serializers import AccountSerializer, SendOTPSerializer, VerifyOTPSerializer
+from .serializers import AccountSerializer, SendOTPSerializer, StaffLoginSerializer, VerifyOTPSerializer
 from . import services
 from .services import request_otp, verify_otp
 
@@ -93,6 +93,68 @@ class VerifyOTPView(APIView):
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'is_new_user': created,
+            'account': AccountSerializer(account).data,
+        })
+
+
+def _client_ip(request):
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    return (forwarded.split(',')[-1].strip() if forwarded else '') or request.META.get('REMOTE_ADDR', '')
+
+
+class StaffLoginView(APIView):
+    """
+    POST /api/auth/staff-login/ {email, password} — the web Admin Portal's
+    sign-in (curapath.in/admin). Answers exactly like verify-otp: a token
+    pair and the account. Only staff accounts that the Admin Portal would
+    accept anyway can sign in here; see accounts.models.StaffCredential.
+
+    Wrong email and wrong password get the same answer, so the form cannot
+    be used to find out which emails exist. Throttled per client on top of
+    the per-credential lockout.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [AnonRateThrottle, ScopedRateThrottle]
+    throttle_scope = 'staff_login'
+
+    def post(self, request):
+        from admin_portal.models import AuditLog
+
+        serializer = StaffLoginSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'detail': 'Enter your email and password.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result, account, locked_until = services.staff_password_login(
+            serializer.validated_data['email'], serializer.validated_data['password']
+        )
+        if result == services.STAFF_LOGIN_LOCKED:
+            minutes = max(1, -(-int((locked_until - timezone.now()).total_seconds()) // 60))
+            return Response(
+                {
+                    'detail': f'Too many wrong attempts. Try again in {minutes} minute{"s" if minutes != 1 else ""}.',
+                    'retry_after': minutes * 60,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={'Retry-After': str(minutes * 60)},
+            )
+        if result == services.STAFF_LOGIN_INVALID:
+            return Response({'detail': 'Email or password is incorrect.'}, status=status.HTTP_401_UNAUTHORIZED)
+        if result == services.STAFF_LOGIN_NOT_ALLOWED:
+            return Response(
+                {'detail': 'This account does not have access to the Admin Portal.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        AuditLog.objects.create(
+            staff=account, action='staff_password_login', target_type='account', target_id=str(account.id),
+            detail={'ip': _client_ip(request)},
+        )
+        refresh = RefreshToken.for_user(account)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
             'account': AccountSerializer(account).data,
         })
 

@@ -1,13 +1,14 @@
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, type Href } from 'expo-router';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { fromIsoDate } from '../../src/components/DateField';
 import { genderLabel, relationLabel } from '../../src/components/profileOptions';
 import { Screen } from '../../src/components/ui';
 import { useAuth, type Profile } from '../../src/context/AuthContext';
 import { colors, radius, shadow, spacing, type } from '../../src/theme';
+import { useConfirmLogout } from '../../src/hooks/useConfirmLogout';
 
 type FeatherName = keyof typeof Feather.glyphMap;
 
@@ -28,7 +29,7 @@ function ageFrom(dob?: string | null) {
  * showing, a one-tap switch between family members, and sign-out.
  */
 export default function ProfileScreen() {
-  const { account, profiles, activeProfile, setActiveProfile, logout } = useAuth();
+  const { account, profiles, activeProfile, setActiveProfile } = useAuth();
   const router = useRouter();
 
   if (!activeProfile) return null;
@@ -50,19 +51,7 @@ export default function ProfileScreen() {
     { icon: 'help-circle', label: 'Help & support', note: 'How the app works', href: '/(patient)/help' },
   ];
 
-  function confirmSignOut() {
-    Alert.alert('Sign out?', 'You will need your phone number and a new code to sign back in.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/login');
-        },
-      },
-    ]);
-  }
+  const confirmSignOut = useConfirmLogout();
 
   return (
     <Screen>

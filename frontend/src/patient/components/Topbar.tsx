@@ -10,6 +10,7 @@ import { todayIso } from '@shared/dates';
 import useNotifications from '../hooks/useNotifications';
 import { useAuth } from '../context/AuthContext';
 import { allergiesApi, profilesApi } from '../lib/api';
+import { useBackToClose } from '@shared/hooks/useBackToClose';
 
 /** Straight from Profile.Relation on the model, minus `self`: the account
  *  holder already exists, so a new member is always someone else. */
@@ -81,7 +82,8 @@ export default function Topbar({
     const picked = profiles.find((p) => p.id === id);
     if (picked) setActiveProfile(picked);
     setSwitcherOpen(false);
-    navigate('/patient/settings');
+    // Already on Settings: swap in place, so Back is not a dead step.
+    navigate('/patient/settings', { replace: window.location.pathname === '/patient/settings' });
   }
 
   return (
@@ -233,6 +235,8 @@ function AddFamilyMemberModal({
   onClose: () => void;
   onCreated: () => void | Promise<void>;
 }) {
+  // Back closes the form instead of leaving the page underneath.
+  useBackToClose(true, onClose);
   const [fullName, setFullName] = useState('');
   const [relation, setRelation] = useState('father');
   const [dob, setDob] = useState('');

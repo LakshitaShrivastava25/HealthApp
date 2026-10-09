@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from django.utils import timezone
 
-from documents.validators import validate_upload
+from documents.validators import FileKindField, validate_upload
 from family.models import Profile
 
 from .councils import council_name
@@ -45,6 +45,7 @@ BOOKING_PHONE_MAX_DIGITS = 15
 
 
 class DoctorSerializer(serializers.ModelSerializer):
+    license_document_type = FileKindField(source='license_document')
     # Shown to the doctor alongside the code they picked.
     state_council_name = serializers.SerializerMethodField()
 
@@ -52,7 +53,7 @@ class DoctorSerializer(serializers.ModelSerializer):
         model = Doctor
         fields = [
             'id', 'full_name', 'specialization', 'qualification', 'experience_years',
-            'license_document', 'verification_status', 'clinic_name', 'consultation_fee',
+            'license_document', 'license_document_type', 'verification_status', 'clinic_name', 'consultation_fee',
             'registration_number', 'state_council_id', 'state_council_name', 'registration_year',
             'clinic_address', 'booking_phone_number',
             'available_days', 'clinic_open_time', 'clinic_close_time',

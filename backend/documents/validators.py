@@ -61,3 +61,33 @@ def validate_upload(file):
             f'Upload a {ALLOWED_LABEL} file.'
         )
     return file
+
+
+def file_kind(name: str) -> str:
+    """
+    'pdf', 'image', 'heic' (a phone photo most viewers cannot display) or
+    'other' — '' when there is no file. The apps pick their viewer from this
+    instead of guessing from the URL, which is a signed /api/files/?t=...
+    link that does not end in the file's extension.
+    """
+    ext = os.path.splitext(name or '')[1].lower()
+    if not ext:
+        return ''
+    if ext == '.pdf':
+        return 'pdf'
+    if ext in ('.jpg', '.jpeg', '.png', '.webp'):
+        return 'image'
+    if ext in ('.heic', '.heif'):
+        return 'heic'
+    return 'other'
+
+
+class FileKindField(serializers.Field):
+    """Read-only: the kind of the stored file in `source` (see file_kind)."""
+
+    def __init__(self, **kwargs):
+        kwargs['read_only'] = True
+        super().__init__(**kwargs)
+
+    def to_representation(self, value):
+        return file_kind(getattr(value, 'name', '') or '')

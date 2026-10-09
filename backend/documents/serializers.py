@@ -2,10 +2,11 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Document, TimelineEvent
-from .validators import validate_upload
+from .validators import FileKindField, validate_upload
 
 
 class DocumentSerializer(serializers.ModelSerializer):
+    file_type = FileKindField(source='file')
     possible_duplicate = serializers.SerializerMethodField()
     copies = serializers.SerializerMethodField()
     upload_history = serializers.SerializerMethodField()
@@ -13,7 +14,7 @@ class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = [
-            'id', 'profile', 'file', 'title', 'category', 'status',
+            'id', 'profile', 'file', 'file_type', 'title', 'category', 'status',
             'doctor_name', 'hospital_name', 'document_date',
             'structured_data', 'uploaded_at', 'processed_at',
             'original_filename', 'duplicate_of', 'duplicate_kind',

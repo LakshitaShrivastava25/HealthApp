@@ -23,6 +23,7 @@ import { DAY_NAMES } from '../components/ClinicAvailability';
 import { authApi, doctorApi, profileApi } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { COUNTRIES, DEFAULT_COUNTRY, type Country } from '@shared/data/countries';
+import FileViewer from '@shared/components/FileViewer';
 
 type Doctor = {
   full_name: string;
@@ -38,6 +39,7 @@ type Doctor = {
   booking_phone_number: string;
   consultation_fee: string | null;
   license_document: string | null;
+  license_document_type?: string;
   available_days: string[] | null;
   clinic_open_time: string | null;
   clinic_close_time: string | null;
@@ -78,6 +80,7 @@ function Row({ label, icon, children }: { label: string; icon?: ReactNode; child
 }
 
 export default function Profile() {
+  const [viewingLicence, setViewingLicence] = useState(false);
   const { refreshDoctor } = useAuth();
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [loginNumber, setLoginNumber] = useState('');
@@ -128,9 +131,16 @@ export default function Profile() {
     setCloseTime((d.clinic_close_time ?? '').slice(0, 5));
   }
 
+  const [loadError, setLoadError] = useState('');
   useEffect(() => {
-    doctorApi.me().then((r) => hydrate(r.data));
-    authApi.me().then((r) => setLoginNumber(r.data.phone_number ?? ''));
+    doctorApi
+      .me()
+      .then((r) => hydrate(r.data))
+      .catch(() => setLoadError("Couldn't load your profile. Check your connection and refresh the page."));
+    authApi
+      .me()
+      .then((r) => setLoginNumber(r.data.phone_number ?? ''))
+      .catch(() => undefined);
   }, []);
 
   const registrationChanged =
@@ -190,7 +200,7 @@ export default function Profile() {
     return (
       <>
         <Topbar title="My Profile" />
-        <main className="p-4 sm:p-6 lg:p-8 text-sm text-ink-500">Loading...</main>
+        <main className={`p-4 sm:p-6 lg:p-8 text-sm ${loadError ? 'text-danger' : 'text-ink-500'}`}>{loadError || 'Loading...'}</main>
       </>
     );
   }
@@ -415,14 +425,19 @@ export default function Profile() {
           <Card className="p-5 space-y-3">
             <p className="text-sm font-semibold text-ink-900">License document</p>
             {doctor.license_document ? (
-              <a
-                href={doctor.license_document}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-accent-ink hover:underline"
-              >
-                View current document →
-              </a>
+              <>
+                <button onClick={() => setViewingLicence(true)} className="text-xs text-accent-ink hover:underline">
+                  View current document →
+                </button>
+                {viewingLicence && (
+                  <FileViewer
+                    url={doctor.license_document}
+                    type={doctor.license_document_type}
+                    title="Licence document"
+                    onClose={() => setViewingLicence(false)}
+                  />
+                )}
+              </>
             ) : (
               <p className="text-xs text-ink-300">No document uploaded yet.</p>
             )}

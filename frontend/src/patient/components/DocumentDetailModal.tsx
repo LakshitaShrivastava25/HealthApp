@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, FileText, Pencil, Check, Trash2, RefreshCw, ClipboardCheck } from 'lucide-react';
+import { X, FileText, Pencil, Check, Trash2, RefreshCw, ClipboardCheck, ArrowLeft, Eye } from 'lucide-react';
 import { Badge, Button } from './ui';
 import { documentsApi } from '../lib/api';
 import {
@@ -9,6 +9,9 @@ import {
   INTERNAL_KEYS,
 } from '@shared/components/extractionState';
 import { todayIso } from '@shared/dates';
+import FileViewer from '@shared/components/FileViewer';
+import { useBackToClose } from '@shared/hooks/useBackToClose';
+import { refreshNotificationsSoon } from '../hooks/useNotifications';
 
 type DocumentDetail = {
   id: string;
@@ -20,6 +23,7 @@ type DocumentDetail = {
   doctor_name: string;
   structured_data: Record<string, unknown>;
   file: string;
+  file_type?: string;
   original_filename?: string;
   duplicate_of?: string | null;
   duplicate_kind?: string;
@@ -108,7 +112,27 @@ export default function DocumentDetailModal({
 
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [duplicateError, setDuplicateError] = useState('');
-  const [viewingId, setViewingId] = useState(documentId);
+  // Documents opened from inside this one ("Open the original", "Compare",
+  // a copy) stack up, so the back arrow and the Back button return to the
+  // previous one instead of losing the way.
+  const [viewStack, setViewStack] = useState<string[]>([documentId]);
+  const viewingId = viewStack[viewStack.length - 1];
+  const setViewingId = (id: string) => setViewStack((stack) => [...stack, id]);
+  const popView = () => setViewStack((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
+  const [loadError, setLoadError] = useState('');
+  const [viewerOpen, setViewerOpen] = useState(false);
+
+  // Back closes the modal (and first steps back through opened documents);
+  // Escape does the same.
+  useBackToClose(true, onClose);
+  useBackToClose(viewStack.length > 1, popView);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !viewerOpen) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, viewerOpen]);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -116,6 +140,7 @@ export default function DocumentDetailModal({
 
   function load() {
     setLoading(true);
+    setLoadError('');
     documentsApi
       .get(viewingId)
       .then((r) => {
@@ -123,11 +148,15 @@ export default function DocumentDetailModal({
         setEditText(editableJson(r.data.structured_data));
         hydrateReview(r.data);
       })
+      .catch(() => {
+        setDoc(null);
+        setLoadError("Couldn't open this document. Check your connection and try again.");
+      })
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
-    setViewingId(documentId);
+    setViewStack([documentId]);
   }, [documentId]);
 
   useEffect(() => {
@@ -142,6 +171,7 @@ export default function DocumentDetailModal({
     try {
       const { data } = await run();
       setDoc(data);
+      refreshNotificationsSoon();
       onUpdated?.();
     } catch {
       setDuplicateError('Could not save that. Please try again.');
@@ -164,6 +194,7 @@ export default function DocumentDetailModal({
       await documentsApi.correct(viewingId, parsed);
       setEditing(false);
       load();
+      refreshNotificationsSoon();
       onUpdated?.();
     } catch {
       setSaveError('Could not save the correction. Is the backend running?');
@@ -177,6 +208,7 @@ export default function DocumentDetailModal({
     setDeleting(true);
     try {
       await documentsApi.delete(viewingId);
+      refreshNotificationsSoon();
       onDeleted?.();
       onClose();
     } catch {
@@ -225,6 +257,7 @@ export default function DocumentDetailModal({
       const { data } = await documentsApi.confirm(doc.id);
       setDoc(data);
       hydrateReview(data);
+      refreshNotificationsSoon();
       onUpdated?.();
     } catch {
       setConfirmError('Could not save your review. Please try again.');
@@ -240,6 +273,7 @@ export default function DocumentDetailModal({
       const { data } = await documentsApi.retryProcessing(viewingId);
       setDoc(data);
       setEditText(editableJson(data.structured_data));
+      refreshNotificationsSoon();
       onUpdated?.();
     } catch {
       setRetryError('Could not process it this time either. Please try again shortly.');
@@ -251,23 +285,38 @@ export default function DocumentDetailModal({
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-card rounded-xl2 shadow-card max-w-lg w-full max-h-[80vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label={doc?.title || 'Document'}
+        className="bg-card rounded-xl2 shadow-card max-w-lg w-full max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center">
-              <FileText size={16} />
-            </div>
-            <p className="text-sm font-semibold text-ink-900">{doc?.title || 'Loading...'}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            {viewStack.length > 1 ? (
+              <button onClick={popView} className="w-9 h-9 shrink-0 rounded-lg hover:bg-surface text-ink-700 flex items-center justify-center" aria-label="Back to the previous document">
+                <ArrowLeft size={16} />
+              </button>
+            ) : (
+              <div className="w-9 h-9 shrink-0 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center">
+                <FileText size={16} />
+              </div>
+            )}
+            <p className="text-sm font-semibold text-ink-900 truncate">{doc?.title || (loadError ? 'Document' : 'Loading...')}</p>
           </div>
-          <button onClick={onClose} className="text-ink-500 hover:text-ink-900">
+          <button onClick={onClose} className="text-ink-500 hover:text-ink-900" aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
         <div className="p-5">
-          {loading && <p className="text-sm text-ink-500">Loading document...</p>}
+          {loading && !doc && <p className="text-sm text-ink-500">Loading document...</p>}
+          {loadError && (
+            <div className="text-sm text-danger">
+              <p>{loadError}</p>
+              <button onClick={load} className="mt-2 text-xs font-medium text-accent-ink hover:underline">Try again</button>
+            </div>
+          )}
 
           {doc && (
             <>
@@ -531,14 +580,15 @@ export default function DocumentDetailModal({
               )}
 
               {doc.file && !editing && (
-                <a
-                  href={doc.file}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block mt-4 text-sm font-medium text-accent-ink"
+                <button
+                  onClick={() => setViewerOpen(true)}
+                  className="inline-flex items-center gap-1.5 mt-4 text-sm font-medium text-accent-ink hover:underline"
                 >
-                  View original file →
-                </a>
+                  <Eye size={15} /> View original {doc.file_type === 'image' ? 'photo' : doc.file_type === 'pdf' ? 'PDF' : 'file'}
+                </button>
+              )}
+              {viewerOpen && doc.file && (
+                <FileViewer url={doc.file} type={doc.file_type} title={doc.title} onClose={() => setViewerOpen(false)} />
               )}
 
               {!editing && ((doc.upload_history?.length ?? 0) > 1 || (doc.copies?.length ?? 0) > 0 || doc.original_filename) && (

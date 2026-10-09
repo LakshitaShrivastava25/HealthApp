@@ -2,6 +2,7 @@ import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig 
 
 import { getApiBaseUrl } from './config';
 import { clearTokens, getAccessToken, getRefreshToken, setAccessToken, setTokens } from './tokens';
+import { bumpDataVersion } from './dataVersion';
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -74,10 +75,12 @@ async function refreshAccessToken(): Promise<string | null> {
       else await setAccessToken(data.access);
       return data.access as string;
     } catch (err) {
-      // Only a rejected refresh token ends the session. A timeout or no
-      // network rethrows, so the caller fails this once and the person
-      // stays signed in for when the connection comes back.
-      if ((err as AxiosError).response) return null;
+      // Only a refused refresh token (400/401/403) ends the session. A
+      // timeout, no network, or a 5xx/429 while the server is waking up or
+      // deploying rethrows, so the caller fails this once and the person
+      // stays signed in — those used to sign people out at random.
+      const status = (err as AxiosError).response?.status;
+      if (status === 400 || status === 401 || status === 403) return null;
       throw err;
     } finally {
       // Cleared inside the same promise so the next 401 starts a fresh
@@ -90,7 +93,13 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // A successful change on the server: screens refresh on their next focus
+    // (src/hooks/useFocusRefresh.ts) instead of on every focus.
+    const method = (response.config.method ?? 'get').toLowerCase();
+    if (method !== 'get' && method !== 'head' && method !== 'options') bumpDataVersion();
+    return response;
+  },
   async (error: AxiosError) => {
     const original = error.config as RetriableConfig | undefined;
     if (error.response?.status !== 401 || !original || original._retry) {
@@ -221,7 +230,8 @@ export const insuranceApi = {
 export const pushApi = {
   register: (token: string, platform: 'android' | 'ios') =>
     api.post('/auth/push-devices/', { token, platform }),
-  unregister: (token: string) => api.delete('/auth/push-devices/', { data: { token } }),
+  // Short timeout: it runs during sign-out, which must never hang on a slow server.
+  unregister: (token: string) => api.delete('/auth/push-devices/', { data: { token }, timeout: 4000 }),
 };
 
 export const medicinesApi = {

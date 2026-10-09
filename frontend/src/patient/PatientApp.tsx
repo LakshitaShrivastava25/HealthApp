@@ -3,18 +3,20 @@ import { Sparkles, FileBarChart } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import AppLayout from './layouts/AppLayout';
 import SessionStatus from '../auth/SessionStatus';
-import ProfileSetup from './pages/ProfileSetup';
-import Dashboard from './pages/Dashboard';
-import HealthTimeline from './pages/HealthTimeline';
-import MedicalLocker from './pages/MedicalLocker';
-import Insurance from './pages/Insurance';
-import Medicines from './pages/Medicines';
-import FindCare from './pages/FindCare';
-import EmergencyCard from './pages/EmergencyCard';
-import DoctorAccess from './pages/DoctorAccess';
-import Settings from './pages/Settings';
-import ComingSoon from './pages/ComingSoon';
-import HelpSupport from './pages/HelpSupport';
+import { lazyPage } from '@shared/lazyPage';
+
+const ProfileSetup = lazyPage('patient', () => import('./pages/ProfileSetup'));
+const Dashboard = lazyPage('patient', () => import('./pages/Dashboard'));
+const HealthTimeline = lazyPage('patient', () => import('./pages/HealthTimeline'));
+const MedicalLocker = lazyPage('patient', () => import('./pages/MedicalLocker'));
+const Insurance = lazyPage('patient', () => import('./pages/Insurance'));
+const Medicines = lazyPage('patient', () => import('./pages/Medicines'));
+const FindCare = lazyPage('patient', () => import('./pages/FindCare'));
+const EmergencyCard = lazyPage('patient', () => import('./pages/EmergencyCard'));
+const DoctorAccess = lazyPage('patient', () => import('./pages/DoctorAccess'));
+const Settings = lazyPage('patient', () => import('./pages/Settings'));
+const ComingSoon = lazyPage('patient', () => import('./pages/ComingSoon'));
+const HelpSupport = lazyPage('patient', () => import('./pages/HelpSupport'));
 
 /**
  * User mode's gate. Signed out → the one sign-in screen, remembering where
@@ -78,6 +80,7 @@ export default function patientRoutes() {
         />
         <Route path="help" element={<HelpSupport />} />
       </Route>
+      <Route path="*" element={<Navigate to="/patient" replace />} />
     </Route>
   );
 }

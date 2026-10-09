@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { FileText, Check } from 'lucide-react';
+import { FileText, Check, Eye } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import { adminApi } from '../lib/api';
+import FileViewer from '@shared/components/FileViewer';
 
 type Doc = {
   id: string;
@@ -10,10 +11,13 @@ type Doc = {
   category: string;
   status: string;
   structured_data: Record<string, unknown>;
+  file?: string | null;
+  file_type?: string;
 };
 
 export default function DocumentReview() {
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [viewing, setViewing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
@@ -78,6 +82,14 @@ export default function DocumentReview() {
               <Card className="p-5 h-fit sticky top-24">
                 <p className="text-sm font-semibold text-ink-900 mb-1">{openDocData.title}</p>
                 <p className="text-xs text-ink-500 mb-3">Edit the extracted data, then approve.</p>
+                {openDocData.file && (
+                  <button onClick={() => setViewing(true)} className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:underline">
+                    <Eye size={13} /> View the original to compare
+                  </button>
+                )}
+                {viewing && openDocData.file && (
+                  <FileViewer url={openDocData.file} type={openDocData.file_type} title={openDocData.title} onClose={() => setViewing(false)} />
+                )}
                 <textarea
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}

@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Badge, Button, Card, EmptyState, ErrorNote, Row, Screen } from '../../../src/components/ui';
 import { adminApi, unwrap } from '../../../src/lib/api';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { openFile } from '../../../src/lib/viewer';
+import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
 type AdminDoc = {
   id: string;
@@ -16,6 +17,8 @@ type AdminDoc = {
   raw_ocr_text: string;
   structured_data: Record<string, unknown>;
   uploaded_at: string;
+  file: string | null;
+  file_type?: string;
 };
 
 const FILTERS = [
@@ -48,11 +51,8 @@ export default function AdminDocuments() {
     }
   }, [filter]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
+  // Not on every tab switch: see useFocusRefresh.
+  useFocusRefresh(load, `admin-documents:${filter}`);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -148,6 +148,12 @@ export default function AdminDocuments() {
                       {d.raw_ocr_text}
                     </Text>
                   </>
+                )}
+
+                {!!d.file && (
+                <Pressable onPress={() => openFile(d.file, d.file_type, d.title)} hitSlop={8} style={{ marginTop: spacing.md }}>
+                  <Text style={[type.label, { color: colors.brandPurple }]}>View the original to compare →</Text>
+                </Pressable>
                 )}
 
                 {d.status !== 'processed' && (

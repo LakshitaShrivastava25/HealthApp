@@ -11,11 +11,12 @@ import {
   View,
 } from 'react-native';
 
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorNote, Input, Row, Screen } from '../../../src/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorNote, Input, Row, Screen, Loading } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { insuranceApi, unwrap, type UploadFile } from '../../../src/lib/api';
 import { pickDocument } from '../../../src/lib/pickFile';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { openFile } from '../../../src/lib/viewer';
 
 type Exclusion = { id: string; description: string };
 type WaitingPeriod = { id: string; condition: string; months: number; waiting_until: string | null };
@@ -35,6 +36,8 @@ type Policy = {
   room_rent_limit: string;
   co_payment_percent: string | null;
   structured_data: Record<string, unknown>;
+  file: string | null;
+  file_type?: string;
   exclusions: Exclusion[];
   waiting_periods: WaitingPeriod[];
   sub_limits: SubLimit[];
@@ -59,10 +62,13 @@ function money(value: string | null) {
 
 export default function Insurance() {
   const { activeProfile } = useAuth();
+  const profileId = activeProfile?.id ?? null;
 
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // False until the first load finishes: a loader, not "nothing here yet".
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -81,10 +87,10 @@ export default function Insurance() {
 
   const load = useCallback(
     async (selectId?: string) => {
-      if (!activeProfile) return;
+      if (!profileId) return;
       setError(null);
       try {
-        const { data } = await insuranceApi.list(activeProfile.id);
+        const { data } = await insuranceApi.list(profileId);
         const list = unwrap<Policy>(data);
         setPolicies(list);
         setActiveId((current) => {
@@ -94,9 +100,11 @@ export default function Insurance() {
         });
       } catch {
         setError("Couldn't load your policies. Pull down to retry.");
+      } finally {
+        setLoaded(true);
       }
     },
-    [activeProfile]
+    [profileId]
   );
 
   useEffect(() => {
@@ -199,7 +207,8 @@ export default function Insurance() {
         Add a policy
       </Button>
 
-      {policies.length === 0 && !uploading && !error && (
+      {!loaded && !error && <Loading />}
+      {loaded && policies.length === 0 && !uploading && !error && (
         <EmptyState
           title="No policy uploaded yet"
           note="Upload a policy PDF and its coverage, exclusions and waiting periods are read out automatically."
@@ -234,6 +243,16 @@ export default function Insurance() {
                 {active.status.replace('_', ' ')}
               </Badge>
             </Row>
+            {!!active.file && (
+              <Pressable
+                onPress={() => openFile(active.file, active.file_type, active.plan_name || active.insurer || 'Policy document')}
+                hitSlop={8}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm }}
+              >
+                <Feather name="file-text" size={14} color={colors.brandPurple} />
+                <Text style={[type.label, { color: colors.brandPurple }]}>View policy document</Text>
+              </Pressable>
+            )}
 
             {extractionFailed && (
               <View style={{ marginTop: spacing.md }}>

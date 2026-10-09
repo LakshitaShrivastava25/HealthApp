@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '../context/AuthContext';
 import { doctorAccessApi, documentsApi, unwrap } from '../lib/api';
+import { dataVersion } from '../lib/dataVersion';
+import { FOCUS_REFRESH_MS } from './useFocusRefresh';
 
 export type AppNotification = {
   id: string;
@@ -61,47 +63,71 @@ export function deriveNotifications(documents: Doc[], grants: Grant[]): AppNotif
  * rather than a notifications table: documents waiting on the person,
  * documents still being read, and doctors asking for access.
  *
- * Refetches when the active profile changes (these are per-person) and
- * whenever the screen hosting it regains focus, so confirming a document
- * and coming back updates the count. Late responses for a profile the
- * person already switched away from are dropped. Failures resolve to an
- * empty list: a header decoration must never take a screen down with it.
+ * One shared result per profile for every bell on screen: each tab header
+ * has its own bell, and each used to fetch two full lists on every focus.
+ * Now they share one request, reused for FOCUS_REFRESH_MS unless something
+ * was changed on the server meanwhile (dataVersion). Tapping the bell
+ * always refreshes. Late responses for a profile the person already switched
+ * away from are dropped. Failures resolve to an empty list: a header
+ * decoration must never take a screen down with it.
  */
+type Shared = { at: number; version: number; value: AppNotification[]; inFlight?: Promise<AppNotification[]> };
+const shared = new Map<string, Shared>();
+
+function loadShared(profileId: string, force: boolean): Promise<AppNotification[]> {
+  const entry = shared.get(profileId);
+  if (entry?.inFlight) return entry.inFlight;
+  if (entry && !force && entry.version === dataVersion() && Date.now() - entry.at < FOCUS_REFRESH_MS) {
+    return Promise.resolve(entry.value);
+  }
+  const version = dataVersion();
+  const inFlight = Promise.all([
+    documentsApi
+      .list(profileId)
+      .then((r) => unwrap<Doc>(r.data))
+      .catch(() => [] as Doc[]),
+    doctorAccessApi
+      .listForProfile(profileId)
+      .then((r) => unwrap<Grant>(r.data))
+      .catch(() => [] as Grant[]),
+  ]).then(([documents, grants]) => {
+    const value = deriveNotifications(documents, grants);
+    shared.set(profileId, { at: Date.now(), version, value });
+    return value;
+  });
+  shared.set(profileId, { at: entry?.at ?? 0, version: entry?.version ?? -1, value: entry?.value ?? [], inFlight });
+  return inFlight;
+}
+
 export default function useNotifications(): { notifications: AppNotification[]; refresh: () => void } {
   const { activeProfile } = useAuth();
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const profileId = activeProfile?.id ?? null;
+  const [notifications, setNotifications] = useState<AppNotification[]>(
+    () => (profileId ? shared.get(profileId)?.value : undefined) ?? []
+  );
   const requestId = useRef(0);
 
-  const refresh = useCallback(() => {
-    const id = ++requestId.current;
-    if (!activeProfile) {
-      setNotifications([]);
-      return;
-    }
-    const profileId = activeProfile.id;
-    void Promise.all([
-      documentsApi
-        .list(profileId)
-        .then((r) => unwrap<Doc>(r.data))
-        .catch(() => [] as Doc[]),
-      doctorAccessApi
-        .listForProfile(profileId)
-        .then((r) => unwrap<Grant>(r.data))
-        .catch(() => [] as Grant[]),
-    ]).then(([documents, grants]) => {
-      // Only the newest request may write: an older one resolving late would
-      // otherwise show the previous person's notifications.
-      if (id !== requestId.current) return;
-      setNotifications(deriveNotifications(documents, grants));
-    });
-  }, [activeProfile]);
+  const load = useCallback(
+    (force: boolean) => {
+      const id = ++requestId.current;
+      if (!profileId) {
+        setNotifications([]);
+        return;
+      }
+      void loadShared(profileId, force).then((value) => {
+        // Only the newest request may write: an older one resolving late would
+        // otherwise show the previous person's notifications.
+        if (id === requestId.current) setNotifications(value);
+      });
+    },
+    [profileId]
+  );
 
-  // Re-runs on focus, and again while focused whenever `refresh` changes
-  // (i.e. the active profile switched).
+  // On focus, and again while focused whenever the active profile switches.
   useFocusEffect(
     useCallback(() => {
-      refresh();
-    }, [refresh])
+      load(false);
+    }, [load])
   );
 
   // Invalidate any in-flight request on unmount.
@@ -112,5 +138,6 @@ export default function useNotifications(): { notifications: AppNotification[]; 
     []
   );
 
+  const refresh = useCallback(() => load(true), [load]);
   return { notifications, refresh };
 }

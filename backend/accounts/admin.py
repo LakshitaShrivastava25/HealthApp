@@ -1,9 +1,20 @@
 from django.contrib import admin, messages
 
-from .models import Account, OTPConfig, OTPRequest
+from .models import Account, OTPConfig, OTPRequest, StaffCredential
 
 admin.site.register(Account)
 admin.site.register(OTPRequest)
+
+
+@admin.register(StaffCredential)
+class StaffCredentialAdmin(admin.ModelAdmin):
+    """Admin Portal email sign-ins. Passwords are set with `manage.py set_staff_login`, never here."""
+    list_display = ('email', 'account', 'last_login_at', 'locked_until', 'password_changed_at')
+    exclude = ('password',)
+    readonly_fields = ('account', 'email', 'last_login_at', 'password_changed_at', 'failed_attempts')
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(OTPConfig)

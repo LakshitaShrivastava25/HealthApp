@@ -5,6 +5,9 @@ import { Card, Badge, Button, EmptyState } from '../components/ui';
 import DocumentDetailModal from '../components/DocumentDetailModal';
 import { useAuth } from '../context/AuthContext';
 import { documentsApi } from '../lib/api';
+import { useCachedState } from '@shared/hooks/useCachedState';
+import PageFallback from '@shared/components/PageFallback';
+import { refreshNotificationsSoon } from '../hooks/useNotifications';
 
 const tabs = [
   { label: 'All', value: '' },
@@ -40,22 +43,39 @@ export default function MedicalLocker() {
   const { activeProfile } = useAuth();
   const [tab, setTab] = useState('');
   const [query, setQuery] = useState('');
-  const [documents, setDocuments] = useState<Doc[]>([]);
+  const profileId = activeProfile?.id ?? null;
+  // Remembered per profile and tab: coming back shows the list at once while
+  // it refreshes, instead of "No documents yet" until the request returns.
+  const [documents, setDocuments, loaded] = useCachedState<Doc[]>(
+    profileId ? `locker:${profileId}:${tab}` : null,
+    []
+  );
+  const [loadError, setLoadError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadDocuments() {
-    if (!activeProfile) return;
-    const { data } = await documentsApi.list(activeProfile.id, tab || undefined);
-    setDocuments(data.results ?? data);
+    if (!profileId) return;
+    try {
+      const { data } = await documentsApi.list(profileId, tab || undefined);
+      setDocuments(data.results ?? data);
+      setLoadError('');
+    } catch {
+      setLoadError("Couldn't load your documents. Check your connection and try again.");
+    }
   }
 
   useEffect(() => {
     loadDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfile, tab]);
+  }, [profileId, tab]);
+
+  function documentsChanged() {
+    refreshNotificationsSoon();
+    return loadDocuments();
+  }
 
   async function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -64,7 +84,7 @@ export default function MedicalLocker() {
     setUploadNotice(null);
     try {
       const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other');
-      await loadDocuments();
+      await documentsChanged();
       if (data?.upload?.outcome === 'exact_duplicate') {
         // The same file (under any name) is already here: nothing was added
         // and nothing was processed again. Show the one that is.
@@ -155,7 +175,11 @@ export default function MedicalLocker() {
           ))}
         </div>
 
-        {filtered.length === 0 && (
+        {loadError && <p className="mb-4 text-sm text-danger" role="alert">{loadError}</p>}
+
+        {!loaded && !loadError && <PageFallback />}
+
+        {loaded && filtered.length === 0 && (
           <Card>
             <EmptyState
               icon={<FolderHeart size={22} />}
@@ -204,8 +228,8 @@ export default function MedicalLocker() {
         <DocumentDetailModal
           documentId={openDocId}
           onClose={() => setOpenDocId(null)}
-          onUpdated={loadDocuments}
-          onDeleted={loadDocuments}
+          onUpdated={documentsChanged}
+          onDeleted={documentsChanged}
         />
       )}
     </>

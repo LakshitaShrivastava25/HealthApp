@@ -4,6 +4,8 @@ import Topbar from '../components/Topbar';
 import { Card, CardHeader, Badge, Button, EmptyState } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { doctorAccessApi } from '../lib/api';
+import { useCachedState } from '@shared/hooks/useCachedState';
+import PageFallback from '@shared/components/PageFallback';
 
 type Grant = {
   id: string;
@@ -14,19 +16,23 @@ type Grant = {
 
 export default function DoctorAccess() {
   const { activeProfile } = useAuth();
-  const [grants, setGrants] = useState<Grant[]>([]);
+  const profileId = activeProfile?.id ?? null;
+  const [grants, setGrants, loaded] = useCachedState<Grant[]>(profileId ? `doctor-access:${profileId}` : null, []);
   const [copied, setCopied] = useState(false);
   const [actingOnId, setActingOnId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfile]);
+  }, [profileId]);
 
   function load() {
-    if (!activeProfile) return;
-    doctorAccessApi.listForProfile(activeProfile.id).then((r) => setGrants(r.data.results ?? r.data));
+    if (!profileId) return;
+    doctorAccessApi
+      .listForProfile(profileId)
+      .then((r) => setGrants(r.data.results ?? r.data))
+      .catch(() => undefined);
   }
 
   function handleCopy() {
@@ -77,7 +83,9 @@ export default function DoctorAccess() {
 
         <Card className="p-5">
           <CardHeader title="Pending Requests" subtitle="Review and respond — nothing happens without your approval" />
-          {pending.length === 0 ? (
+          {!loaded ? (
+            <PageFallback />
+          ) : pending.length === 0 ? (
             <EmptyState compact icon={<Clock size={20} />} title="No pending requests" note="Requests from doctors will appear here for you to approve or deny." />
           ) : (
             <div className="mt-3 space-y-3">
@@ -119,7 +127,9 @@ export default function DoctorAccess() {
 
         <Card className="p-5">
           <CardHeader title="Doctors With Access" subtitle="Revoke access at any time" />
-          {approved.length === 0 ? (
+          {!loaded ? (
+            <PageFallback />
+          ) : approved.length === 0 ? (
             <EmptyState
               icon={<UserCheck size={22} />}
               title="No doctors have access yet"

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 
 import { documentsApi, doctorAccessApi } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useCachedState } from '@shared/hooks/useCachedState';
 
 export type Notification = { id: string; text: string; tone: 'warning' | 'info' };
 
@@ -23,27 +24,43 @@ type Grant = {
  * the Dashboard only, and a second, permanently disabled one sat in the
  * header everywhere else.
  *
- * Refetches when the active profile changes (these are per-person) and on
- * navigation, so confirming a document and moving on updates the count
- * without a reload. Failures resolve to an empty list: a header decoration
- * must never take a page down with it.
+ * Refetches when the active profile changes, when the tab regains focus,
+ * and on navigation at most every REFRESH_MS — it used to refetch two full
+ * lists on every single page change. The last result is remembered per
+ * profile, so the badge is there immediately on every page. Failures
+ * resolve to an empty list: a header decoration must never take a page
+ * down with it.
  */
+const REFRESH_MS = 20_000;
+const lastFetched = new Map<string, number>();
+
 export default function useNotifications(): Notification[] {
   const { activeProfile } = useAuth();
   const { pathname } = useLocation();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const profileId = activeProfile?.id ?? null;
+  const [notifications, setNotifications] = useCachedState<Notification[]>(
+    profileId ? `notifications:${profileId}` : null,
+    []
+  );
+  const [focusTick, setFocusTick] = useState(0);
 
   useEffect(() => {
-    if (!activeProfile) {
-      setNotifications([]);
-      return;
-    }
+    const onFocus = () => setFocusTick((n) => n + 1);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
+  useEffect(() => {
+    if (!profileId) return;
+    const last = lastFetched.get(profileId) ?? 0;
+    if (Date.now() - last < REFRESH_MS) return;
+    lastFetched.set(profileId, Date.now());
     let cancelled = false;
 
     Promise.all([
-      documentsApi.list(activeProfile.id).then((r) => (r.data.results ?? r.data) as Doc[]).catch(() => [] as Doc[]),
+      documentsApi.list(profileId).then((r) => (r.data.results ?? r.data) as Doc[]).catch(() => [] as Doc[]),
       doctorAccessApi
-        .listForProfile(activeProfile.id)
+        .listForProfile(profileId)
         .then((r) => (r.data.results ?? r.data) as Grant[])
         .catch(() => [] as Grant[]),
     ]).then(([documents, grants]) => {
@@ -70,7 +87,12 @@ export default function useNotifications(): Notification[] {
     return () => {
       cancelled = true;
     };
-  }, [activeProfile, pathname]);
+  }, [profileId, pathname, focusTick, setNotifications]);
 
   return notifications;
+}
+
+/** Makes the next navigation refetch the bell (after a document is confirmed, uploaded or deleted). */
+export function refreshNotificationsSoon() {
+  lastFetched.clear();
 }

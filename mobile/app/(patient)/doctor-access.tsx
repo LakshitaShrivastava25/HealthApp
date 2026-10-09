@@ -17,6 +17,7 @@ type Grant = {
 
 export default function DoctorAccess() {
   const { activeProfile } = useAuth();
+  const profileId = activeProfile?.id ?? null;
 
   const [grants, setGrants] = useState<Grant[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -25,15 +26,15 @@ export default function DoctorAccess() {
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     setError(null);
     try {
-      const { data } = await doctorAccessApi.listForProfile(activeProfile.id);
+      const { data } = await doctorAccessApi.listForProfile(profileId);
       setGrants(unwrap<Grant>(data));
     } catch {
       setError("Couldn't load access requests. Pull down to retry.");
     }
-  }, [activeProfile]);
+  }, [profileId]);
 
   useEffect(() => {
     void load();

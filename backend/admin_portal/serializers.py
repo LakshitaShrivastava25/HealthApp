@@ -6,22 +6,30 @@ from doctors.councils import council_name
 from doctors.models import Doctor
 from family.models import Profile
 from documents.models import Document
+from documents.validators import FileKindField
 from insurance.models import InsurancePolicy
 from .models import AuditLog
 
 
 class AdminDocumentSerializer(serializers.ModelSerializer):
+    # The source file, so a reviewer can compare what was read against it.
+    file_type = FileKindField(source='file')
+
     class Meta:
         model = Document
-        fields = ['id', 'profile', 'title', 'category', 'status', 'raw_ocr_text', 'structured_data', 'uploaded_at']
-        read_only_fields = ['id', 'profile', 'title', 'category', 'raw_ocr_text', 'uploaded_at']
+        fields = ['id', 'profile', 'title', 'category', 'status', 'raw_ocr_text', 'structured_data', 'uploaded_at',
+                  'file', 'file_type']
+        read_only_fields = ['id', 'profile', 'title', 'category', 'raw_ocr_text', 'uploaded_at', 'file']
 
 
 class AdminInsurancePolicySerializer(serializers.ModelSerializer):
+    file_type = FileKindField(source='file')
+
     class Meta:
         model = InsurancePolicy
-        fields = ['id', 'profile', 'insurer', 'policy_number', 'status', 'raw_text', 'structured_data', 'uploaded_at']
-        read_only_fields = ['id', 'profile', 'raw_text', 'uploaded_at']
+        fields = ['id', 'profile', 'insurer', 'policy_number', 'status', 'raw_text', 'structured_data', 'uploaded_at',
+                  'file', 'file_type']
+        read_only_fields = ['id', 'profile', 'raw_text', 'uploaded_at', 'file']
 
 
 class AdminDoctorVerificationSerializer(serializers.ModelSerializer):
@@ -43,6 +51,7 @@ class AdminDoctorVerificationSerializer(serializers.ModelSerializer):
     name_matches = serializers.SerializerMethodField()
     # Where the admin can check the register by hand.
     imr_url = serializers.SerializerMethodField()
+    license_document_type = FileKindField(source='license_document')
 
     class Meta:
         model = Doctor
@@ -52,7 +61,7 @@ class AdminDoctorVerificationSerializer(serializers.ModelSerializer):
             'clinic_name', 'clinic_address',
             'consultation_fee', 'booking_phone_number', 'account_phone_number',
             'available_days', 'clinic_open_time', 'clinic_close_time',
-            'license_document', 'verification_status', 'submitted_at',
+            'license_document', 'license_document_type', 'verification_status', 'submitted_at',
             # What the NMC register said — the admin's evidence.
             'nmc_result', 'nmc_checked_at', 'nmc_doctor_id', 'nmc_name', 'nmc_qualification',
             'nmc_university', 'nmc_registration_date', 'nmc_suspended', 'nmc_remarks',

@@ -97,7 +97,32 @@ POST /api/auth/verify-otp/        { phone_number, otp } → { access, refresh, a
 POST /api/auth/refresh/           { refresh } → { access }
 GET  /api/auth/me/                → current account
 PATCH /api/auth/me/
+POST /api/auth/staff-login/       { email, password } → { access, refresh, account }   (Admin Portal only)
 ```
+
+#### Admin Portal sign-in (curapath.in/admin)
+
+The web Admin Portal at `/admin` has its own email + password sign-in. It
+signs in to an existing staff account — the one on `ADMIN_PHONE_NUMBERS` —
+so OTP sign-in at `/login` keeps working for the same account, and the
+usual staff check still runs on every request.
+
+Set or change it on the server (the password is asked for at a hidden
+prompt, or read from `STAFF_LOGIN_PASSWORD`; never pass it on the command line):
+
+```bash
+python manage.py set_staff_login admin@curapath.com           # create or change the password
+python manage.py set_staff_login admin@curapath.com --phone +91XXXXXXXXXX   # if several admin numbers
+python manage.py set_staff_login admin@curapath.com --remove  # turn it off
+```
+
+Passwords are checked with Django's password rules, including similarity
+to the email; `--allow-weak` overrides that. Five wrong passwords lock the
+sign-in for 15 minutes (counted in the database), requests are also
+throttled per client (`THROTTLE_STAFF_LOGIN`, default `20/hour`), and every
+successful sign-in is written to the audit log. The password is stored
+separately from `Account.password`, so it cannot be used at Django's own
+`/admin/` login, which has no rate limit.
 
 ### Family (`/api/`)
 ```

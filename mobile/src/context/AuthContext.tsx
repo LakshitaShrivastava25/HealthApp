@@ -10,7 +10,7 @@ import {
   type Mode,
 } from '../lib/api';
 import { IS_PRODUCTION, setApiBaseUrl } from '../lib/config';
-import { preferredMode, rememberMode } from '../lib/mode';
+import { preferredMode, rememberMode, rememberActiveProfile, rememberedActiveProfile } from '../lib/mode';
 import { clearLocalNotifications, unregisterForPush } from '../lib/notifications';
 import { clearSessionCache, readSessionCache, writeSessionCache } from '../lib/sessionCache';
 import {
@@ -116,6 +116,11 @@ type AuthValue = {
 
 const AuthContext = createContext<AuthValue | null>(null);
 
+/** Same values? Then the old object is kept, so effects keyed on it don't re-run. */
+function sameValue(a: unknown, b: unknown) {
+  return a === b || (!!a && !!b && JSON.stringify(a) === JSON.stringify(b));
+}
+
 function portalFor(account: Account | null, doctor: DoctorRecord | null, mode: Mode): Portal | null {
   if (!account) return null;
   if (STAFF_ROLES.includes(account.role)) return 'admin';
@@ -141,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [account, setAccount] = useState<Account | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
+  const [activeProfile, setActiveProfileState] = useState<Profile | null>(null);
   const [doctor, setDoctor] = useState<DoctorRecord | null>(null);
   const [hasRegistered, setHasRegistered] = useState(false);
   const [mode, setMode] = useState<Mode>('patient');
@@ -166,14 +171,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Always the account's own family, even from a Doctor-mode screen.
     const { data } = await profilesApi.listOwn();
     const list = unwrap<Profile>(data);
-    setProfiles(list);
-    setActiveProfile((current) => {
-      if (!current) return list[0] ?? null;
+    // Unchanged profiles keep their identity. Every screen keyed on the
+    // active profile used to refetch after any refresh — including the
+    // background one on every cold start, so each start loaded twice.
+    setProfiles((current) =>
+      current.length === list.length && list.every((p, i) => sameValue(p, current[i])) ? current : list
+    );
+    setActiveProfileState((current) => {
       // Keep the same person selected but pull their latest values, so an
       // edit on the Settings screen shows up without a restart.
-      return list.find((p) => p.id === current.id) ?? list[0] ?? null;
+      const next = (current && list.find((p) => p.id === current.id)) ?? list[0] ?? null;
+      return sameValue(next, current) ? current : next;
     });
     return list;
+  }, []);
+
+  /** Switches the family member on screen and remembers the choice for next launch. */
+  const setActiveProfile = useCallback((profile: Profile) => {
+    setActiveProfileState(profile);
+    if (accountRef.current) void rememberActiveProfile(accountRef.current.id, profile.id);
   }, []);
 
   /** The account's Doctor record; null when it has not registered. */
@@ -249,7 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     doctorRef.current = null;
     setAccount(null);
     setProfiles([]);
-    setActiveProfile(null);
+    setActiveProfileState(null);
     setDoctor(null);
     setHasRegistered(false);
     setActingAs('patient');
@@ -297,7 +313,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         doctorRef.current = cached.doctor ?? null;
         setAccount(cached.account);
         setProfiles(cachedProfiles);
-        setActiveProfile(cachedProfiles[0] ?? null);
+        // The family member viewed last time, not always the first one.
+        const rememberedId = await rememberedActiveProfile(cached.account.id);
+        setActiveProfileState(cachedProfiles.find((p) => p.id === rememberedId) ?? cachedProfiles[0] ?? null);
         setDoctor(cached.doctor ?? null);
         setHasRegistered(!!cached.doctor);
         if (!STAFF_ROLES.includes(cached.account.role)) {

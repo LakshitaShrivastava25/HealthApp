@@ -1,5 +1,4 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -21,12 +20,14 @@ import { DOCTOR_STATUS_LABEL } from '../../src/lib/councils';
 import { DELETE_ACCOUNT_URL, PRIVACY_URL, TERMS_URL } from '../../src/lib/links';
 import { colors, radius, spacing, type } from '../../src/theme';
 import NotificationSettingsCard from '../../src/components/NotificationSettingsCard';
+import { useConfirmLogout } from '../../src/hooks/useConfirmLogout';
+import { resetTo } from '../../src/lib/navigation';
 
 type Allergy = { id: string; kind: string; substance: string; reaction: string };
 
 export default function Settings() {
   const { account, profiles, activeProfile, refreshProfiles, logout, doctor } = useAuth();
-  const router = useRouter();
+  const confirmLogout = useConfirmLogout();
 
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(activeProfile?.full_name ?? '');
@@ -138,7 +139,7 @@ export default function Settings() {
             try {
               await authApi.deleteAccount();
               await logout();
-              router.replace('/login');
+              resetTo('/login');
             } catch {
               setError("Couldn't delete the account. Please try again.");
             }
@@ -291,10 +292,7 @@ export default function Settings() {
         </Row>
 
         <Pressable
-          onPress={async () => {
-            await logout();
-            router.replace('/login');
-          }}
+          onPress={confirmLogout}
           style={styles.actionRow}
         >
           <Feather name="log-out" size={15} color={colors.ink700} />

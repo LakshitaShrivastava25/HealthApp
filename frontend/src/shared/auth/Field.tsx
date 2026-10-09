@@ -16,12 +16,15 @@ export default function Field({
   label,
   icon,
   hint,
+  trailing,
   className = '',
   ...input
 }: {
   label: string;
   icon?: ReactNode;
   hint?: string;
+  /** Something inside the field's right edge, e.g. a show-password toggle. */
+  trailing?: ReactNode;
 } & InputHTMLAttributes<HTMLInputElement>) {
   const autoId = useId();
   const id = input.id ?? autoId;
@@ -42,9 +45,10 @@ export default function Field({
           {...input}
           id={id}
           className={`w-full bg-transparent py-3 text-sm text-ink-900 outline-none placeholder:text-ink-300 ${
-            icon ? 'pl-2.5 pr-3.5' : 'px-3.5'
-          }`}
+            icon ? 'pl-2.5' : 'pl-3.5'
+          } ${trailing ? 'pr-1' : 'pr-3.5'}`}
         />
+        {trailing && <span className="flex shrink-0 items-center pr-1.5">{trailing}</span>}
       </div>
 
       {hint && <p className="mt-1.5 text-[11px] text-ink-500">{hint}</p>}

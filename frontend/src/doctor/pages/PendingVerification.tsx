@@ -4,6 +4,7 @@ import { Clock3, LogOut, RefreshCw, User, UserCog, XCircle } from 'lucide-react'
 import { AuthCard, AuthShell, CuraPathLogo, SecurityBadge } from '@shared/auth';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLogoutConfirm } from '@shared/hooks/useLogoutConfirm';
 
 /**
  * Where a registered-but-unverified doctor waits — the mobile app's
@@ -16,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
  */
 export default function PendingVerification() {
   const { doctor, refreshDoctor, logout } = useAuth();
+  const { requestLogout, dialog: logoutDialog } = useLogoutConfirm(logout);
   const navigate = useNavigate();
   const [checking, setChecking] = useState(false);
   const [checkFailed, setCheckFailed] = useState(false);
@@ -137,15 +139,13 @@ export default function PendingVerification() {
 
         <button
           type="button"
-          onClick={() => {
-            logout();
-            window.location.assign('/login');
-          }}
+          onClick={requestLogout}
           className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-medium text-ink-500 transition-colors hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/30"
         >
           <LogOut size={13} />
           Sign out
         </button>
+        {logoutDialog}
 
         <SecurityBadge />
       </AuthCard>

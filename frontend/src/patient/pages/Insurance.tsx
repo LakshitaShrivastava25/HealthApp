@@ -6,6 +6,9 @@ import AIMarkdown from '../components/AIMarkdown';
 import { useAuth } from '../context/AuthContext';
 import { insuranceApi } from '../lib/api';
 import { describeExtraction } from '@shared/components/extractionState';
+import FileViewer from '@shared/components/FileViewer';
+import { useCachedState } from '@shared/hooks/useCachedState';
+import PageFallback from '@shared/components/PageFallback';
 
 type Exclusion = { id: string; description: string };
 type WaitingPeriod = { id: string; condition: string; months: number; waiting_until: string | null };
@@ -29,6 +32,7 @@ type Policy = {
   waiting_periods: WaitingPeriod[];
   sub_limits: SubLimit[];
   file: string | null;
+  file_type?: string;
 };
 
 type ChatMessage = { id: string; role: 'user' | 'ai'; content: string };
@@ -40,8 +44,10 @@ type Estimate = {
 };
 
 export default function Insurance() {
+  const [viewingFile, setViewingFile] = useState(false);
   const { activeProfile } = useAuth();
-  const [policies, setPolicies] = useState<Policy[]>([]);
+  const profileId = activeProfile?.id ?? null;
+  const [policies, setPolicies, policiesLoaded] = useCachedState<Policy[]>(profileId ? `insurance:${profileId}` : null, []);
   const [activePolicyId, setActivePolicyId] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState('');
@@ -65,11 +71,17 @@ export default function Insurance() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const activePolicy = policies.find((p) => p.id === activePolicyId) || null;
+  // Falls back to the first policy, so a remembered list shows one at once.
+  const activePolicy = policies.find((p) => p.id === activePolicyId) || policies[0] || null;
 
   async function loadPolicies(selectId?: string) {
-    if (!activeProfile) return;
-    const { data } = await insuranceApi.list(activeProfile.id);
+    if (!profileId) return;
+    let data;
+    try {
+      ({ data } = await insuranceApi.list(profileId));
+    } catch {
+      return;
+    }
     const list = data.results ?? data;
     setPolicies(list);
     if (selectId && list.some((p: Policy) => p.id === selectId)) {
@@ -84,7 +96,7 @@ export default function Insurance() {
   useEffect(() => {
     loadPolicies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfile]);
+  }, [profileId]);
 
   useEffect(() => {
     setEstimate(null);
@@ -186,7 +198,8 @@ export default function Insurance() {
       />
 
       <main className="p-4 sm:p-6 lg:p-8 space-y-6">
-        {policies.length === 0 && (
+        {!policiesLoaded && <PageFallback />}
+        {policiesLoaded && policies.length === 0 && (
           <Card>
             <EmptyState
               icon={<ShieldCheck size={22} />}
@@ -260,14 +273,20 @@ export default function Insurance() {
                 </div>
 
                 {activePolicy.file && !isEditingFields && (
-                  <a
-                    href={activePolicy.file}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => setViewingFile(true)}
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink mt-2 hover:underline"
                   >
                     <FileText size={13} /> View original document
-                  </a>
+                  </button>
+                )}
+                {viewingFile && activePolicy.file && (
+                  <FileViewer
+                    url={activePolicy.file}
+                    type={activePolicy.file_type}
+                    title={activePolicy.plan_name || activePolicy.insurer || 'Policy document'}
+                    onClose={() => setViewingFile(false)}
+                  />
                 )}
 
                 {isEditingFields ? (

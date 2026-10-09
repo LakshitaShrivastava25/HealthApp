@@ -10,6 +10,7 @@ import CountUp from '@shared/motion/CountUp';
 import AmbientBackground from '@shared/components/AmbientBackground';
 import { useAuth } from '../context/AuthContext';
 import { documentsApi, doctorAccessApi, medicinesApi, profilesApi, timelineApi } from '../lib/api';
+import { useCachedState } from '@shared/hooks/useCachedState';
 
 const docBadgeTone: Record<string, 'info' | 'success' | 'warning' | 'neutral' | 'danger'> = {
   report: 'info',
@@ -32,12 +33,17 @@ function totalOf(data: { count?: number; results?: unknown[] } | unknown[]) {
 export default function Dashboard() {
   const { activeProfile, profiles } = useAuth();
   const navigate = useNavigate();
-  const [documents, setDocuments] = useState<Doc[]>([]);
-  const [documentCount, setDocumentCount] = useState(0);
-  const [medications, setMedications] = useState<Med[]>([]);
-  const [medicationCount, setMedicationCount] = useState(0);
-  const [timelineCount, setTimelineCount] = useState(0);
-  const [doctorAccessCount, setDoctorAccessCount] = useState(0);
+  const profileId = activeProfile?.id ?? null;
+  // Remembered per profile, so returning to the dashboard shows the last
+  // numbers at once (and the count-up does not restart from zero) while
+  // everything refreshes quietly.
+  const key = (name: string) => (profileId ? `dashboard:${name}:${profileId}` : null);
+  const [documents, setDocuments] = useCachedState<Doc[]>(key('documents'), []);
+  const [documentCount, setDocumentCount] = useCachedState(key('documentCount'), 0);
+  const [medications, setMedications] = useCachedState<Med[]>(key('medications'), []);
+  const [medicationCount, setMedicationCount] = useCachedState(key('medicationCount'), 0);
+  const [timelineCount, setTimelineCount] = useCachedState(key('timelineCount'), 0);
+  const [doctorAccessCount, setDoctorAccessCount] = useCachedState(key('doctorAccessCount'), 0);
   const [question, setQuestion] = useState('');
   const [askedQuestion, setAskedQuestion] = useState<string | null>(null);
   const [askLoading, setAskLoading] = useState(false);
@@ -45,28 +51,35 @@ export default function Dashboard() {
   const [openDocId, setOpenDocId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     loadDocuments();
-    medicinesApi.list(activeProfile.id).then((r) => {
-      setMedications(r.data.results ?? r.data);
-      setMedicationCount(totalOf(r.data));
-    });
-    timelineApi.list(activeProfile.id).then((r) => setTimelineCount(totalOf(r.data)));
+    medicinesApi
+      .list(profileId)
+      .then((r) => {
+        setMedications(r.data.results ?? r.data);
+        setMedicationCount(totalOf(r.data));
+      })
+      .catch(() => undefined);
+    timelineApi.list(profileId).then((r) => setTimelineCount(totalOf(r.data))).catch(() => undefined);
     doctorAccessApi
-      .listForProfile(activeProfile.id)
+      .listForProfile(profileId)
       .then((r) => {
         const grants = r.data.results ?? r.data;
         setDoctorAccessCount(grants.filter((g: { status: string }) => g.status === 'approved').length);
-      });
+      })
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfile]);
+  }, [profileId]);
 
   function loadDocuments() {
-    if (!activeProfile) return;
-    documentsApi.list(activeProfile.id).then((r) => {
-      setDocuments((r.data.results ?? r.data).slice(0, 5));
-      setDocumentCount(totalOf(r.data));
-    });
+    if (!profileId) return;
+    documentsApi
+      .list(profileId)
+      .then((r) => {
+        setDocuments((r.data.results ?? r.data).slice(0, 5));
+        setDocumentCount(totalOf(r.data));
+      })
+      .catch(() => undefined);
   }
 
   async function handleAsk() {

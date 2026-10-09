@@ -1,8 +1,9 @@
 import * as Notifications from 'expo-notifications';
-import { useRootNavigationState, useRouter, type Href } from 'expo-router';
+import { useRootNavigationState, useRouter, useSegments, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '../context/AuthContext';
+import { resetTo } from '../lib/navigation';
 import { registerForPush, syncMedicineReminders } from '../lib/notifications';
 
 /**
@@ -17,7 +18,8 @@ import { registerForPush, syncMedicineReminders } from '../lib/notifications';
  *   mode first; a link this account cannot open falls back to home.
  */
 export default function NotificationBridge() {
-  const { isLoading, isAuthenticated, account, portal, profiles, doctor, switchMode } = useAuth();
+  const { isLoading, isAuthenticated, account, portal, profiles, doctor, switchMode, refreshDoctor } = useAuth();
+  const segments = useSegments();
   const router = useRouter();
   const navReady = !!useRootNavigationState()?.key;
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
@@ -55,33 +57,45 @@ export default function NotificationBridge() {
   useEffect(() => {
     if (!pendingUrl || isLoading || !navReady) return;
     if (!isAuthenticated) return; // opened after logout: the login screen stays
-    setPendingUrl(null);
+    const url = pendingUrl;
 
     // Which mode the link belongs to, and whether this account has it.
-    const needs = pendingUrl.startsWith('/(patient)')
-      ? 'patient'
-      : pendingUrl.startsWith('/(doctor)')
-        ? 'doctor'
-        : null;
+    const needs = url.startsWith('/(patient)') ? 'patient' : url.startsWith('/(doctor)') ? 'doctor' : null;
     const canOpen =
       needs === 'patient'
         ? portal !== 'admin'
         : needs === 'doctor'
           ? doctor?.verification_status === 'verified'
-          : !!portal && pendingUrl.startsWith(`/(${portal})`);
+          : !!portal && url.startsWith(`/(${portal})`);
 
-    if (pendingUrl === '/' || !canOpen) {
-      router.push('/' as Href);
+    if (url === '/' || !canOpen) {
+      // e.g. "your registration was approved": pick up the new status first,
+      // so the home route sends the doctor to the right place — and replace,
+      // so Back does not reveal a second copy of the same home screen.
+      setPendingUrl(null);
+      void refreshDoctor().then(() => resetTo('/'));
       return;
     }
-    if (needs && portal !== needs) {
-      switchMode(needs);
-      // Let the mode commit before the target's route guard reads it.
-      setTimeout(() => router.push(pendingUrl as Href), 0);
+
+    const area = needs ? `(${needs})` : `(${portal})`;
+    if (segments[0] !== area) {
+      // Get into the right area first; this effect runs again once it is on
+      // screen (segments change), instead of racing the area's own redirect.
+      if (needs && portal !== needs) switchMode(needs);
+      resetTo(`/${area}/(tabs)` as Href);
       return;
     }
-    router.push(pendingUrl as Href);
-  }, [pendingUrl, isLoading, navReady, isAuthenticated, portal, doctor, switchMode, router]);
+
+    setPendingUrl(null);
+    if (url.includes('/(tabs)')) {
+      // A tab: back down to the tabs and switch to it. Pushing a tab URL from
+      // a pushed screen used to create a second set of tabs.
+      if (router.canDismiss()) router.dismissAll();
+      router.navigate(url as Href);
+    } else {
+      router.push(url as Href);
+    }
+  }, [pendingUrl, isLoading, navReady, isAuthenticated, portal, doctor, switchMode, refreshDoctor, router, segments]);
 
   return null;
 }

@@ -321,6 +321,25 @@ class StoredFileTests(TestCase):
         )
         self.assertTrue(response.data['file'].startswith('https://'))
 
+    def test_file_is_fetchable_by_the_web_viewer(self):
+        """The web viewer reads the file with fetch() (pdf.js) or <img>, never a frame."""
+        response = APIClient().get(self.upload(), HTTP_ORIGIN='http://localhost:5173')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Access-Control-Allow-Origin'], 'http://localhost:5173')
+        self.assertEqual(response['X-Frame-Options'], 'DENY')
+
+    def test_file_type_tells_the_apps_which_viewer_to_use(self):
+        self.upload()
+        doc = Document.objects.get(profile=self.profile)
+        self.assertEqual(self.client_api.get(f'/api/documents/{doc.id}/').data['file_type'], 'pdf')
+
+    def test_file_kind(self):
+        from documents.validators import file_kind
+        self.assertEqual(file_kind('documents/2026/10/rx_1a2b3c4d.PDF'), 'pdf')
+        self.assertEqual(file_kind('documents/x.jpeg'), 'image')
+        self.assertEqual(file_kind('documents/x.heic'), 'heic')
+        self.assertEqual(file_kind(''), '')
+
 
 @override_settings(CLOUDINARY_CLOUD_NAME='demo', CLOUDINARY_API_KEY='k', CLOUDINARY_API_SECRET='s')
 class CloudinaryStorageTests(TestCase):

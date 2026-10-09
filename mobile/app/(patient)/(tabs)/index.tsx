@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter, type Href } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -17,6 +17,7 @@ import {
   unwrap,
 } from '../../../src/lib/api';
 import { colors, radius, shadow, spacing, type } from '../../../src/theme';
+import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
 type Doc = {
   id: string;
@@ -58,6 +59,7 @@ function todayLabel() {
 
 export default function Dashboard() {
   const { activeProfile, profiles } = useAuth();
+  const profileId = activeProfile?.id ?? null;
   const router = useRouter();
 
   const [documents, setDocuments] = useState<Doc[]>([]);
@@ -77,15 +79,15 @@ export default function Dashboard() {
   const [asking, setAsking] = useState(false);
 
   const load = useCallback(async () => {
-    if (!activeProfile) return;
+    if (!profileId) return;
     setLoadError(null);
     try {
       const [docs, meds, policies, access, notifs] = await Promise.all([
-        documentsApi.list(activeProfile.id),
-        medicinesApi.list(activeProfile.id),
-        insuranceApi.list(activeProfile.id),
-        doctorAccessApi.listForProfile(activeProfile.id),
-        notificationsApi.list(activeProfile.id),
+        documentsApi.list(profileId),
+        medicinesApi.list(profileId),
+        insuranceApi.list(profileId),
+        doctorAccessApi.listForProfile(profileId),
+        notificationsApi.list(profileId),
       ]);
       const allDocs = unwrap<Doc>(docs.data);
       setDocuments(allDocs.slice(0, 4));
@@ -101,13 +103,10 @@ export default function Dashboard() {
     } catch {
       setLoadError("Couldn't load your dashboard. Check your connection and pull down to retry.");
     }
-  }, [activeProfile]);
+  }, [profileId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
+  // Not on every tab switch: see useFocusRefresh.
+  useFocusRefresh(load, profileId ? `home:${profileId}` : null);
 
   async function onRefresh() {
     setRefreshing(true);

@@ -20,8 +20,6 @@ export default function Accounts() {
     adminApi.accounts(search).then((r) => setAccounts(r.data.results ?? r.data));
   }
 
-  useEffect(() => load(), []);
-
   useEffect(() => {
     const t = setTimeout(() => load(query || undefined), 300);
     return () => clearTimeout(t);

@@ -1,7 +1,10 @@
 import uuid
+from datetime import timedelta
 
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 
 class AccountManager(BaseUserManager):
@@ -120,3 +123,50 @@ class OTPConfig(models.Model):
             default = cls.Mode.SMS
         obj, _ = cls.objects.get_or_create(pk=1, defaults={'mode': default})
         return obj
+
+
+class StaffCredential(models.Model):
+    """
+    Email + password sign-in for the web Admin Portal (curapath.in/admin) —
+    a second way into an existing staff account, alongside OTP. Set with
+    `manage.py set_staff_login`; there is no self-service sign-up.
+
+    Deliberately NOT Account.password. Django's own /admin/ login checks
+    that field with no rate limit at all, so a password stored there could
+    be guessed indefinitely. This one is accepted only by StaffLoginView,
+    which is throttled and locks the credential after repeated failures.
+
+    The account still has to pass the usual staff check (a staff role AND a
+    number on ADMIN_PHONE_NUMBERS) on every sign-in and every request, so a
+    credential alone never grants anything.
+    """
+
+    MAX_FAILURES = 5
+    LOCK_DURATION = timedelta(minutes=15)
+
+    account = models.OneToOneField(Account, on_delete=models.CASCADE, related_name='staff_credential')
+    # Stored lowercase; looked up lowercase.
+    email = models.EmailField(unique=True)
+    password = models.CharField(max_length=128)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    last_login_at = models.DateTimeField(null=True, blank=True)
+    password_changed_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.email
+
+    def set_password(self, raw_password):
+        self.password = make_password(raw_password)
+        self.password_changed_at = timezone.now()
+
+    def check_password(self, raw_password):
+        def upgrade(raw):
+            # Re-hash with the current hasher when Django's default changes.
+            self.password = make_password(raw)
+            self.save(update_fields=['password'])
+
+        return check_password(raw_password, self.password, upgrade)
+
+    def is_locked(self, now=None):
+        return bool(self.locked_until and self.locked_until > (now or timezone.now()))

@@ -1,6 +1,7 @@
 import { RefreshCw, WifiOff } from 'lucide-react';
 
 import { useSession } from '@shared/session/SessionContext';
+import { useLogoutConfirm } from '@shared/hooks/useLogoutConfirm';
 
 /**
  * What a route gate shows while the signed-in account loads — or, when the
@@ -10,6 +11,7 @@ import { useSession } from '@shared/session/SessionContext';
  */
 export default function SessionStatus() {
   const { loadFailed, retryLoad, logout } = useSession();
+  const { requestLogout, dialog: logoutDialog } = useLogoutConfirm(logout);
 
   if (!loadFailed) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-ink-500">Loading…</div>;
@@ -35,14 +37,12 @@ export default function SessionStatus() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              logout();
-              window.location.assign('/login');
-            }}
+            onClick={requestLogout}
             className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-ink-700 hover:bg-surface"
           >
             Sign out
           </button>
+          {logoutDialog}
         </div>
       </div>
     </div>

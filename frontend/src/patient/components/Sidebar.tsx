@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import ModeSwitch from '@shared/session/ModeSwitch';
 import { useAuth } from '../context/AuthContext';
+import { useLogoutConfirm } from '@shared/hooks/useLogoutConfirm';
 
 const navItems = [
   { to: '/patient', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,15 +38,8 @@ const navItems = [
 
 export default function Sidebar() {
   const { logout, hasRegistered } = useAuth();
-
-  function handleLogout() {
-    logout();
-    // A hard navigation, not react-router's navigate(): a full document
-    // load discards all in-memory auth state, any request still in flight
-    // and the refresh state, so nothing can survive into the next person's
-    // session on a shared machine.
-    window.location.assign('/login');
-  }
+  // Asks first, then ends the session with a hard navigation to /login.
+  const { requestLogout, dialog: logoutDialog } = useLogoutConfirm(logout);
 
   return (
     <aside className="w-64 shrink-0 h-screen sticky top-0 bg-card border-r border-border flex flex-col">
@@ -102,8 +96,9 @@ export default function Sidebar() {
             <ChevronRight size={15} className="shrink-0 text-ink-300" />
           </Link>
         )}
+        {logoutDialog}
         <button
-          onClick={handleLogout}
+          onClick={requestLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-ink-500 hover:bg-surface hover:text-danger transition-colors"
         >
           <LogOut size={18} strokeWidth={2} />

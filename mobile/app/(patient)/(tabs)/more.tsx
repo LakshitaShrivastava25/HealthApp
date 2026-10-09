@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ModeSwitchCard } from '../../../src/components/ModeSwitch';
 import { Card, Row, Screen, SectionTitle } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/AuthContext';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import { useConfirmLogout } from '../../../src/hooks/useConfirmLogout';
 
 type Item = {
   icon: keyof typeof Feather.glyphMap;
@@ -62,21 +63,9 @@ const ACCOUNT: Item[] = [
 
 export default function More() {
   const router = useRouter();
-  const { account, logout, hasRegistered } = useAuth();
+  const { account, hasRegistered } = useAuth();
 
-  function confirmLogout() {
-    Alert.alert('Sign out?', 'You will need your phone number and a new code to sign back in.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/login');
-        },
-      },
-    ]);
-  }
+  const confirmLogout = useConfirmLogout();
 
   const renderItem = (item: Item) => (
     <Pressable key={item.label} onPress={() => router.push(item.href)} style={styles.row}>

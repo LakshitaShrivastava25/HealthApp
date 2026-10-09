@@ -19,6 +19,7 @@ import { Card, Button } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { allergiesApi, authApi, profilesApi } from '../lib/api';
 import { todayIso } from '@shared/dates';
+import { useLogoutConfirm } from '@shared/hooks/useLogoutConfirm';
 
 const notBuiltItems = [
   { icon: ShieldCheck, label: 'Security & Privacy' },
@@ -97,7 +98,8 @@ export default function Settings() {
     return () => {
       cancelled = true;
     };
-  }, [activeProfile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id]);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -135,17 +137,14 @@ export default function Settings() {
     }
   }
 
-  function handleLogout() {
-    logout();
-    window.location.assign('/login');
-  }
+  const { requestLogout, dialog: logoutDialog } = useLogoutConfirm(logout);
 
   async function handleDeleteAccount() {
     setDeleting(true);
     try {
       await authApi.deleteAccount();
       logout();
-      window.location.assign('/login');
+      window.location.replace('/login');
     } finally {
       setDeleting(false);
     }
@@ -380,9 +379,10 @@ export default function Settings() {
           </Card>
         </div>
 
-        <Button variant="danger" className="w-full mt-6 justify-center py-3" onClick={handleLogout}>
+        <Button variant="danger" className="w-full mt-6 justify-center py-3" onClick={requestLogout}>
           Logout
         </Button>
+        {logoutDialog}
       </main>
     </>
   );

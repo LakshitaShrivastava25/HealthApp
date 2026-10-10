@@ -66,7 +66,7 @@ class AdminDoctorVerificationSerializer(serializers.ModelSerializer):
             'nmc_result', 'nmc_checked_at', 'nmc_doctor_id', 'nmc_name', 'nmc_qualification',
             'nmc_university', 'nmc_registration_date', 'nmc_suspended', 'nmc_remarks',
             'nmc_payload', 'name_match_score', 'name_matches', 'verification_provider',
-            'verification_attempts', 'last_verification_error',
+            'verification_attempts', 'last_verification_error', 'provider_attempts', 'verification_consent_at',
             # The admin's decision.
             'verified_at', 'verified_by_phone', 'rejection_reason', 'imr_url',
         ]

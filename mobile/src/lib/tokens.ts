@@ -25,8 +25,12 @@ export async function getRefreshToken() {
 }
 
 export async function setTokens(access: string, refresh: string) {
-  await SecureStore.setItemAsync(ACCESS_KEY, access);
+  // Refresh token first. The server blacklists the one it rotated out, so
+  // if the app is closed between the two writes, an old access token is
+  // harmless (its next 401 refreshes it) but an old refresh token would end
+  // the session at the next refresh.
   await SecureStore.setItemAsync(REFRESH_KEY, refresh);
+  await SecureStore.setItemAsync(ACCESS_KEY, access);
 }
 
 export async function setAccessToken(access: string) {

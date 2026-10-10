@@ -18,7 +18,7 @@ import { registerForPush, syncMedicineReminders } from '../lib/notifications';
  *   mode first; a link this account cannot open falls back to home.
  */
 export default function NotificationBridge() {
-  const { isLoading, isAuthenticated, account, portal, profiles, doctor, switchMode, refreshDoctor } = useAuth();
+  const { isLoading, isAuthenticated, account, portal, profiles, doctor, refreshDoctor } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const navReady = !!useRootNavigationState()?.key;
@@ -79,9 +79,15 @@ export default function NotificationBridge() {
 
     const area = needs ? `(${needs})` : `(${portal})`;
     if (segments[0] !== area) {
-      // Get into the right area first; this effect runs again once it is on
-      // screen (segments change), instead of racing the area's own redirect.
-      if (needs && portal !== needs) switchMode(needs);
+      // Mid-switch: wait for the switch screen to open the new area; this
+      // effect runs again once it is on screen (segments change).
+      if ((segments[0] as string) === 'switch-mode') return;
+      if (needs && portal !== needs) {
+        // Another mode: through the switch screen, never by flipping the
+        // mode under the open area (that looped and closed the app).
+        resetTo({ pathname: '/switch-mode', params: { to: needs } } as unknown as Href);
+        return;
+      }
       resetTo(`/${area}/(tabs)` as Href);
       return;
     }
@@ -95,7 +101,7 @@ export default function NotificationBridge() {
     } else {
       router.push(url as Href);
     }
-  }, [pendingUrl, isLoading, navReady, isAuthenticated, portal, doctor, switchMode, refreshDoctor, router, segments]);
+  }, [pendingUrl, isLoading, navReady, isAuthenticated, portal, doctor, refreshDoctor, router, segments]);
 
   return null;
 }

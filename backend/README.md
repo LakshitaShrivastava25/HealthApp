@@ -200,17 +200,36 @@ council, year or licence), the backend looks the registration up on the
 **The check never approves or rejects anyone** — every registration lands in
 the admin queue, and only an admin decides.
 
-**Providers** (`doctors/services/verification/`, swappable behind one
-`VerificationResult` shape):
-- `nmc_provider.py` — the NMC's public JSON search
-  (`/indian-medical-register/search`, plus `/black-list-doctors/search` for
-  removals). Free, no key. One request per check, no pagination, no bulk
-  scraping; retries 5xx/429/timeouts twice with backoff. Only an allowlist of
-  fields is kept — DOB, father's name and address are dropped before
-  anything is stored or logged.
-- `vendor_provider.py` — optional paid fallback, **off** unless both vendor
-  env vars are set, and only consulted when NMC is unreachable. Request and
-  response mapping is a TODO for whichever vendor is chosen.
+**Providers** (`doctors/services/verification/`, all behind one
+`VerificationResult` shape, tried in `DOCTOR_VERIFY_PROVIDERS` order):
+
+| Provider | What it is | Runs | Off unless |
+|---|---|---|---|
+| `nmc` (`nmc_provider.py`) | NMC's public JSON search (`/indian-medical-register/search`, plus `/black-list-doctors/search` for removals). Free, ~2 s. | always — sign-up, the Verify button, admin Re-verify, the cron job | — |
+| `apify` (`apify_provider.py`) | The community [NMC Doctor Lookup](https://apify.com/whoareyouanas/nmc-doctor-lookup) actor, run from Apify's servers (helps if NMC blocks Render's IP). 10–60 s, ~$5 per 1,000 lookups. **Built on NMC's retired `/MCIRest` endpoints (404 since the 2026 redesign) — check it with the smoke test before paying for it.** | cron job only | `APIFY_TOKEN` |
+| `decentro` (`decentro_provider.py`) | Decentro's commercial NMC verification API (`POST /v2/kyc/professional-verification/nmc`). Needs the doctor's registration year. Staging by default. | cron job only | `DECENTRO_CLIENT_ID` + `DECENTRO_CLIENT_SECRET` |
+
+- **The chain** stops at the first provider that finds the number (or
+  several entries for it); "not found" and "unreachable" move on to the next.
+  Every provider asked is logged on the doctor as `provider_attempts`
+  (`[{"provider": "nmc", "result": "not_found", "ms": 2140}, …]`), which the
+  admin queue shows. Even when every provider says "not found", the doctor
+  goes to the admin — a typo'd number is not grounds for automatic rejection.
+- **Consent:** the outside providers (Apify, Decentro) are only asked about
+  doctors who ticked the consent box at sign-up (`verification_consent_at`).
+  Doctors without it — everyone registered before the box, and older app
+  versions — are only ever checked against NMC's own register.
+- **Matching:** the register searches by substring, so rows are filtered to
+  the exact number — tolerating council prefixes (Delhi stores `DMC/R/11030`,
+  AP `APMC/FMR/…`, old Maharashtra `B-…`) and leading zeros. Up to
+  `NMC_MAX_PAGES` pages of 100 are read before concluding "not found". When a
+  number isn't in the chosen council, all councils are searched and any hit
+  is shown to the doctor and admin ("listed under Tamil Nadu Medical Council
+  (2015)") — usually the doctor picked the wrong council.
+- **Personal data:** each provider keeps an allowlist of fields; `strip_pii`
+  then drops address, DOB, parent's name, UPRN, phone, email and Aadhaar at
+  any depth before anything is stored. Decentro calls log only
+  `decentroTxnId`.
 
 **Statuses** (`Doctor.verification_status`):
 
@@ -232,20 +251,33 @@ A verified doctor who later shows up as removed on the register goes back to
 | `NMC_BASE_URL` | `https://nmc.org.in/indian-medical-register` | |
 | `NMC_TIMEOUT` | `20` | seconds per request |
 | `NMC_CA_BUNDLE` | — | CA file, only if NMC's chain fails on the host. TLS is never disabled. |
+| `NMC_MAX_PAGES` | `3` | pages of 100 rows read before "not found" |
 | `DOCTOR_NAME_MATCH_THRESHOLD` | `0.85` | name-match score shown as "matches" |
-| `DOCTOR_VERIFY_VENDOR_URL` / `DOCTOR_VERIFY_VENDOR_TOKEN` | — | paid fallback; leave unset |
+| `DOCTOR_VERIFY_PROVIDERS` | `nmc,apify,decentro` | order; unconfigured ones are skipped |
+| `APIFY_TOKEN` | — | turns on the Apify fallback |
+| `APIFY_TIMEOUT` | `90` | seconds |
+| `DECENTRO_BASE_URL` | `https://in.staging.decentro.tech` | `https://in.decentro.tech` once production access is granted |
+| `DECENTRO_CLIENT_ID` / `DECENTRO_CLIENT_SECRET` | — | turn on the Decentro fallback (staging and production credentials differ) |
+| `DECENTRO_TIMEOUT` | `30` | seconds |
 | `THROTTLE_NMC_PRECHECK` | `10/min` | the form's Verify button |
 
 **Commands**
 ```bash
-python manage.py nmc_smoke_test 2001123450 MAH   # one live lookup, PII-free output
-python manage.py reverify_doctors                # pending + failed, one at a time
-python manage.py reverify_doctors --audit-verified   # removal check for verified doctors
+python manage.py nmc_smoke_test 2001123450 MAH        # live lookup: raw answer, unfiltered rows, parsed result
+python manage.py nmc_smoke_test 5892 MAD --try-councils MAD,MCI --year 2003
+python manage.py nmc_smoke_test 5892 MAD --year 2003 --provider decentro   # one real, billed call
+python manage.py reverify_doctors                     # full chain over doctors waiting on a check
+python manage.py reverify_doctors --audit-verified    # removal check for verified doctors
 ```
+
+`reverify_doctors` picks up pending and register-unreachable doctors, plus
+doctors under review whose number NMC couldn't find — once per configured
+fallback they haven't been through (so adding Decentro credentials later
+re-checks them once, not every run). At most `--limit` (50) per run.
 
 **Render cron job** (recommended): a Cron Job service on the backend's
 repo/env, schedule `0 */6 * * *`, command
-`python manage.py reverify_doctors --limit 100 --pause 2`.
+`python manage.py reverify_doctors --pause 2 && python manage.py reverify_doctors --audit-verified`.
 
 **Limitations**
 - The NMC register is a public website with no SLA; slow or down periods

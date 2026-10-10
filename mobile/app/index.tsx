@@ -1,4 +1,3 @@
-import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -6,6 +5,7 @@ import { Loading } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { hasSeenOnboarding } from '../src/lib/onboarding';
 import { colors } from '../src/theme';
+import { RedirectOnce } from '../src/components/RedirectOnce';
 
 /**
  * The single entry point. Everything about where a person lands is decided
@@ -36,22 +36,22 @@ export default function Index() {
   }
 
   // First launch on this device gets the intro slides before sign-in.
-  if (!isAuthenticated) return <Redirect href={seenIntro ? '/login' : '/onboarding'} />;
+  if (!isAuthenticated) return <RedirectOnce href={seenIntro ? '/login' : '/onboarding'} />;
 
   switch (portal) {
     case 'admin':
-      return <Redirect href="/(admin)/(tabs)" />;
+      return <RedirectOnce href="/(admin)/(tabs)" />;
     case 'doctor':
-      return <Redirect href="/(doctor)/(tabs)" />;
+      return <RedirectOnce href="/(doctor)/(tabs)" />;
     case 'doctor-setup':
-      return <Redirect href="/(doctor-setup)/pending" />;
+      return <RedirectOnce href="/(doctor-setup)/pending" />;
     case 'patient':
       return profiles.length === 0 ? (
-        <Redirect href="/profile-setup" />
+        <RedirectOnce href="/profile-setup" />
       ) : (
-        <Redirect href="/(patient)/(tabs)" />
+        <RedirectOnce href="/(patient)/(tabs)" />
       );
     default:
-      return <Redirect href="/login" />;
+      return <RedirectOnce href="/login" />;
   }
 }

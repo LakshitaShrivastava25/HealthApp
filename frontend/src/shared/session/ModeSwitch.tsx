@@ -17,8 +17,11 @@ const OPTIONS: { mode: Mode; label: string; Icon: typeof User; active: string }[
  *
  * Switching is a route change. Both modes run on the one signed-in session
  * (SessionContext), so there is nothing to sign in to again.
+ *
+ * Labels show from `sm` up; `labels` shows them on phones too, where the
+ * headers give the switch a row of its own.
  */
-export default function ModeSwitch({ className = '' }: { className?: string }) {
+export default function ModeSwitch({ className = '', labels = false }: { className?: string; labels?: boolean }) {
   const { hasRegistered, mode } = useSession();
   const navigate = useNavigate();
 
@@ -41,12 +44,12 @@ export default function ModeSwitch({ className = '' }: { className?: string }) {
             aria-label={`${label} mode`}
             title={selected ? `You are in ${label} mode` : `Switch to ${label} mode`}
             onClick={() => !selected && navigate(homeFor(option))}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/40 sm:px-3 ${
-              selected ? `${active} shadow-sm` : 'text-ink-500 hover:bg-card hover:text-ink-900'
-            }`}
+            className={`flex items-center gap-1.5 rounded-full py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/40 sm:px-3 ${
+              labels ? 'px-3' : 'px-2.5'
+            } ${selected ? `${active} shadow-sm` : 'text-ink-500 hover:bg-card hover:text-ink-900'}`}
           >
             <Icon size={14} strokeWidth={2.2} />
-            <span className="hidden sm:inline">{label}</span>
+            <span className={labels ? '' : 'hidden sm:inline'}>{label}</span>
           </button>
         );
       })}

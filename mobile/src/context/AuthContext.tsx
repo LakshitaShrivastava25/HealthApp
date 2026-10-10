@@ -3,9 +3,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   authApi,
   doctorApi,
+  endStoredSession,
   profilesApi,
   setActingAs,
   setSessionExpiredHandler,
+  startSession,
   unwrap,
   type Mode,
 } from '../lib/api';
@@ -13,14 +15,7 @@ import { IS_PRODUCTION, setApiBaseUrl } from '../lib/config';
 import { preferredMode, rememberMode, rememberActiveProfile, rememberedActiveProfile } from '../lib/mode';
 import { clearLocalNotifications, unregisterForPush } from '../lib/notifications';
 import { clearSessionCache, readSessionCache, writeSessionCache } from '../lib/sessionCache';
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  getStoredApiBaseUrl,
-  setTokens,
-  storeApiBaseUrl,
-} from '../lib/tokens';
+import { getAccessToken, getRefreshToken, getStoredApiBaseUrl, storeApiBaseUrl } from '../lib/tokens';
 
 export type Role = 'patient' | 'doctor' | 'admin' | 'ocr_reviewer' | 'claims_ops';
 
@@ -260,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // waits on a slow network.
     const refresh = await getRefreshToken();
     if (refresh) void authApi.logout(refresh).catch(() => undefined);
-    await clearTokens();
+    await endStoredSession();
     accountRef.current = null;
     doctorRef.current = null;
     setAccount(null);
@@ -337,7 +332,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           break;
         } catch (err) {
           if (isAuthRejection(err)) {
-            await clearTokens();
+            await endStoredSession();
             break;
           }
           if (attempt < 3) await wait(3000 * (attempt + 1));
@@ -357,7 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyOtp = useCallback(
     async (phone: string, otp: string) => {
       const { data } = await authApi.verifyOtp(phone, otp);
-      await setTokens(data.access, data.refresh);
+      await startSession(data.access, data.refresh);
       // A fresh sign-in picks its mode afresh (the last one this account
       // used on this phone, else User mode).
       modeChosen.current = false;

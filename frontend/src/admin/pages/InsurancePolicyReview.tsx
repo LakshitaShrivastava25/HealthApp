@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ShieldCheck, Check, Eye } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import { adminApi } from '../lib/api';
 import FileViewer from '@shared/components/FileViewer';
+import { useRevealWhenStacked } from '@shared/hooks/useRevealWhenStacked';
 
 type Policy = {
   id: string;
@@ -22,6 +23,8 @@ export default function InsurancePolicyReview() {
   const [insurer, setInsurer] = useState('');
   const [policyNumber, setPolicyNumber] = useState('');
   const [saving, setSaving] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useRevealWhenStacked(panelRef, openId);
 
   function load() {
     adminApi.policies('needs_review').then((r) => setPolicies(r.data.results ?? r.data));
@@ -63,8 +66,8 @@ export default function InsurancePolicyReview() {
               {policies.map((p) => (
                 <button key={p.id} onClick={() => openPolicy(p)} className="w-full text-left">
                   <Card interactive className={`p-4 hover:border-accent transition-colors ${openId === p.id ? 'border-accent' : ''}`}>
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 [overflow-wrap:anywhere]">
                         <p className="text-sm font-semibold text-ink-900">{p.insurer || 'Unnamed insurer'}</p>
                         <p className="text-xs text-ink-500">{p.policy_number || 'No policy number extracted'}</p>
                       </div>
@@ -76,32 +79,34 @@ export default function InsurancePolicyReview() {
             </div>
 
             {open && (
-              <Card className="p-5 h-fit sticky top-24">
-                <p className="text-sm font-semibold text-ink-900 mb-3">Confirm extracted fields</p>
-                {open.file && (
-                  <button onClick={() => setViewing(true)} className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:underline">
-                    <Eye size={13} /> View the policy document
-                  </button>
-                )}
-                {viewing && open.file && (
-                  <FileViewer url={open.file} type={open.file_type} title={open.insurer || 'Policy document'} onClose={() => setViewing(false)} />
-                )}
-                <label className="text-xs text-ink-500 block mb-1">Insurer</label>
-                <input
-                  value={insurer}
-                  onChange={(e) => setInsurer(e.target.value)}
-                  className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none mb-3"
-                />
-                <label className="text-xs text-ink-500 block mb-1">Policy Number</label>
-                <input
-                  value={policyNumber}
-                  onChange={(e) => setPolicyNumber(e.target.value)}
-                  className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none mb-3"
-                />
-                <Button className="w-full" onClick={handleValidate} disabled={saving}>
-                  <Check size={15} /> {saving ? 'Validating...' : 'Validate Policy'}
-                </Button>
-              </Card>
+              <div ref={panelRef} className="h-fit scroll-mt-24 lg:sticky lg:top-24">
+                <Card className="p-5">
+                  <p className="text-sm font-semibold text-ink-900 mb-3">Confirm extracted fields</p>
+                  {open.file && (
+                    <button onClick={() => setViewing(true)} className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:underline">
+                      <Eye size={13} /> View the policy document
+                    </button>
+                  )}
+                  {viewing && open.file && (
+                    <FileViewer url={open.file} type={open.file_type} title={open.insurer || 'Policy document'} onClose={() => setViewing(false)} />
+                  )}
+                  <label className="text-xs text-ink-500 block mb-1">Insurer</label>
+                  <input
+                    value={insurer}
+                    onChange={(e) => setInsurer(e.target.value)}
+                    className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none mb-3"
+                  />
+                  <label className="text-xs text-ink-500 block mb-1">Policy Number</label>
+                  <input
+                    value={policyNumber}
+                    onChange={(e) => setPolicyNumber(e.target.value)}
+                    className="w-full text-sm px-3 py-2 rounded-lg border border-border outline-none mb-3"
+                  />
+                  <Button className="w-full" onClick={handleValidate} disabled={saving}>
+                    <Check size={15} /> {saving ? 'Validating...' : 'Validate Policy'}
+                  </Button>
+                </Card>
+              </div>
             )}
           </div>
         )}

@@ -49,7 +49,40 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
   onSessionExpired = handler;
 }
 
-let refreshInFlight: Promise<string | null> | null = null;
+/**
+ * Which stored session this is. Moves on at every sign-in and sign-out, so a
+ * refresh still running when the session changed hands can neither write
+ * the old tokens back nor end the new session.
+ */
+let sessionGeneration = 0;
+
+/**
+ * 'refreshed': fresh tokens are stored. 'rejected': the server refused the
+ * refresh token, so the session is over. 'superseded': nothing of this
+ * session is left to refresh — signed out, or signed in again, meanwhile.
+ */
+type RefreshOutcome = 'refreshed' | 'rejected' | 'superseded';
+
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+/** Stores a new sign-in's tokens; anything still in flight from before is ignored. */
+export async function startSession(access: string, refresh: string) {
+  sessionGeneration += 1;
+  refreshInFlight = null;
+  await setTokens(access, refresh);
+}
+
+/** Forgets the stored session: a sign-out, or a refresh token the server refused. */
+export async function endStoredSession() {
+  sessionGeneration += 1;
+  refreshInFlight = null;
+  await clearTokens();
+}
+
+// Render's free server can take most of a minute to wake. Past this the
+// refresh counts as a dropped connection — never as a refusal — instead of
+// holding every waiting request forever.
+const REFRESH_TIMEOUT_MS = 70_000;
 
 /**
  * One refresh at a time, shared by every request that got a 401 while it
@@ -60,36 +93,50 @@ let refreshInFlight: Promise<string | null> | null = null;
  * forever and the screens that made them hang on a spinner. Returning a
  * single shared promise instead means failure propagates to every waiter,
  * which is the whole point of waiting on it.
+ *
+ * Rejects when the server could not be asked or could not answer (no
+ * signal, timeout, 5xx, 429): that says nothing about the session.
  */
-async function refreshAccessToken(): Promise<string | null> {
+function refreshSession(): Promise<RefreshOutcome> {
   if (refreshInFlight) return refreshInFlight;
 
-  refreshInFlight = (async () => {
+  const generation = sessionGeneration;
+  const attempt = (async (): Promise<RefreshOutcome> => {
     const refresh = await getRefreshToken();
-    if (!refresh) return null;
+    if (generation !== sessionGeneration) return 'superseded';
+    // No refresh token: already signed out, unless an access token was left
+    // behind on its own, which can never be renewed. This outcome used to
+    // stay cached here after a sign-out, and the next sign-in was then
+    // logged out at its first refresh without the server being asked.
+    if (!refresh) return (await getAccessToken()) ? 'rejected' : 'superseded';
     try {
-      const { data } = await axios.post(`${getApiBaseUrl()}/auth/refresh/`, { refresh });
+      const { data } = await axios.post(
+        `${getApiBaseUrl()}/auth/refresh/`,
+        { refresh },
+        { timeout: REFRESH_TIMEOUT_MS }
+      );
+      if (generation !== sessionGeneration) return 'superseded';
       // The backend rotates refresh tokens; keeping the new one is what lets
       // a session slide forward instead of ending 30 days after login.
       if (data.refresh) await setTokens(data.access, data.refresh);
       else await setAccessToken(data.access);
-      return data.access as string;
+      return 'refreshed';
     } catch (err) {
+      if (generation !== sessionGeneration) return 'superseded';
       // Only a refused refresh token (400/401/403) ends the session. A
       // timeout, no network, or a 5xx/429 while the server is waking up or
       // deploying rethrows, so the caller fails this once and the person
       // stays signed in — those used to sign people out at random.
       const status = (err as AxiosError).response?.status;
-      if (status === 400 || status === 401 || status === 403) return null;
+      if (status === 400 || status === 401 || status === 403) return 'rejected';
       throw err;
-    } finally {
-      // Cleared inside the same promise so the next 401 starts a fresh
-      // attempt rather than re-awaiting this settled one.
-      refreshInFlight = null;
     }
-  })();
-
-  return refreshInFlight;
+  })().finally(() => {
+    // Only our own: a sign-in or sign-out may have replaced it already.
+    if (refreshInFlight === attempt) refreshInFlight = null;
+  });
+  refreshInFlight = attempt;
+  return attempt;
 }
 
 api.interceptors.response.use(
@@ -107,18 +154,30 @@ api.interceptors.response.use(
     }
     original._retry = true;
 
-    let access: string | null;
+    // The tokens changed while this request was out — another request's
+    // refresh got there first, or someone signed in: retry with the new
+    // ones instead of rotating the refresh token again.
+    const current = await getAccessToken();
+    if (current && original.headers?.get('Authorization') !== `Bearer ${current}`) {
+      return api(original);
+    }
+
+    const generation = sessionGeneration;
+    let outcome: RefreshOutcome;
     try {
-      access = await refreshAccessToken();
-    } catch {
-      return Promise.reject(error);
+      outcome = await refreshSession();
+    } catch (refreshError) {
+      // Fail with what actually went wrong (no signal, server waking up),
+      // not with the 401: callers such as the startup check read a 401 as
+      // "signed out" and would end a session that is still good.
+      return Promise.reject(refreshError);
     }
-    if (!access) {
-      await clearTokens();
+    if (outcome === 'refreshed') return api(original);
+    if (outcome === 'rejected' && generation === sessionGeneration) {
+      await endStoredSession();
       onSessionExpired?.();
-      return Promise.reject(error);
     }
-    return api(original);
+    return Promise.reject(error);
   }
 );
 
@@ -297,6 +356,18 @@ export type RegisterCheck = {
   name_matches: boolean | null;
   suspended: boolean;
   message: string;
+  /** On a match: what the register holds, for the form to fill in. */
+  prefill?: RegisterPrefill | null;
+  /** Not found: other councils listing the same number (usually the wrong council was picked). */
+  other_councils?: { state_council_id: string; state_council_name: string; year: number | null }[];
+};
+
+export type RegisterPrefill = {
+  full_name?: string;
+  qualification?: string;
+  registration_year?: number;
+  /** Years since registration — an estimate. */
+  experience_years?: number;
 };
 
 export const doctorApi = {

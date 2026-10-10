@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FileText, Check, Eye } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import { adminApi } from '../lib/api';
 import FileViewer from '@shared/components/FileViewer';
+import { useRevealWhenStacked } from '@shared/hooks/useRevealWhenStacked';
 
 type Doc = {
   id: string;
@@ -21,6 +22,8 @@ export default function DocumentReview() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useRevealWhenStacked(panelRef, openId);
 
   function load() {
     adminApi.documents('needs_review').then((r) => setDocs(r.data.results ?? r.data));
@@ -66,9 +69,9 @@ export default function DocumentReview() {
                   <Card interactive
                     className={`p-4 hover:border-accent transition-colors ${openId === d.id ? 'border-accent' : ''}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-ink-900">{d.title}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-ink-900 [overflow-wrap:anywhere]">{d.title}</p>
                         <Badge tone="neutral">{d.category}</Badge>
                       </div>
                       <Badge tone="warning">needs review</Badge>
@@ -79,27 +82,29 @@ export default function DocumentReview() {
             </div>
 
             {openDocData && (
-              <Card className="p-5 h-fit sticky top-24">
-                <p className="text-sm font-semibold text-ink-900 mb-1">{openDocData.title}</p>
-                <p className="text-xs text-ink-500 mb-3">Edit the extracted data, then approve.</p>
-                {openDocData.file && (
-                  <button onClick={() => setViewing(true)} className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:underline">
-                    <Eye size={13} /> View the original to compare
-                  </button>
-                )}
-                {viewing && openDocData.file && (
-                  <FileViewer url={openDocData.file} type={openDocData.file_type} title={openDocData.title} onClose={() => setViewing(false)} />
-                )}
-                <textarea
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  rows={12}
-                  className="w-full text-xs font-mono bg-surface rounded-lg p-3 outline-none border border-border focus:ring-2 focus:ring-accent/30"
-                />
-                <Button className="w-full mt-3" onClick={handleApprove} disabled={saving}>
-                  <Check size={15} /> {saving ? 'Approving...' : 'Approve & Mark Processed'}
-                </Button>
-              </Card>
+              <div ref={panelRef} className="h-fit scroll-mt-24 lg:sticky lg:top-24">
+                <Card className="p-5">
+                  <p className="text-sm font-semibold text-ink-900 mb-1 [overflow-wrap:anywhere]">{openDocData.title}</p>
+                  <p className="text-xs text-ink-500 mb-3">Edit the extracted data, then approve.</p>
+                  {openDocData.file && (
+                    <button onClick={() => setViewing(true)} className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-ink hover:underline">
+                      <Eye size={13} /> View the original to compare
+                    </button>
+                  )}
+                  {viewing && openDocData.file && (
+                    <FileViewer url={openDocData.file} type={openDocData.file_type} title={openDocData.title} onClose={() => setViewing(false)} />
+                  )}
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    rows={12}
+                    className="w-full text-xs font-mono bg-surface rounded-lg p-3 outline-none border border-border focus:ring-2 focus:ring-accent/30"
+                  />
+                  <Button className="w-full mt-3" onClick={handleApprove} disabled={saving}>
+                    <Check size={15} /> {saving ? 'Approving...' : 'Approve & Mark Processed'}
+                  </Button>
+                </Card>
+              </div>
             )}
           </div>
         )}

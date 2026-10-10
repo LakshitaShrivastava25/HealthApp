@@ -50,32 +50,32 @@ export default function Overview() {
     <>
       <Topbar title="Overview" subtitle="Platform status at a glance" />
       <main className="p-4 sm:p-6 lg:p-8 space-y-6">
-        <Card className="!bg-gradient-to-br from-brand-teal to-brand-purple !border-0 text-white p-6 flex items-center justify-between overflow-hidden relative">
-          <div className="relative z-10">
+        <Card className="!bg-gradient-to-br from-brand-teal to-brand-purple !border-0 text-white p-5 sm:p-6 flex items-center justify-between gap-4 overflow-hidden relative">
+          <div className="relative z-10 min-w-0 [overflow-wrap:anywhere]">
             <div className="flex items-center gap-2 text-sm font-medium opacity-90 mb-2">
               <Sparkles size={16} /> Welcome back{staff?.email ? `, ${staff.email}` : staff?.phone_number ? `, ${formatPhone(staff.phone_number)}` : ''}
             </div>
-            <p className="text-2xl font-bold">
+            <p className="text-xl sm:text-2xl font-bold">
               {pendingTotal === 0 ? "You're all caught up 🎉" : `${pendingTotal} item${pendingTotal === 1 ? '' : 's'} need your attention`}
             </p>
             <p className="text-sm opacity-80 mt-1">
               {pendingTotal === 0 ? 'Nothing pending across documents, policies, or doctor verification.' : 'Review queues below to keep things moving.'}
             </p>
           </div>
-          <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center shrink-0 relative z-10">
+          <div className="hidden sm:flex w-24 h-24 rounded-full bg-white/10 items-center justify-center shrink-0 relative z-10">
             <ShieldCheck size={40} className="opacity-90" />
           </div>
           <div className="absolute -right-6 -bottom-10 w-40 h-40 rounded-full bg-white/5" />
           <div className="absolute right-16 -top-8 w-24 h-24 rounded-full bg-white/5" />
         </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {tiles.map((t) => {
             const tone = tones[t.tone];
             return (
               <Card
                 key={t.label}
-                className={`p-5 cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 hover:ring-2 ${tone.ring} group`}
+                className={`p-4 sm:p-5 cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 hover:ring-2 ${tone.ring} group`}
                 onClick={() => navigate(t.href)}
               >
                 <div className="flex items-start justify-between">
@@ -84,7 +84,7 @@ export default function Overview() {
                   </div>
                   <ArrowRight size={15} className="text-ink-300 group-hover:text-ink-500 group-hover:translate-x-0.5 transition-all mt-1" />
                 </div>
-                <p className="text-3xl font-bold text-ink-900">{t.value ?? '—'}</p>
+                <p className="text-2xl sm:text-3xl font-bold text-ink-900">{t.value ?? '—'}</p>
                 <p className="text-xs text-ink-500 mt-1 font-medium">{t.label}</p>
               </Card>
             );

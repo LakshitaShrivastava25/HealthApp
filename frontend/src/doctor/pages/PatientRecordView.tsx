@@ -77,7 +77,8 @@ export default function PatientRecordView() {
         subtitle="Read-only — you're viewing this with the patient's approval"
         action={
           <Button onClick={() => setShowNoteForm((v) => !v)}>
-            {showNoteForm ? <X size={16} /> : <Plus size={16} />} {showNoteForm ? 'Cancel' : 'Add Consultation Note'}
+            {showNoteForm ? <X size={16} /> : <Plus size={16} />}{' '}
+            {showNoteForm ? 'Cancel' : <><span className="sm:hidden">Add note</span><span className="hidden sm:inline">Add Consultation Note</span></>}
           </Button>
         }
       />
@@ -142,7 +143,9 @@ export default function PatientRecordView() {
               <div className="space-y-2">
                 {documents.map((d) => (
                   <div key={d.id} className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
+                    {/* flex-1 + anywhere: a title made from a long file name
+                        has no spaces, and used to widen the page on phones. */}
+                    <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                       {/* Opens the real uploaded file, the same way the
                           patient's own Medical Locker does. Access is still
                           gated server-side by the approved grant that let
@@ -183,7 +186,7 @@ export default function PatientRecordView() {
             <div className="space-y-2">
               {medications.map((m) => (
                 <div key={m.id} className="flex items-start justify-between gap-4 border-b border-border last:border-0 pb-2 last:pb-0">
-                  <div className="min-w-0">
+                  <div className="min-w-0 [overflow-wrap:anywhere]">
                     <p className="text-sm font-medium text-ink-900">{m.name}</p>
                     <p className="text-xs text-ink-500 mt-0.5">
                       {[m.generic_name && !m.name.toLowerCase().includes(m.generic_name.toLowerCase().split(' + ')[0]) ? m.generic_name : '', m.dosage, m.frequency]
@@ -198,7 +201,7 @@ export default function PatientRecordView() {
                       </p>
                     )}
                   </div>
-                  {m.instructions && <p className="text-xs text-ink-300 shrink-0">{m.instructions}</p>}
+                  {m.instructions && <p className="max-w-[45%] text-right text-xs text-ink-300">{m.instructions}</p>}
                 </div>
               ))}
             </div>
@@ -214,12 +217,12 @@ export default function PatientRecordView() {
           ) : (
             <div className="space-y-2">
               {timeline.map((e) => (
-                <div key={e.id} className="flex items-center justify-between border-b border-border last:border-0 pb-2">
-                  <div>
+                <div key={e.id} className="flex items-center justify-between gap-3 border-b border-border last:border-0 pb-2">
+                  <div className="min-w-0 [overflow-wrap:anywhere]">
                     <p className="text-sm text-ink-900">{e.title}</p>
                     <p className="text-xs text-ink-500">{e.summary}</p>
                   </div>
-                  <p className="text-xs text-ink-300">{e.event_date}</p>
+                  <p className="shrink-0 whitespace-nowrap text-xs text-ink-300">{e.event_date}</p>
                 </div>
               ))}
             </div>

@@ -48,6 +48,10 @@ class DoctorSerializer(serializers.ModelSerializer):
     license_document_type = FileKindField(source='license_document')
     # Shown to the doctor alongside the code they picked.
     state_council_name = serializers.SerializerMethodField()
+    # The registration form's "I consent to CuraPath verifying my
+    # registration … via authorised verification partners" box. Stored as
+    # verification_consent_at; see validate() for why it isn't required=True.
+    verification_consent = serializers.BooleanField(write_only=True, required=False)
 
     class Meta:
         model = Doctor
@@ -60,9 +64,11 @@ class DoctorSerializer(serializers.ModelSerializer):
             # What the doctor is told about their review. The register's full
             # record and the match score stay with the admin.
             'rejection_reason', 'nmc_result', 'nmc_name', 'nmc_qualification',
+            'verification_consent', 'verification_consent_at',
         ]
         read_only_fields = [
             'id', 'verification_status', 'rejection_reason', 'nmc_result', 'nmc_name', 'nmc_qualification',
+            'verification_consent_at',
         ]
         # Uniqueness of (registration number, council) is checked in
         # _check_registration, after normalising, with a message a doctor can
@@ -94,10 +100,31 @@ class DoctorSerializer(serializers.ModelSerializer):
             }
             if missing:
                 raise serializers.ValidationError(missing)
+            # The consent box and the year of registration (which Decentro's
+            # check needs, and which tells apart two entries sharing a
+            # number) are required of every current form. App versions
+            # released before them send neither field; their registrations
+            # still go through — and without consent, the outside
+            # verification partners are simply never asked about them.
+            if 'verification_consent' in self.initial_data:
+                errors = {}
+                if not attrs.get('verification_consent'):
+                    errors['verification_consent'] = [
+                        'Please consent to the verification of your registration to continue.'
+                    ]
+                if not attrs.get('registration_year'):
+                    errors['registration_year'] = ['Enter the year you were registered.']
+                if errors:
+                    raise serializers.ValidationError(errors)
         # state_council_id is not in the required list: app versions released
         # before it existed don't send it, and their registrations still go to
         # the admin queue — just without an automatic register check.
         return _check_registration(attrs, self.instance)
+
+    def create(self, validated_data):
+        if validated_data.pop('verification_consent', False):
+            validated_data['verification_consent_at'] = timezone.now()
+        return super().create(validated_data)
 
     def get_state_council_name(self, obj):
         return council_name(obj.state_council_id)

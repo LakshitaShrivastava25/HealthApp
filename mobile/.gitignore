@@ -6,6 +6,12 @@ web-build/
 .DS_Store
 expo-env.d.ts
 
+# Native projects are generated from app.json by `expo prebuild` (EAS runs it
+# on every build). A committed android/ makes EAS skip that and build the stale
+# copy instead — wrong architectures, missing app.json changes.
+/android
+/ios
+
 # Firebase client config for Android push. Not a secret in itself, but it
 # carries a Google API key that GitHub's secret scanning blocks on push.
 # Builds still get it: .easignore leaves it in, or set the EAS file variable

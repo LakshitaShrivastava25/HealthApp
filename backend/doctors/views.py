@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 def _check_register(doctor):
     """
     Run the NMC register check for a doctor who just registered or changed
-    their details. One attempt only — the person is waiting on this request;
-    `manage.py reverify_doctors` retries anything that couldn't be reached.
+    their details. NMC only, one attempt — the person is waiting on this
+    request; `manage.py reverify_doctors` retries anything that couldn't be
+    reached and asks the slower outside fallbacks (Apify, Decentro).
     Never fails the request: whatever happens, the doctor is in the admin
     queue already.
     """
@@ -168,13 +169,14 @@ class DoctorViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
         """
         POST /api/doctors/verify-registration/ — the registration form's
         "Verify" button: looks the number up on the NMC register before the
-        doctor submits, and says what the register has. Informational only;
-        an admin still reviews every registration. Signed-in only (doctors
+        doctor submits, and says what the register has — on a match, with a
+        `prefill` the form fills its fields from. Informational only; an
+        admin still reviews every registration. Signed-in only (doctors
         register from their own account) and throttled, so it can't be used
         as a free register scraper.
         """
         from .services.verification import (
-            AMBIGUOUS, FOUND, NOT_FOUND, compute_name_match, verify_registration,
+            AMBIGUOUS, FOUND, NOT_FOUND, compute_name_match, form_prefill, other_councils_text, verify_registration,
         )
 
         params = VerifyRegistrationSerializer(data=request.data)
@@ -193,6 +195,7 @@ class DoctorViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
             'name_match_score': None,
             'name_matches': None,
             'suspended': result.status == FOUND and result.is_suspended,
+            'prefill': form_prefill(result) or None,
         }
         if result.status == FOUND:
             if data.get('full_name'):
@@ -205,12 +208,26 @@ class DoctorViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
                 'Found on the NMC register. An admin will confirm your registration after you submit.'
             )
         elif result.status == NOT_FOUND:
+            elsewhere = other_councils_text(result)
+            body['other_councils'] = [
+                {'state_council_id': c['council'], 'state_council_name': c['council_name'], 'year': c.get('year')}
+                for c in result.other_councils
+            ]
             body['message'] = (
                 f'No registration {data["registration_number"].strip()} found in {council_name(council)} '
-                'on the NMC register. Check the number and council — you can still submit, and an admin will review it.'
+                'on the NMC register. '
+                + (f'The same number is listed under {elsewhere} — check you picked the right council. '
+                   if elsewhere else 'Check the number and council — ')
+                + ('You can still submit, and an admin will review it.' if elsewhere else
+                   'you can still submit, and an admin will review it.')
             )
         elif result.status == AMBIGUOUS:
-            body['message'] = 'Several register entries match this number. An admin will confirm which is yours.'
+            body['message'] = (
+                'Several register entries match this number. Enter your year of registration to pick yours — '
+                'an admin will confirm it either way.'
+                if not data.get('registration_year') else
+                'Several register entries match this number. An admin will confirm which is yours.'
+            )
         else:
             body['message'] = (
                 "We couldn't reach the medical register right now — your registration will be verified shortly."

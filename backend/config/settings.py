@@ -312,8 +312,24 @@ NMC_TIMEOUT = float(os.getenv('NMC_TIMEOUT', '20'))
 # Optional extra CA bundle (.pem) if NMC's TLS chain ever omits its
 # intermediate certificate. Never disable certificate checks instead.
 NMC_CA_BUNDLE = os.getenv('NMC_CA_BUNDLE', '')
+# Pages of 100 rows read for one number before concluding "not found" (a
+# short number's exact match can sit behind its substring matches).
+NMC_MAX_PAGES = int(os.getenv('NMC_MAX_PAGES', '3'))
 # Name similarity (0-1) the admin queue shows as a match.
 DOCTOR_NAME_MATCH_THRESHOLD = float(os.getenv('DOCTOR_NAME_MATCH_THRESHOLD', '0.85'))
-# Optional paid fallback, tried only when NMC is unreachable. Off unless both are set.
-DOCTOR_VERIFY_VENDOR_URL = os.getenv('DOCTOR_VERIFY_VENDOR_URL', '')
-DOCTOR_VERIFY_VENDOR_TOKEN = os.getenv('DOCTOR_VERIFY_VENDOR_TOKEN', '')
+# Order the providers are tried in. Unconfigured ones are skipped, so the
+# fallbacks stay off until their credentials are set.
+DOCTOR_VERIFY_PROVIDERS = [
+    name.strip().lower()
+    for name in os.getenv('DOCTOR_VERIFY_PROVIDERS', 'nmc,apify,decentro').split(',')
+    if name.strip()
+]
+# Apify "NMC Doctor Lookup" actor — off unless the token is set.
+APIFY_TOKEN = os.getenv('APIFY_TOKEN', '')
+APIFY_TIMEOUT = float(os.getenv('APIFY_TIMEOUT', '90'))
+# Decentro NMC verification — off unless both credentials are set. Staging
+# until production access is granted: https://in.decentro.tech
+DECENTRO_BASE_URL = os.getenv('DECENTRO_BASE_URL', 'https://in.staging.decentro.tech')
+DECENTRO_CLIENT_ID = os.getenv('DECENTRO_CLIENT_ID', '')
+DECENTRO_CLIENT_SECRET = os.getenv('DECENTRO_CLIENT_SECRET', '')
+DECENTRO_TIMEOUT = float(os.getenv('DECENTRO_TIMEOUT', '30'))

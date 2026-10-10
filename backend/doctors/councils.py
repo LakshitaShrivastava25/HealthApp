@@ -43,6 +43,19 @@ COUNCILS = [
 
 COUNCIL_NAMES = dict(COUNCILS)
 
+# The register's own spelling, where it differs from ours. Outside
+# verification providers (Apify, Decentro) take the council as free text and
+# match it against the register, so they are sent the register's version.
+REGISTER_SPELLINGS = {
+    'CHA': 'Chattisgarh Medical Council',
+    'HIM': 'Himanchal Pradesh Medical Council',
+}
+
 
 def council_name(code):
     return COUNCIL_NAMES.get(code or '', code or '')
+
+
+def register_council_name(code):
+    """The council's name exactly as the NMC register writes it."""
+    return REGISTER_SPELLINGS.get(code or '') or council_name(code)

@@ -55,10 +55,25 @@ type AdminDoctor = {
   name_matches: boolean | null;
   verification_provider: string;
   last_verification_error: string;
+  provider_attempts?: ProviderAttempt[];
+  verification_consent_at?: string | null;
   verified_at: string | null;
   verified_by_phone: string | null;
   rejection_reason: string;
   imr_url: string;
+};
+
+/** One provider asked in the latest check (backend: Doctor.provider_attempts). */
+type ProviderAttempt = { provider: string; result: string; ms?: number; error?: string; reason?: string };
+
+const PROVIDER_LABEL: Record<string, string> = { nmc: 'NMC register', apify: 'Apify', decentro: 'Decentro' };
+const ATTEMPT_LABEL: Record<string, [string, string]> = {
+  found: ['found', colors.success],
+  suspended: ['found — listed as removed', colors.danger],
+  not_found: ['not found', colors.warning],
+  ambiguous: ['several entries', colors.warning],
+  unavailable: ['unreachable', colors.ink500],
+  skipped: ['skipped', colors.ink300],
 };
 
 // 'review' is pending + under review + register unreachable — everything
@@ -381,8 +396,32 @@ function RegisterEvidence({ d }: { d: AdminDoctor }) {
       {!!d.nmc_checked_at && (
         <Text style={[type.micro, { marginTop: spacing.sm }]}>
           Checked {when(d.nmc_checked_at)}
-          {d.verification_provider && d.verification_provider !== 'nmc' ? ` via ${d.verification_provider}` : ''}
+          {d.verification_provider && d.verification_provider !== 'nmc'
+            ? ` via ${PROVIDER_LABEL[d.verification_provider] ?? d.verification_provider}`
+            : ''}
         </Text>
+      )}
+
+      {!!d.provider_attempts?.length && (
+        <View style={{ marginTop: spacing.sm }}>
+          <Text style={type.micro}>SOURCES CHECKED</Text>
+          {d.provider_attempts.map((a, i) => {
+            const [label, color] = ATTEMPT_LABEL[a.result] ?? [a.result, colors.ink500];
+            const note = a.reason || a.error;
+            return (
+              <Text key={i} style={[type.caption, { marginTop: 2 }]}>
+                {PROVIDER_LABEL[a.provider] ?? a.provider}: <Text style={{ fontWeight: '600', color }}>{label}</Text>
+                {a.ms != null ? ` · ${(a.ms / 1000).toFixed(1)} s` : ''}
+                {note ? <Text style={{ color: colors.ink300 }}> — {note}</Text> : null}
+              </Text>
+            );
+          })}
+          <Text style={[type.micro, { marginTop: 2 }]}>
+            {d.verification_consent_at
+              ? 'Consented to outside verification partners.'
+              : 'No consent to outside verification partners — only the NMC register is asked.'}
+          </Text>
+        </View>
       )}
 
       {!!d.nmc_payload && (

@@ -28,7 +28,10 @@ export const doctorApi = {
     clinic_name: string;
     registration_number: string;
     state_council_id: string;
-    registration_year?: string;
+    registration_year: string;
+    /** The "I consent to CuraPath verifying my registration…" box. Required
+     *  by the backend from every form that sends it. */
+    verification_consent: boolean;
     clinic_address: string;
     booking_phone_number: string;
     consultation_fee?: string;
@@ -42,7 +45,8 @@ export const doctorApi = {
     form.append('clinic_name', data.clinic_name);
     form.append('registration_number', data.registration_number);
     form.append('state_council_id', data.state_council_id);
-    if (data.registration_year) form.append('registration_year', data.registration_year);
+    form.append('registration_year', data.registration_year);
+    form.append('verification_consent', String(data.verification_consent));
     form.append('clinic_address', data.clinic_address);
     form.append('booking_phone_number', data.booking_phone_number);
     if (data.consultation_fee) form.append('consultation_fee', data.consultation_fee);
@@ -68,6 +72,18 @@ export type RegisterCheck = {
   name_matches: boolean | null;
   suspended: boolean;
   message: string;
+  /** On a match: what the register holds, for the form to fill in. */
+  prefill?: RegisterPrefill | null;
+  /** Not found: other councils listing the same number (usually the wrong council was picked). */
+  other_councils?: { state_council_id: string; state_council_name: string; year: number | null }[];
+};
+
+export type RegisterPrefill = {
+  full_name?: string;
+  qualification?: string;
+  registration_year?: number;
+  /** Years since registration — an estimate. */
+  experience_years?: number;
 };
 
 export const profileApi = {

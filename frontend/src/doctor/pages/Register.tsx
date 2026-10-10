@@ -31,9 +31,9 @@ import {
 import { DEFAULT_COUNTRY, type Country } from '@shared/data/countries';
 import BookingPhoneField from '../components/BookingPhoneField';
 import CouncilField from '../components/CouncilField';
-import RegisterCheck from '../components/RegisterCheck';
+import RegisterCheck, { type RegisterFill } from '../components/RegisterCheck';
 import { useAuth } from '../context/AuthContext';
-import { doctorApi } from '../lib/api';
+import { doctorApi, type RegisterPrefill } from '../lib/api';
 
 /**
  * A labelled <textarea> matching shared/auth's Field treatment.
@@ -106,8 +106,43 @@ export default function Register() {
   const [bookingDigits, setBookingDigits] = useState('');
   const [consultationFee, setConsultationFee] = useState('');
   const [licenseDocument, setLicenseDocument] = useState<File | null>(null);
+  const [consent, setConsent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** A register match fills in what the register holds; every field stays
+   *  editable, and Undo puts back what was there before. */
+  function fillFromRegister(fill: RegisterPrefill): RegisterFill {
+    const before = { fullName, qualification, experienceYears, registrationYear };
+    const filled: string[] = [];
+    if (fill.full_name && fill.full_name !== fullName) {
+      setFullName(fill.full_name);
+      filled.push('name');
+    }
+    if (fill.qualification && fill.qualification !== qualification) {
+      setQualification(fill.qualification);
+      filled.push('qualification');
+    }
+    if (fill.registration_year && String(fill.registration_year) !== registrationYear) {
+      setRegistrationYear(String(fill.registration_year));
+      filled.push('year of registration');
+    }
+    // Years since registration is only an estimate: it fills a blank, never
+    // replaces a number the doctor typed.
+    if (fill.experience_years != null && !experienceYears.trim()) {
+      setExperienceYears(String(fill.experience_years));
+      filled.push('years of experience');
+    }
+    return {
+      filled,
+      undo: () => {
+        setFullName(before.fullName);
+        setQualification(before.qualification);
+        setExperienceYears(before.experienceYears);
+        setRegistrationYear(before.registrationYear);
+      },
+    };
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     // The browser has already enforced every `required` field by the time
@@ -137,6 +172,7 @@ export default function Register() {
         registration_number: registrationNumber,
         state_council_id: councilId,
         registration_year: registrationYear,
+        verification_consent: consent,
         clinic_address: clinicAddress,
         booking_phone_number: `${bookingCountry.dialCode}${bookingDigits}`,
         consultation_fee: consultationFee,
@@ -205,6 +241,37 @@ export default function Register() {
 
         <form onSubmit={handleSubmit} noValidate={false}>
         <div className="space-y-3.5">
+          {/* Registration first: a register match fills in the name and
+              qualifications below it. */}
+          <Field
+            label="Registration / license number"
+            icon={<BadgeCheck size={15} />}
+            value={registrationNumber}
+            onChange={(e) => setRegistrationNumber(e.target.value)}
+            placeholder="e.g. 2001123450"
+            hint="Exactly as it appears on your council registration certificate."
+            required
+          />
+          <CouncilField value={councilId} onChange={setCouncilId} required />
+          <Field
+            label="Year of registration"
+            icon={<CalendarClock size={15} />}
+            value={registrationYear}
+            onChange={(e) => setRegistrationYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            inputMode="numeric"
+            placeholder="e.g. 2015"
+            hint="The year on your council registration certificate."
+            pattern="(19|20)\d{2}"
+            title="A four-digit year, e.g. 2015"
+            required
+          />
+          <RegisterCheck
+            registrationNumber={registrationNumber}
+            councilId={councilId}
+            year={registrationYear}
+            fullName={fullName}
+            onFill={fillFromRegister}
+          />
           <Field
             label="Full name"
             icon={<User size={15} />}
@@ -247,30 +314,6 @@ export default function Register() {
             placeholder="Apollo Clinic"
             required
           />
-          <Field
-            label="Registration / license number"
-            icon={<BadgeCheck size={15} />}
-            value={registrationNumber}
-            onChange={(e) => setRegistrationNumber(e.target.value)}
-            placeholder="e.g. 2001123450"
-            hint="Exactly as it appears on your council registration certificate."
-            required
-          />
-          <CouncilField value={councilId} onChange={setCouncilId} required />
-          <Field
-            label="Year of registration (optional)"
-            icon={<CalendarClock size={15} />}
-            value={registrationYear}
-            onChange={(e) => setRegistrationYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            inputMode="numeric"
-            placeholder="e.g. 2015"
-          />
-          <RegisterCheck
-            registrationNumber={registrationNumber}
-            councilId={councilId}
-            year={registrationYear}
-            fullName={fullName}
-          />
           <TextAreaField
             label="Clinic address"
             icon={<MapPin size={15} />}
@@ -311,6 +354,20 @@ export default function Register() {
             }
           />
         </div>
+
+        <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-white/60 p-3 text-[12.5px] leading-snug text-ink-700">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            required
+            className="mt-0.5 h-4 w-4 shrink-0 accent-brand-purple"
+          />
+          <span>
+            I consent to CuraPath verifying my registration with the National Medical Commission
+            register via authorised verification partners.
+          </span>
+        </label>
 
         <FormError message={error} />
 

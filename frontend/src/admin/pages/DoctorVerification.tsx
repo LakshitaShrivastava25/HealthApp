@@ -45,11 +45,56 @@ type Doctor = {
   name_matches: boolean | null;
   verification_provider: string;
   last_verification_error: string;
+  provider_attempts?: ProviderAttempt[];
+  verification_consent_at?: string | null;
   verified_at: string | null;
   verified_by_phone: string | null;
   rejection_reason: string;
   imr_url: string;
 };
+
+/** One provider asked in the latest check (backend: Doctor.provider_attempts). */
+type ProviderAttempt = { provider: string; result: string; ms?: number; error?: string; reason?: string };
+
+const PROVIDER_LABEL: Record<string, string> = { nmc: 'NMC register', apify: 'Apify', decentro: 'Decentro' };
+const ATTEMPT_LABEL: Record<string, [string, string]> = {
+  found: ['found', 'text-success'],
+  suspended: ['found — listed as removed', 'text-danger'],
+  not_found: ['not found', 'text-warning'],
+  ambiguous: ['several entries', 'text-warning'],
+  unavailable: ['unreachable', 'text-ink-500'],
+  skipped: ['skipped', 'text-ink-300'],
+};
+
+/** Every source the latest check asked, in order, with what each said. */
+function SourcesChecked({ d }: { d: Doctor }) {
+  const attempts = d.provider_attempts ?? [];
+  if (!attempts.length) return null;
+  return (
+    <div className="mt-2">
+      <p className="text-[10.5px] uppercase tracking-wide text-ink-300">Sources checked</p>
+      <ul className="mt-0.5 space-y-0.5 text-[11px]">
+        {attempts.map((a, i) => {
+          const [label, tone] = ATTEMPT_LABEL[a.result] ?? [a.result, 'text-ink-500'];
+          const note = a.reason || a.error;
+          return (
+            <li key={i} className="flex flex-wrap gap-x-1.5">
+              <span className="text-ink-500">{PROVIDER_LABEL[a.provider] ?? a.provider}:</span>
+              <span className={`font-medium ${tone}`}>{label}</span>
+              {a.ms != null && <span className="text-ink-300">· {(a.ms / 1000).toFixed(1)} s</span>}
+              {note && <span className="min-w-0 break-words text-ink-300">— {note}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-1 text-[10.5px] text-ink-300">
+        {d.verification_consent_at
+          ? 'Consented to outside verification partners.'
+          : 'No consent to outside verification partners — only the NMC register is asked.'}
+      </p>
+    </div>
+  );
+}
 
 /** One labelled value in the details grid. Em dash when nothing was given,
  *  so a blank field reads as "not provided" rather than looking broken. */
@@ -144,9 +189,13 @@ function RegisterEvidence({ d }: { d: Doctor }) {
       {d.nmc_checked_at && (
         <p className="mt-2 text-[10.5px] text-ink-300">
           Checked {when(d.nmc_checked_at)}
-          {d.verification_provider && d.verification_provider !== 'nmc' ? ` via ${d.verification_provider}` : ''}
+          {d.verification_provider && d.verification_provider !== 'nmc'
+            ? ` via ${PROVIDER_LABEL[d.verification_provider] ?? d.verification_provider}`
+            : ''}
         </p>
       )}
+
+      <SourcesChecked d={d} />
 
       {d.nmc_payload && (
         <details className="mt-2">

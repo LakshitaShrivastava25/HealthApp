@@ -36,7 +36,7 @@ export default function Topbar({ title, subtitle, action }: { title: string; sub
           <div className="flex items-center gap-2.5 pl-3 border-l border-border">
             <Avatar initials={initials} size={34} />
             <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-ink-900 leading-tight">{staff.email || staff.phone_number}</p>
+              <p className="max-w-[14rem] truncate text-sm font-semibold text-ink-900 leading-tight">{staff.email || staff.phone_number}</p>
               <span
                 className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold capitalize ${
                   roleTone[staff.role] || 'bg-surface text-ink-500'

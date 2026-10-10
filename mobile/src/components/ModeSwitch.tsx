@@ -1,58 +1,100 @@
-import { Feather } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import type { Href } from 'expo-router';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { useAuth, type Mode } from '../context/AuthContext';
 import { DOCTOR_STATUS_LABEL, DOCTOR_STATUS_TONE } from '../lib/councils';
+import { resetTo } from '../lib/navigation';
 import { colors, radius, spacing, type } from '../theme';
 import { Badge, Card, Row } from './ui';
-import { resetTo } from '../lib/navigation';
 
-const MODES: Record<Mode, { label: string; icon: keyof typeof Feather.glyphMap; color: string; bg: string }> = {
-  patient: { label: 'User', icon: 'user', color: colors.brandPurple, bg: colors.brandLavender },
-  doctor: { label: 'Doctor', icon: 'briefcase', color: colors.brandTeal, bg: '#E0F7F7' },
+/** The same look as the website's switch (frontend/src/shared/session/ModeSwitch.tsx). */
+export const MODE_STYLE: Record<
+  Mode,
+  { label: string; icon: 'account' | 'stethoscope'; color: string; soft: string; note: string }
+> = {
+  patient: {
+    label: 'User',
+    icon: 'account',
+    color: colors.brandPurple,
+    soft: colors.brandLavender,
+    note: "Your own and your family's records",
+  },
+  doctor: {
+    label: 'Doctor',
+    icon: 'stethoscope',
+    color: colors.brandTeal,
+    soft: '#E0F7F7',
+    note: 'Your patients, access requests and records',
+  },
 };
 
+const ORDER: Mode[] = ['patient', 'doctor'];
+
 /**
- * The User / Doctor switch. Renders nothing until the account has registered
- * as a doctor — the "Register as a doctor" entry on More is the way in.
+ * Switching User / Doctor mode. Renders nothing until the account has
+ * registered as a doctor — "Register as a doctor" on More is the way in.
  *
- * Switching goes back through the index route, which opens the right place
- * for the new mode: the doctor tabs, or the pending screen while an admin is
- * still verifying the registration. The website has the same control
- * (frontend/src/shared/session/ModeSwitch.tsx).
+ * The switch goes through app/switch-mode.tsx: the current area is left
+ * first, while the mode is still unchanged, and the mode flips there. Flipping
+ * it in place made the open area's guard redirect at the same moment the
+ * switch navigated — a loop that closed the app.
  */
 export function useModeSwitch() {
-  const { mode, switchMode, hasRegistered } = useAuth();
+  const { mode, hasRegistered } = useAuth();
   const target: Mode = mode === 'doctor' ? 'patient' : 'doctor';
   return {
     available: hasRegistered,
+    mode,
     target,
     switchTo: (next: Mode = target) => {
-      switchMode(next);
-      // The whole previous area goes, not just its top screen, so Back can't
-      // land on a stale copy of it.
-      resetTo('/');
+      if (next === mode) return;
+      resetTo({ pathname: '/switch-mode', params: { to: next } } as unknown as Href);
     },
   };
 }
 
-/** Compact header pill: shows the mode a tap switches TO. */
-export function ModeSwitchPill() {
-  const { available, target, switchTo } = useModeSwitch();
+/**
+ * The header control: "User | Doctor", the current mode filled in. Icons
+ * only on narrow screens (as the website does on phones), with labels when
+ * there is room or `labels` is set.
+ */
+export function ModeToggle({ labels }: { labels?: boolean }) {
+  const { available, mode, switchTo } = useModeSwitch();
+  const { width } = useWindowDimensions();
   if (!available) return null;
-  const m = MODES[target];
+  const showLabels = labels ?? width >= 480;
+
   return (
-    <Pressable
-      onPress={() => switchTo()}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={`Switch to ${m.label} mode`}
-      style={({ pressed }) => [styles.pill, { backgroundColor: m.bg }, pressed && { opacity: 0.7 }]}
-    >
-      <Feather name="repeat" size={12} color={m.color} />
-      <Feather name={m.icon} size={14} color={m.color} />
-      <Text style={[styles.pillText, { color: m.color }]}>{m.label}</Text>
-    </Pressable>
+    <View style={styles.toggle} accessibilityRole="radiogroup" accessibilityLabel="Switch between User and Doctor mode">
+      {ORDER.map((option) => {
+        const selected = option === mode;
+        const s = MODE_STYLE[option];
+        return (
+          <Pressable
+            key={option}
+            onPress={() => switchTo(option)}
+            disabled={selected}
+            hitSlop={6}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: selected }}
+            accessibilityLabel={`${s.label} mode`}
+            accessibilityHint={selected ? undefined : `Switch to ${s.label} mode`}
+            style={({ pressed }) => [
+              styles.segment,
+              !showLabels && styles.segmentIconOnly,
+              selected && [styles.segmentSelected, { backgroundColor: s.color }],
+              pressed && !selected && { backgroundColor: colors.card },
+            ]}
+          >
+            <MaterialCommunityIcons name={s.icon} size={15} color={selected ? colors.white : colors.ink500} />
+            {showLabels && (
+              <Text style={[styles.segmentText, { color: selected ? colors.white : colors.ink500 }]}>{s.label}</Text>
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -61,22 +103,18 @@ export function ModeSwitchCard() {
   const { doctor } = useAuth();
   const { available, target, switchTo } = useModeSwitch();
   if (!available) return null;
-  const m = MODES[target];
+  const m = MODE_STYLE[target];
   const status = doctor?.verification_status;
   return (
     <Card onPress={() => switchTo()}>
       <Row>
-        <View style={[styles.icon, { backgroundColor: m.bg }]}>
-          <Feather name={m.icon} size={17} color={m.color} />
+        <View style={[styles.icon, { backgroundColor: m.soft }]}>
+          <MaterialCommunityIcons name={m.icon} size={19} color={m.color} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={type.label}>Switch to {m.label.toLowerCase()} mode</Text>
           <Text style={type.micro}>
-            {target === 'doctor'
-              ? status === 'verified'
-                ? 'Your patients, access requests and records'
-                : 'See where your registration is'
-              : "Your own and your family's records"}
+            {target === 'doctor' && status !== 'verified' ? 'See where your registration is' : m.note}
           </Text>
         </View>
         {target === 'doctor' && status && status !== 'verified' && (
@@ -89,15 +127,33 @@ export function ModeSwitchCard() {
 }
 
 const styles = StyleSheet.create({
-  pill: {
+  toggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
+    padding: 2,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  pillText: { fontSize: 12, fontWeight: '700' },
+  segment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
+  segmentIconOnly: { paddingHorizontal: 9 },
+  segmentSelected: {
+    shadowColor: '#101828',
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  segmentText: { fontSize: 12, fontWeight: '700' },
   icon: {
     width: 38,
     height: 38,

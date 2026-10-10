@@ -59,7 +59,7 @@ export default function Topbar({
   subtitle?: string;
   action?: ReactNode;
 }) {
-  const { profiles, activeProfile, setActiveProfile, refreshProfiles } = useAuth();
+  const { profiles, activeProfile, setActiveProfile, refreshProfiles, hasRegistered } = useAuth();
   const navigate = useNavigate();
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -88,7 +88,7 @@ export default function Topbar({
 
   return (
     <>
-      <header className="relative sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between gap-2">
+      <header className="relative sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-3 lg:flex-nowrap lg:gap-x-4">
         {/* Header-variant ambient art: 3 small icons, far right, so it
             never sits under the page title itself.
 
@@ -100,7 +100,7 @@ export default function Topbar({
             as "clicking does nothing". Anything absolutely positioned from
             this header must be free to extend past it. */}
         <AmbientBackground variant="header" />
-        <div className="relative flex min-w-0 items-center gap-2">
+        <div className="relative flex min-w-0 flex-1 items-center gap-2">
           <MobileMenuButton />
           <div className="min-w-0">
             <h1 className="truncate text-base sm:text-lg lg:text-xl font-bold text-ink-900">{title}</h1>
@@ -108,12 +108,24 @@ export default function Topbar({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-          {action}
+        {/* Below `lg` (phones, tablets — wherever the menu is a drawer): a
+            second row for the User / Doctor switch and the page's own button.
+            On one row they left the title a few letters ("M…", "We…"). From
+            `lg` up this row joins the first. The doctor header
+            (doctor/components/Topbar.tsx) does the same, so the switch sits
+            in the same place in both modes. */}
+        {(action || hasRegistered) && (
+          <div className="relative order-last flex w-full flex-wrap items-center gap-2 lg:order-none lg:w-auto">
+            <ModeSwitch labels className="lg:hidden" />
+            {action && <div className="ml-auto flex items-center gap-2">{action}</div>}
+          </div>
+        )}
 
+        <div className="relative flex shrink-0 items-center gap-1 sm:gap-2 lg:gap-4">
           {/* User / Doctor switch — only once this account has registered
-              as a doctor; renders nothing before that. */}
-          <ModeSwitch />
+              as a doctor; renders nothing before that. Below `lg` it is the
+              labelled one in the second row. */}
+          <ModeSwitch className="hidden lg:inline-flex" />
 
           {/* The real bell, on every screen. It used to be the Dashboard's
               alone, passed in through `action`, while this header rendered a
@@ -156,14 +168,16 @@ export default function Topbar({
           <div className="relative" ref={switcherRef}>
             <button
               onClick={() => setSwitcherOpen((v) => !v)}
-              className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-full hover:bg-surface transition-colors"
+              aria-label={`Switch profile — viewing ${activeProfile?.full_name ?? '…'}`}
+              aria-expanded={switcherOpen}
+              className="flex items-center gap-2.5 p-1 sm:pr-2 rounded-full hover:bg-surface transition-colors"
             >
               <Avatar initials={activeProfile?.initials || '?'} />
-              <div className="text-left hidden sm:block">
-                <p className="text-sm font-semibold text-ink-900 leading-tight">{activeProfile?.full_name || 'Loading...'}</p>
+              <div className="text-left hidden xl:block">
+                <p className="max-w-[12rem] truncate text-sm font-semibold text-ink-900 leading-tight">{activeProfile?.full_name || 'Loading...'}</p>
                 <p className="text-xs text-ink-500 leading-tight capitalize">{activeProfile?.relation}</p>
               </div>
-              <ChevronDown size={16} className="text-ink-500" />
+              <ChevronDown size={16} className="hidden sm:block text-ink-500" />
             </button>
 
             {switcherOpen && (

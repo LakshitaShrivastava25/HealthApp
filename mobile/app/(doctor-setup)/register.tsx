@@ -1,13 +1,13 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import CouncilPicker from '../../src/components/CouncilPicker';
-import RegisterCheck from '../../src/components/RegisterCheck';
+import RegisterCheck, { type RegisterFill } from '../../src/components/RegisterCheck';
 import { Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
-import { doctorApi, type UploadFile } from '../../src/lib/api';
+import { doctorApi, type RegisterPrefill, type UploadFile } from '../../src/lib/api';
 import { pickDocument, pickFromCamera } from '../../src/lib/pickFile';
 import { colors, radius, spacing, type } from '../../src/theme';
 import { useConfirmExit } from '../../src/lib/useBackHandler';
@@ -30,7 +30,7 @@ type FieldErrors = Record<string, string[]>;
  */
 export default function DoctorRegister() {
   useConfirmExit();
-  const { doctor, refreshDoctor, account, switchMode } = useAuth();
+  const { doctor, refreshDoctor, account } = useAuth();
   const router = useRouter();
   // Decided once, on open: the record appears mid-submit when registering,
   // and the form must not flip to "edit" under the person's thumb.
@@ -50,10 +50,45 @@ export default function DoctorRegister() {
   const [bookingPhone, setBookingPhone] = useState(doctor?.booking_phone_number ?? '');
   const [fee, setFee] = useState(doctor?.consultation_fee ?? '');
   const [license, setLicense] = useState<UploadFile | null>(null);
+  const [consent, setConsent] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  /** A register match fills in what the register holds; every field stays
+   *  editable, and Undo puts back what was there before. */
+  function fillFromRegister(fill: RegisterPrefill): RegisterFill {
+    const before = { fullName, qualification, experience, registrationYear };
+    const filled: string[] = [];
+    if (fill.full_name && fill.full_name !== fullName) {
+      setFullName(fill.full_name);
+      filled.push('name');
+    }
+    if (fill.qualification && fill.qualification !== qualification) {
+      setQualification(fill.qualification);
+      filled.push('qualification');
+    }
+    if (fill.registration_year && String(fill.registration_year) !== registrationYear) {
+      setRegistrationYear(String(fill.registration_year));
+      filled.push('year of registration');
+    }
+    // Years since registration is only an estimate: it fills a blank, never
+    // replaces a number the doctor typed.
+    if (fill.experience_years != null && !experience.trim()) {
+      setExperience(String(fill.experience_years));
+      filled.push('years of experience');
+    }
+    return {
+      filled,
+      undo: () => {
+        setFullName(before.fullName);
+        setQualification(before.qualification);
+        setExperience(before.experience);
+        setRegistrationYear(before.registrationYear);
+      },
+    };
+  }
 
   async function attachLicense(pick: () => Promise<UploadFile | null>) {
     try {
@@ -78,6 +113,8 @@ export default function DoctorRegister() {
       form.append('registration_number', registrationNumber.trim());
       form.append('state_council_id', councilId);
       if (registrationYear) form.append('registration_year', registrationYear);
+      // Asked once, at registration; the backend requires it from any form that sends it.
+      if (!editing) form.append('verification_consent', String(consent));
       form.append('clinic_address', clinicAddress.trim());
       form.append('booking_phone_number', bookingPhone.trim());
       // Optional fields are omitted rather than sent blank: an empty string
@@ -96,10 +133,9 @@ export default function DoctorRegister() {
       await refreshDoctor();
       // Straight into Doctor mode: the index route opens the pending screen
       // until an admin verifies the registration.
-      switchMode('doctor');
-      // resetTo, not replace: the patient screens this form was pushed from
-      // must not stay underneath (Back used to bounce off them).
-      resetTo('/');
+      // Into Doctor mode through the switch screen: the patient screens this
+      // form was pushed from are left first, then the mode flips.
+      resetTo({ pathname: '/switch-mode', params: { to: 'doctor' } } as unknown as Href);
     } catch (err) {
       const response = (err as { response?: { data?: Record<string, string[] | string> } })?.response;
       const data = response?.data;
@@ -125,9 +161,12 @@ export default function DoctorRegister() {
     }
   }
 
-  // The council is what makes the number checkable on the NMC register.
+  // The council is what makes the number checkable on the NMC register; a
+  // new registration also needs the year (it tells apart entries sharing a
+  // number) and the verification consent.
   const required = [fullName, specialization, clinicName, registrationNumber, councilId, clinicAddress, bookingPhone];
-  const canSubmit = required.every((v) => v.trim().length > 0);
+  if (!editing) required.push(registrationYear);
+  const canSubmit = required.every((v) => v.trim().length > 0) && (editing || consent);
 
   const fieldError = (name: string) =>
     fieldErrors[name]?.length ? (
@@ -144,6 +183,40 @@ export default function DoctorRegister() {
               ? 'Changing your registration number, council, name or licence sends your registration back to an admin for review.'
               : `Signed in as ${account?.phone_number ?? ''}. An admin verifies your credentials before you can request patient access. Your own records stay on this same account.`
           }
+        />
+
+        {/* Registration first: a register match fills in the name and
+            qualifications below it. */}
+        <Input
+          label="Medical registration number"
+          value={registrationNumber}
+          onChangeText={setRegistrationNumber}
+          placeholder="Council registration number"
+          autoCapitalize="characters"
+        />
+        {fieldError('registration_number')}
+
+        <CouncilPicker
+          value={councilId}
+          onChange={setCouncilId}
+          error={fieldErrors.state_council_id?.join(' ')}
+        />
+
+        <Input
+          label={editing ? 'Year of registration (optional)' : 'Year of registration'}
+          value={registrationYear}
+          onChangeText={(v) => setRegistrationYear(v.replace(/[^0-9]/g, '').slice(0, 4))}
+          placeholder="e.g. 2015"
+          keyboardType="number-pad"
+          error={fieldErrors.registration_year?.join(' ')}
+        />
+
+        <RegisterCheck
+          registrationNumber={registrationNumber}
+          councilId={councilId}
+          year={registrationYear}
+          fullName={fullName}
+          onFill={fillFromRegister}
         />
 
         <Input
@@ -177,37 +250,6 @@ export default function DoctorRegister() {
           onChangeText={setExperience}
           placeholder="e.g. 12"
           keyboardType="numeric"
-        />
-
-        <Input
-          label="Medical registration number"
-          value={registrationNumber}
-          onChangeText={setRegistrationNumber}
-          placeholder="Council registration number"
-          autoCapitalize="characters"
-        />
-        {fieldError('registration_number')}
-
-        <CouncilPicker
-          value={councilId}
-          onChange={setCouncilId}
-          error={fieldErrors.state_council_id?.join(' ')}
-        />
-
-        <Input
-          label="Year of registration (optional)"
-          value={registrationYear}
-          onChangeText={(v) => setRegistrationYear(v.replace(/[^0-9]/g, '').slice(0, 4))}
-          placeholder="e.g. 2015"
-          keyboardType="number-pad"
-          error={fieldErrors.registration_year?.join(' ')}
-        />
-
-        <RegisterCheck
-          registrationNumber={registrationNumber}
-          councilId={councilId}
-          year={registrationYear}
-          fullName={fullName}
         />
 
         <Input label="Clinic name" value={clinicName} onChangeText={setClinicName} placeholder="e.g. City Heart Clinic" />
@@ -272,6 +314,24 @@ export default function DoctorRegister() {
         )}
       </Card>
 
+      {!editing && (
+        <Pressable
+          onPress={() => setConsent((c) => !c)}
+          style={styles.consent}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: consent }}
+        >
+          <View style={[styles.checkbox, consent && styles.checkboxOn]}>
+            {consent && <Feather name="check" size={13} color="#fff" />}
+          </View>
+          <Text style={[type.caption, { flex: 1, color: colors.ink700 }]}>
+            I consent to CuraPath verifying my registration with the National Medical Commission register via
+            authorised verification partners.
+          </Text>
+        </Pressable>
+      )}
+      {fieldError('verification_consent')}
+
       {!!error && <ErrorNote message={error} />}
 
       <Button onPress={handleSubmit} disabled={!canSubmit} loading={saving}>
@@ -284,6 +344,28 @@ export default function DoctorRegister() {
 const styles = StyleSheet.create({
   hint: { ...type.micro, marginTop: -spacing.sm, marginBottom: spacing.md },
   fieldError: { ...type.caption, color: colors.danger, marginTop: -spacing.sm, marginBottom: spacing.md },
+  consent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    marginTop: 1,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: colors.ink300,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: colors.brandPurple, borderColor: colors.brandPurple },
   fileIcon: {
     width: 36,
     height: 36,

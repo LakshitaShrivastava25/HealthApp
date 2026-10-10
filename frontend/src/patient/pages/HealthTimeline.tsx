@@ -100,15 +100,17 @@ export default function HealthTimeline() {
                 const CardEl = (
                   <Card
                     interactive={clickable}
-                    className={`p-4 flex items-center justify-between ${clickable ? 'hover:border-accent transition-colors' : ''}`}
+                    className={`p-4 flex items-center justify-between gap-3 ${clickable ? 'hover:border-accent transition-colors' : ''}`}
                   >
-                    <div className="flex gap-4">
-                      <p className="text-xs font-semibold text-ink-500 w-16 shrink-0 pt-0.5">
+                    {/* Narrower date column on phones, and min-w-0 so a long
+                        unbroken title wraps instead of widening the page. */}
+                    <div className="flex min-w-0 gap-3 sm:gap-4">
+                      <p className="text-xs font-semibold text-ink-500 w-12 sm:w-16 shrink-0 pt-0.5">
                         {new Date(e.event_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                       </p>
-                      <div>
-                        <p className="text-sm font-semibold text-ink-900">{e.title}</p>
-                        <p className="text-xs text-ink-500 mt-0.5">{e.summary}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-ink-900 [overflow-wrap:anywhere]">{e.title}</p>
+                        <p className="text-xs text-ink-500 mt-0.5 [overflow-wrap:anywhere]">{e.summary}</p>
                       </div>
                     </div>
                     <Badge tone={docBadgeTone[e.event_type] || 'neutral'}>{e.event_type}</Badge>

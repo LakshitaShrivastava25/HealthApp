@@ -10,13 +10,13 @@ import AmbientBackground from '@shared/components/AmbientBackground';
 
 
 export default function Topbar({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
-  const { doctor } = useAuth();
+  const { doctor, hasRegistered } = useAuth();
   const initials = doctor?.full_name
     ? doctor.full_name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
     : '?';
 
   return (
-    <header className="relative overflow-hidden sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2">
+    <header className="relative overflow-hidden sticky top-0 z-10 bg-card border-b border-border px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-3 lg:flex-nowrap lg:gap-x-3">
       {/* Header-variant ambient art: 3 small icons, far right, so it
           never sits under the page title itself. */}
       <AmbientBackground variant="header" />
@@ -27,22 +27,28 @@ export default function Topbar({ title, subtitle, action }: { title: string; sub
           {subtitle && <p className="hidden sm:block truncate text-sm text-ink-500 mt-0.5">{subtitle}</p>}
         </div>
       </div>
-      {action && (
-        <div className="order-last flex w-full flex-wrap items-center justify-end gap-2 sm:order-none sm:w-auto">
-          {action}
+      {/* Below `lg`: a second row for the labelled User / Doctor switch and
+          the page's buttons (which wrap below it when they do not fit beside
+          it) — the same place the patient header puts them. From `lg` up
+          this row joins the first. */}
+      {(action || hasRegistered) && (
+        <div className="relative order-last flex w-full flex-wrap items-center gap-2 lg:order-none lg:w-auto">
+          <ModeSwitch labels className="lg:hidden" />
+          {action && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{action}</div>}
         </div>
       )}
-      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <ModeSwitch />
+      <div className="relative flex shrink-0 items-center gap-2 sm:gap-3">
+        <ModeSwitch className="hidden lg:inline-flex" />
         {doctor && (
           <Link
             to="/doctor/profile"
             title="View and edit your profile"
-            className="flex items-center gap-2.5 pl-3 border-l border-border rounded-lg -mr-1 pr-1 py-1 transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            aria-label="Your profile"
+            className="flex items-center gap-2.5 lg:pl-3 lg:border-l border-border rounded-lg -mr-1 pr-1 py-1 transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <Avatar initials={initials} size={34} />
-            <div className="hidden sm:block text-left">
-              <p className="text-sm font-semibold text-ink-900 leading-tight">Dr. {doctor.full_name}</p>
+            <div className="hidden xl:block text-left">
+              <p className="max-w-[12rem] truncate text-sm font-semibold text-ink-900 leading-tight">Dr. {doctor.full_name}</p>
               <Badge tone={DOCTOR_STATUS_TONE[doctor.verification_status] || 'warning'}>
                 {DOCTOR_STATUS_LABEL[doctor.verification_status] ?? doctor.verification_status}
               </Badge>

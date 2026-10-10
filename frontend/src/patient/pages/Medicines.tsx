@@ -226,7 +226,7 @@ export default function Medicines() {
         subtitle="Every medicine from your prescriptions, listed once, with its history"
         action={
           <Button onClick={() => setShowAddForm((v) => !v)} ariaLabel={showAddForm ? 'Cancel' : 'Add Medicine'}>
-            {showAddForm ? <X size={16} /> : <Plus size={16} />} <span className="hidden sm:inline">{showAddForm ? 'Cancel' : 'Add Medicine'}</span>
+            {showAddForm ? <X size={16} /> : <Plus size={16} />} {showAddForm ? 'Cancel' : 'Add Medicine'}
           </Button>
         }
       />

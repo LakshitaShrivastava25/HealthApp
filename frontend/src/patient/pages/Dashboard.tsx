@@ -120,7 +120,7 @@ export default function Dashboard() {
         subtitle="Here's your health summary for today"
         action={
           <Button onClick={() => navigate('/patient/locker')} ariaLabel="Add Record">
-            <Plus size={16} /> <span className="hidden sm:inline">Add Record</span>
+            <Plus size={16} /> Add Record
           </Button>
         }
       />
@@ -242,11 +242,14 @@ export default function Dashboard() {
                 <button
                   key={d.id}
                   onClick={() => setOpenDocId(d.id)}
-                  className="w-full flex items-center justify-between py-2.5 border-b border-border last:border-0 text-left hover:bg-surface -mx-2 px-2 rounded-lg transition-colors"
+                  className="w-full flex items-center justify-between gap-3 py-2.5 border-b border-border last:border-0 text-left hover:bg-surface -mx-2 px-2 rounded-lg transition-colors"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-ink-900">{d.title}</p>
-                    <p className="text-xs text-ink-500 mt-0.5">{d.document_date || ''} {d.hospital_name}</p>
+                  {/* min-w-0 + truncate: a title made from a long file name
+                      ("Lipid_Profile_Report_2026_09_final…") has no spaces to
+                      wrap at, and used to push the whole page sideways. */}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink-900">{d.title}</p>
+                    <p className="truncate text-xs text-ink-500 mt-0.5">{d.document_date || ''} {d.hospital_name}</p>
                   </div>
                   <Badge tone={docBadgeTone[d.category] || 'neutral'}>{d.category}</Badge>
                 </button>
@@ -266,9 +269,9 @@ export default function Dashboard() {
                   onClick={() => navigate('/patient/medicines')}
                   className="w-full flex items-center gap-3 py-2.5 border-b border-border last:border-0 text-left hover:bg-surface -mx-2 px-2 rounded-lg transition-colors"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-ink-900">{m.name}</p>
-                    <p className="text-xs text-ink-500 mt-0.5">{m.dosage} · {m.instructions}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink-900 [overflow-wrap:anywhere]">{m.name}</p>
+                    <p className="text-xs text-ink-500 mt-0.5 [overflow-wrap:anywhere]">{m.dosage} · {m.instructions}</p>
                   </div>
                 </button>
               ))}

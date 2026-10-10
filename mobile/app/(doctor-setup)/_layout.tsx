@@ -1,7 +1,8 @@
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 
 import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme';
+import { RedirectOnce } from '../../src/components/RedirectOnce';
 
 /**
  * Registration and the verification wait, kept outside the doctor tabs.
@@ -17,7 +18,7 @@ export default function DoctorSetupLayout() {
   const { isLoading, portal } = useAuth();
   // A verified doctor, a staff account or a signed-out session has no
   // business here; the index route sends each of them where they belong.
-  if (!isLoading && portal !== 'patient' && portal !== 'doctor-setup') return <Redirect href="/" />;
+  if (!isLoading && portal !== 'patient' && portal !== 'doctor-setup') return <RedirectOnce href="/" />;
 
   return (
     <Stack

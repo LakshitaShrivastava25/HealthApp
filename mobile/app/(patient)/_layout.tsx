@@ -1,7 +1,8 @@
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 
 import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme';
+import { RedirectOnce } from '../../src/components/RedirectOnce';
 
 /**
  * The patient area is a Stack wrapping a Tabs group.
@@ -17,7 +18,7 @@ export default function PatientLayout() {
   // everyone correctly, but a deep link or notification can land here
   // directly; the server refuses the data either way, this just sends the
   // person home instead of showing an empty screen.
-  if (!isLoading && portal !== 'patient') return <Redirect href="/" />;
+  if (!isLoading && portal !== 'patient') return <RedirectOnce href="/" />;
 
   return (
     <Stack

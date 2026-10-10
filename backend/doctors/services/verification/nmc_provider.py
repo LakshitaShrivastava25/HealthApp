@@ -9,7 +9,12 @@ stopped working — so everything here is defensive:
 
   GET {NMC_BASE_URL}/search?search_type=advance&reg_no=&state=<council code>
       Registration-number search. Matches by SUBSTRING ("12345" also finds
-      "2001123450"), so rows are filtered to an exact number and council.
+      "2001123450"), so rows are filtered to an exact number and council
+      (parsers.same_number — some councils store a prefix, "DMC/R/11030").
+      At most 100 rows a page; a short number can have its exact match on a
+      later page, so up to NMC_MAX_PAGES pages are read before concluding
+      "not found". With state= empty it searches every council, which is how
+      a number filed under a different council is spotted.
       Each row carries the whole record, including personal fields that are
       stripped before anything is stored (see _scrub).
   GET {NMC_BASE_URL}/black-list-doctors/search?state=&reg_no=
@@ -17,23 +22,22 @@ stopped working — so everything here is defensive:
       not restored.
 
 Only single lookups, made when a doctor registers, an admin re-checks, or the
-background job's gentle pass runs — never bulk scraping or pagination.
+background job's gentle pass runs — never bulk scraping.
 """
 
 import json
 import logging
-import re
 import ssl
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
 
 from django.conf import settings
 
 from ...councils import council_name
-from .base import AMBIGUOUS, FOUND, NOT_FOUND, UNAVAILABLE, ProviderUnavailable, VerificationResult
+from .base import AMBIGUOUS, FOUND, NOT_FOUND, UNAVAILABLE, Lookup, ProviderUnavailable, VerificationResult
+from .parsers import parse_date, same_number, truthy, year_of
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +46,7 @@ USER_AGENT = 'CuraPath-DoctorVerification/1.0 (+https://curapath.in)'
 # Kept from a register record; everything else (date of birth, permanent
 # address, father's name, and anything NMC adds later) is dropped.
 KEPT_FIELDS = (
-    'id', 'uprn_no', 'name', 'registration_no', 'registration_date', 'year_of_info',
+    'id', 'name', 'registration_no', 'registration_date', 'year_of_info',
     'state_code', 'state_medical_council', 'qualification', 'qualification_year',
     'university', 'additional_qualifications', 'removed_status', 'removed_on',
     'restored_on', 'remarks',
@@ -50,6 +54,7 @@ KEPT_FIELDS = (
 KEPT_QUALIFICATION_FIELDS = ('qualification', 'year', 'university')
 
 NOT_RESTORED = '1900-01-01'
+PER_PAGE = 100  # the register's own maximum
 
 
 def _scrub(record: dict) -> dict:
@@ -65,39 +70,22 @@ def _scrub(record: dict) -> dict:
     return kept
 
 
-def comparable(reg_no) -> str:
-    """Registration numbers compared on letters and digits only, leading zeros dropped."""
-    return re.sub(r'[^0-9A-Z]', '', str(reg_no or '').upper()).lstrip('0')
-
-
-def _parse_date(value):
-    text = str(value or '').strip()
-    for fmt in ('%d-%m-%Y', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d/%m/%Y'):
-        try:
-            return datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    return None
-
-
 def _is_removed(record: dict) -> bool:
     """Removed from the register and not restored."""
-    status = str(record.get('removed_status') or '').strip().lower()
-    if status in ('', '0', 'none', 'null', 'false', 'n', 'no'):
+    if not truthy(record.get('removed_status')):
         return False
     restored = str(record.get('restored_on') or '').strip()
     return not restored or restored.startswith(NOT_RESTORED) or restored.lower() == 'not disposed off'
 
 
-def _year(value):
-    try:
-        return int(str(value).strip()[:4])
-    except (TypeError, ValueError):
-        return None
-
-
 class NMCProvider:
     name = 'nmc'
+    label = 'NMC register'
+    third_party = False
+    configured = True
+
+    def skip_reason(self, q: Lookup) -> str:
+        return ''
 
     def __init__(self):
         self.base_url = settings.NMC_BASE_URL.rstrip('/')
@@ -139,50 +127,91 @@ class NMCProvider:
             return payload
         raise ProviderUnavailable(last_error)
 
+    def probe(self, path: str, params: dict) -> tuple[int | None, str, str]:
+        """One raw request, no retries: (HTTP status, content type, body text). For the smoke test."""
+        url = f'{self.base_url}/{path}?{urllib.parse.urlencode(params)}'
+        request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT, 'Accept': 'application/json'})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout, context=self.context) as response:
+                body = response.read().decode('utf-8', 'replace')
+                return response.status, response.headers.get('Content-Type', ''), body
+        except urllib.error.HTTPError as exc:
+            return exc.code, (exc.headers or {}).get('Content-Type', ''), exc.read().decode('utf-8', 'replace')
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+            return None, '', f'{type(exc).__name__}: {getattr(exc, "reason", exc)}'
+
     # -- lookups ------------------------------------------------------------
 
-    def _exact_rows(self, payload: dict, reg_no: str, council: str) -> list[dict]:
+    @staticmethod
+    def _rows(payload: dict) -> list[dict]:
         rows = payload.get('data')
         if not isinstance(rows, list):
             raise ProviderUnavailable('unexpected response shape')
-        wanted = comparable(reg_no)
-        name = council_name(council).lower()
+        return [row for row in rows if isinstance(row, dict)]
+
+    @staticmethod
+    def _exact(rows: list[dict], reg_no: str, council: str | None) -> list[dict]:
+        """Rows for exactly this number — in `council`, or in any council when it is None."""
+        name = council_name(council).lower() if council else ''
         return [
             row for row in rows
-            if isinstance(row, dict)
-            and comparable(row.get('registration_no')) == wanted
-            and (str(row.get('state_code') or '').upper() == council
+            if same_number(reg_no, row.get('registration_no'))
+            and (council is None
+                 or str(row.get('state_code') or '').upper() == council
                  or str(row.get('state_medical_council') or '').strip().lower() == name)
         ]
 
+    def _search(self, path: str, reg_no: str, council: str | None, attempts: int) -> list[dict]:
+        """Exact rows for the number, reading further pages only while none has turned up."""
+        params = {'reg_no': reg_no, 'state': council or '', 'per_page': PER_PAGE}
+        if path == 'search':
+            params['search_type'] = 'advance'
+        page = 1
+        while True:
+            payload = self._get(path, {**params, 'page': page}, attempts)
+            exact = self._exact(self._rows(payload), reg_no, council)
+            pages = (payload.get('pagination') or {}).get('total_pages') or 1
+            if exact or page >= min(pages, max(1, settings.NMC_MAX_PAGES)):
+                return exact
+            page += 1
+
+    def other_councils(self, reg_no: str, council: str, attempts: int = 1) -> list[dict]:
+        """The same number listed under other councils — a hint for the doctor and the admin."""
+        found = []
+        for row in self._search('search', reg_no, None, attempts):
+            code = str(row.get('state_code') or '').upper()
+            if code and code != council:
+                found.append({
+                    'council': code,
+                    'council_name': council_name(code),
+                    'registration_no': str(row.get('registration_no') or ''),
+                    'year': year_of(row.get('year_of_info')),
+                })
+        return found[:5]
+
     def check_suspension(self, reg_no: str, council: str, attempts: int = 3) -> tuple[bool, str]:
         """(listed as removed and not restored, remarks) from NMC's blacklist."""
-        payload = self._get(
-            'black-list-doctors/search',
-            {'state': council, 'reg_no': reg_no, 'page': 1, 'per_page': 50},
-            attempts,
-        )
-        for row in self._exact_rows(payload, reg_no, council):
+        for row in self._search('black-list-doctors/search', reg_no, council, attempts):
             # Every row here is a removal; restored_on says whether it still stands.
             if _is_removed({**row, 'removed_status': row.get('removed_status') or '1'}):
-                when = _parse_date(row.get('removed_on'))
+                when = parse_date(row.get('removed_on'))
                 note = 'Listed as removed from the register' + (f' on {when:%d %b %Y}' if when else '') + '.'
                 return True, f'{note} {str(row.get("remarks") or "").strip()}'.strip()
         return False, ''
 
-    def verify(self, reg_no: str, council: str, year: int | None = None, attempts: int = 3) -> VerificationResult:
+    def verify(self, q: Lookup, attempts: int = 3) -> VerificationResult:
+        reg_no, council, year = q.reg_no, q.council, q.year
         started = time.monotonic()
         try:
-            payload = self._get(
-                'search',
-                {'search_type': 'advance', 'reg_no': reg_no, 'state': council, 'page': 1, 'per_page': 50},
-                attempts,
-            )
-            rows = self._exact_rows(payload, reg_no, council)
+            rows = self._search('search', reg_no, council, attempts)
             if len(rows) > 1 and year:
-                rows = [r for r in rows if _year(r.get('year_of_info')) == year] or rows
+                rows = [r for r in rows if year_of(r.get('year_of_info')) == year] or rows
             if not rows:
                 result = VerificationResult(status=NOT_FOUND, provider=self.name)
+                try:
+                    result.other_councils = self.other_councils(reg_no, council)
+                except ProviderUnavailable as exc:
+                    logger.warning('NMC all-council lookup failed for reg %s: %s', reg_no, exc)
             elif len(rows) > 1:
                 result = VerificationResult(
                     status=AMBIGUOUS, provider=self.name,
@@ -193,7 +222,7 @@ class NMCProvider:
                 record = rows[0]
                 suspended, remarks = _is_removed(record), ''
                 if suspended:
-                    when = _parse_date(record.get('removed_on'))
+                    when = parse_date(record.get('removed_on'))
                     remarks = f'Listed as removed from the register{f" on {when:%d %b %Y}" if when else ""}.'
                 try:
                     listed, listed_remarks = self.check_suspension(reg_no, council, attempts=1)
@@ -212,8 +241,8 @@ class NMCProvider:
                         str(part) for part in (record.get('qualification'), record.get('qualification_year')) if part
                     ),
                     university=str(record.get('university') or '').strip(),
-                    registration_date=_parse_date(record.get('registration_date')),
-                    registration_year=_year(record.get('year_of_info')),
+                    registration_date=parse_date(record.get('registration_date')),
+                    registration_year=year_of(record.get('year_of_info')),
                     is_suspended=suspended,
                     suspension_remarks=remarks,
                     raw=_scrub(record),

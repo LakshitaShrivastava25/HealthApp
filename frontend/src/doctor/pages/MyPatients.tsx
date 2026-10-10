@@ -64,7 +64,7 @@ export default function MyPatients() {
         action={
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => setEditingAvailability((v) => !v)}>
-              <CalendarClock size={15} /> Clinic Availability
+              <CalendarClock size={15} /> <span className="sm:hidden">Availability</span><span className="hidden sm:inline">Clinic Availability</span>
             </Button>
             <Button onClick={() => navigate('/doctor/request-access')}>Request Access</Button>
           </div>

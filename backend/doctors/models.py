@@ -36,7 +36,9 @@ class Doctor(models.Model):
 
     class Provider(models.TextChoices):
         NMC = 'nmc', 'NMC register'
-        VENDOR = 'vendor', 'Verification vendor'
+        APIFY = 'apify', 'Apify NMC lookup'
+        DECENTRO = 'decentro', 'Decentro'
+        VENDOR = 'vendor', 'Verification vendor'  # placeholder before Apify/Decentro; kept for old rows
         MANUAL = 'manual', 'Checked by an admin'
 
     AWAITING_ADMIN = (VerificationStatus.PENDING, VerificationStatus.MANUAL_REVIEW, VerificationStatus.FAILED)
@@ -108,6 +110,14 @@ class Doctor(models.Model):
     verification_provider = models.CharField(max_length=10, choices=Provider.choices, blank=True, default='')
     verification_attempts = models.PositiveIntegerField(default=0)
     last_verification_error = models.TextField(blank=True, default='')
+    # Every provider asked in the latest check, in order, with its answer:
+    # [{"provider": "nmc", "result": "unavailable", "ms": 20012, "error": "..."}]
+    provider_attempts = models.JSONField(default=list, blank=True)
+    # When the doctor agreed to have their registration checked through
+    # outside verification partners (Apify, Decentro). Null — doctors who
+    # registered before the consent box, or from an older app — means only
+    # NMC's own register is ever asked about them.
+    verification_consent_at = models.DateTimeField(null=True, blank=True)
 
     # --- The admin's decision -------------------------------------------
     verified_at = models.DateTimeField(null=True, blank=True)

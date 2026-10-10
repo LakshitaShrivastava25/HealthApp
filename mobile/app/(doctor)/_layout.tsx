@@ -1,7 +1,8 @@
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 
 import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme';
+import { RedirectOnce } from '../../src/components/RedirectOnce';
 
 export default function DoctorLayout() {
   const { isLoading, portal } = useAuth();
@@ -9,7 +10,7 @@ export default function DoctorLayout() {
   // everyone correctly, but a deep link or notification can land here
   // directly; the server refuses the data either way, this just sends the
   // person home instead of showing an empty screen.
-  if (!isLoading && portal !== 'doctor') return <Redirect href="/" />;
+  if (!isLoading && portal !== 'doctor') return <RedirectOnce href="/" />;
 
   return (
     <Stack

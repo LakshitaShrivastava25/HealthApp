@@ -139,7 +139,11 @@ class AdminDoctorVerificationViewSet(AuditLogMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def reverify(self, request, pk=None):
-        """Ask the NMC register again (fresh, not cached). Records what it says; decides nothing."""
+        """
+        Ask the NMC register again (fresh, not cached). Records what it says;
+        decides nothing. NMC only: the outside fallbacks can take a minute,
+        longer than a request may wait — reverify_doctors runs those.
+        """
         from doctors.services.verification import apply_verification
 
         doctor = apply_verification(self.get_object(), use_cache=False)

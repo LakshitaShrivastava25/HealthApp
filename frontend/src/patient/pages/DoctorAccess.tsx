@@ -90,12 +90,12 @@ export default function DoctorAccess() {
           ) : (
             <div className="mt-3 space-y-3">
               {pending.map((g) => (
-                <div key={g.id} className="flex items-center justify-between border border-border rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-3">
+                <div key={g.id} className="flex flex-col gap-3 border border-border rounded-lg px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="w-9 h-9 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
                       <Stethoscope size={16} />
                     </div>
-                    <div>
+                    <div className="min-w-0 [overflow-wrap:anywhere]">
                       <p className="text-sm font-medium text-ink-900">Dr. {g.doctor_detail.full_name}</p>
                       <p className="text-xs text-ink-500">
                         {g.doctor_detail.specialization}
@@ -103,7 +103,7 @@ export default function DoctorAccess() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center justify-end gap-2 shrink-0">
                     <Button
                       onClick={() => respond(g.id, 'approve')}
                       disabled={actingOnId === g.id}
@@ -138,12 +138,12 @@ export default function DoctorAccess() {
           ) : (
             <div className="mt-3 space-y-3">
               {approved.map((g) => (
-                <div key={g.id} className="flex items-center justify-between border border-border rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-3">
+                <div key={g.id} className="flex items-center justify-between gap-3 border border-border rounded-lg px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="w-9 h-9 rounded-lg bg-success-bg text-success flex items-center justify-center shrink-0">
                       <Stethoscope size={16} />
                     </div>
-                    <div>
+                    <div className="min-w-0 [overflow-wrap:anywhere]">
                       <p className="text-sm font-medium text-ink-900">Dr. {g.doctor_detail.full_name}</p>
                       <p className="text-xs text-ink-500">{g.doctor_detail.specialization}</p>
                     </div>
@@ -166,8 +166,8 @@ export default function DoctorAccess() {
             <CardHeader title="Past Requests" />
             <div className="mt-3 space-y-2">
               {past.map((g) => (
-                <div key={g.id} className="flex items-center justify-between text-sm">
-                  <span className="text-ink-900">Dr. {g.doctor_detail.full_name}</span>
+                <div key={g.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 text-ink-900 [overflow-wrap:anywhere]">Dr. {g.doctor_detail.full_name}</span>
                   <Badge tone={g.status === 'denied' ? 'danger' : 'neutral'}>{g.status}</Badge>
                 </div>
               ))}

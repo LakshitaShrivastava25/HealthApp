@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 
-import { ModeSwitchPill } from '../../../src/components/ModeSwitch';
+import { ModeToggle } from '../../../src/components/ModeSwitch';
 import { colors, spacing } from '../../../src/theme';
 import { useConfirmExit } from '../../../src/lib/useBackHandler';
 
@@ -28,7 +28,7 @@ export default function DoctorTabs() {
         // The way back to the person's own records, on every doctor tab.
         headerRight: () => (
           <View style={{ marginRight: spacing.lg }}>
-            <ModeSwitchPill />
+            <ModeToggle labels />
           </View>
         ),
         sceneStyle: { backgroundColor: colors.surface },

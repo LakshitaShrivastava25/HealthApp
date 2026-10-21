@@ -22,9 +22,6 @@ export default function Footer() {
           <BrandMark size={32} />
           CuraPath
         </div>
-        {/* Pulled up against the lockup so it reads as part of it rather than
-            as the first line of the paragraph below. */}
-        <p className="-mt-4 text-sm text-slate-500">Technology for Better Care</p>
         <p className="max-w-md text-body">
           Ready to bring your family&apos;s healthcare into one calm place?
         </p>

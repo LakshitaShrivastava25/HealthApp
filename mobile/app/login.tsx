@@ -204,6 +204,16 @@ export default function Login() {
               )}
               <BeatingHeart size={compact ? 32 : 56} halo={!compact} />
               <Text style={[styles.brandName, compact && styles.brandNameCompact]}>CuraPath</Text>
+              {/* Gated on !compact alongside the descriptive line below it.
+                  The compact layout exists because the keyboard leaves very
+                  little height (it also triggers under 560px), and another
+                  line there risks pushing the field and button out of reach —
+                  the one failure this screen cannot afford. */}
+              {!compact && (
+                <Animated.Text entering={FadeIn.duration(220)} style={styles.brandSlogan}>
+                  Technology for Better Care
+                </Animated.Text>
+              )}
               {!compact && (
                 <Animated.Text entering={FadeIn.duration(220)} style={styles.brandTag}>
                   Your family's health records, insurance and medicines in one place.
@@ -397,6 +407,7 @@ const styles = StyleSheet.create({
   brandNameCompact: { fontSize: 22, marginTop: 0 },
   hero: { marginBottom: spacing.sm },
   brandName: { ...type.h1, marginTop: spacing.md },
+  brandSlogan: { ...type.label, textAlign: 'center', marginTop: spacing.xs },
   brandTag: {
     ...type.caption,
     textAlign: 'center',

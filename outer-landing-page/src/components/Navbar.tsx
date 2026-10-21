@@ -61,7 +61,16 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
         <a href="#hero" onClick={closeMenu} className="flex items-center gap-2 rounded-lg text-lg font-semibold text-ink">
           <BrandMark size={32} />
-          CuraPath
+          {/* The name and tagline stack, so the text becomes a column.
+              leading-none keeps both lines inside the 32px mark's height, and
+              the tagline is hidden below sm so the header cannot grow on a
+              phone. */}
+          <span className="flex flex-col leading-none">
+            CuraPath
+            <span className="hidden text-[11px] font-normal text-slate-500 sm:mt-0.5 sm:block">
+              Technology for Better Care
+            </span>
+          </span>
         </a>
 
         <nav aria-label="Primary" className="hidden items-center gap-7 lg:flex">

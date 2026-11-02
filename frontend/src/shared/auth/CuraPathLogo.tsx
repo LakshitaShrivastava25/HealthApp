@@ -19,7 +19,7 @@ export type Portal = 'patient' | 'doctor' | 'admin';
  */
 
 const MARKS = {
-  patient: { Icon: HeartPulse, label: 'CuraPath', sub: 'Your Health, Our Priority' },
+  patient: { Icon: HeartPulse, label: 'CuraPath', sub: 'Technology for Better Care' },
   doctor: { Icon: Stethoscope, label: 'CuraPath', sub: 'Doctor Portal' },
   admin: { Icon: ShieldCheck, label: 'CuraPath', sub: 'Admin Portal' },
 } as const;

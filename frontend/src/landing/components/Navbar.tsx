@@ -61,7 +61,12 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
         <a href="#hero" onClick={closeMenu} className="flex items-center gap-2 rounded-lg text-lg font-semibold text-lp-ink">
           <BrandMark size={32} />
-          CuraPath
+          <span className="flex flex-col leading-none">
+            CuraPath
+            <span className="hidden text-[11px] font-normal text-slate-500 sm:mt-0.5 sm:block">
+              Technology for Better Care
+            </span>
+          </span>
         </a>
 
         <nav aria-label="Primary" className="hidden items-center gap-7 lg:flex">

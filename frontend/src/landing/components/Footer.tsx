@@ -23,6 +23,7 @@ export default function Footer() {
           <BrandMark size={32} />
           CuraPath
         </div>
+        <p className="-mt-4 text-sm text-slate-500">Technology for Better Care</p>
         <p className="max-w-md text-lp-body">
           Ready to bring your family&apos;s healthcare into one calm place?
         </p>

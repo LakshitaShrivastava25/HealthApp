@@ -1,3 +1,5 @@
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -21,6 +23,8 @@ from .serializers import (
     MarkDuplicateSerializer,
     TimelineEventSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
@@ -116,7 +120,20 @@ class DocumentViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
 
         # TODO: move to a Celery task (documents/tasks.py) once Celery+Redis
         # are provisioned, so upload doesn't block on OCR+Claude latency.
-        ClaudeService().process_document(document)
+        try:
+            ClaudeService().process_document(document)
+        except Exception:
+            logger.exception('process_document crashed for document %s', document.pk)
+            document.status = Document.Status.NEEDS_REVIEW
+            document.structured_data = {
+                '_extraction_failed': True,
+                'note': (
+                    'Your file was saved, but automatic processing failed unexpectedly. '
+                    'You can add the details yourself, or try again from the document screen.'
+                ),
+            }
+            document.processed_at = timezone.now()
+            document.save(update_fields=['status', 'structured_data', 'processed_at'])
         data = dict(self.get_serializer(self._fresh(document)).data)
         data['upload'] = {'outcome': DocumentUpload.Outcome.NEW}
         return Response(data, status=status.HTTP_201_CREATED, headers=self.get_success_headers(data))
@@ -253,7 +270,17 @@ class DocumentViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
         document = self.get_object()
         document.status = Document.Status.PROCESSING
         document.save(update_fields=['status'])
-        ClaudeService().process_document(document)
+        try:
+            ClaudeService().process_document(document)
+        except Exception:
+            logger.exception('retry process_document crashed for document %s', document.pk)
+            document.status = Document.Status.NEEDS_REVIEW
+            document.structured_data = {
+                '_extraction_failed': True,
+                'note': 'Processing failed unexpectedly. Please try again later.',
+            }
+            document.processed_at = timezone.now()
+            document.save(update_fields=['status', 'structured_data', 'processed_at'])
         return Response(DocumentSerializer(self._fresh(document)).data)
 
     @action(detail=True, methods=['patch'])

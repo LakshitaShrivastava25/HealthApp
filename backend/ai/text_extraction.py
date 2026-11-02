@@ -69,8 +69,13 @@ def extract_text_from_pdf(file_obj) -> ExtractionResult:
         combined = '\n\n'.join(t.strip() for t in pages_text if t.strip())
     except PdfReadError:
         return ExtractionResult(None, 'unavailable', 'Could not read this file as a PDF — it may be corrupted.')
+    except Exception:
+        return ExtractionResult(None, 'unavailable', 'Could not open this file for text extraction — it may be temporarily unavailable.')
     finally:
-        file_obj.seek(0)
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
 
     if not combined:
         return ExtractionResult(

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, GitBranch, UserCheck, UserX, X, Clock, Users } from 'lucide-react';
+import { Check, UserCheck, X, Clock, Users } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Button } from '../components/ui';
 import { familyApi } from '../lib/api';
@@ -48,7 +48,7 @@ const RELATION_COLORS: Record<string, string> = {
 export default function FamilyTree() {
   const { refreshProfiles } = useAuth();
   const [nodes, setNodes] = useState<TreeNode[]>([]);
-  const [edges, setEdges] = useState<TreeEdge[]>([]);
+  const [, setEdges] = useState<TreeEdge[]>([]);
   const [selfId, setSelfId] = useState<string | null>(null);
   const [requests, setRequests] = useState<LinkRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<LinkRequest[]>([]);

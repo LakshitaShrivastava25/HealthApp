@@ -170,7 +170,7 @@ export default function LabTests() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-ink-900 truncate">{p.name}</p>
-                      <Badge tone={typeTone[p.provider_type] ?? 'neutral'} className="mt-1">
+                      <Badge tone={typeTone[p.provider_type] ?? 'neutral'}>
                         {p.provider_type.replace('_', ' ')}
                       </Badge>
                     </div>

@@ -153,7 +153,7 @@ export const medicinesApi = {
   merge: (id: string, otherId: string) => api.post(`/medications/${id}/merge/`, { other: otherId }),
   keepSeparate: (id: string, otherId: string) => api.post(`/medications/${id}/keep-separate/`, { other: otherId }),
   unmerge: (id: string) => api.post(`/medications/${id}/unmerge/`),
-  create: (data: { profile: string; name: string; dosage: string; instructions: string; frequency: string }) =>
+  create: (data: { profile: string; name: string; dosage: string; instructions: string; frequency: string; start_date?: string }) =>
     api.post('/medications/', data),
   delete: (id: string) => api.delete(`/medications/${id}/`),
   addReminder: (medicationId: string, time_of_day: string) =>

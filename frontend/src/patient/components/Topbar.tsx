@@ -261,7 +261,6 @@ function AddFamilyMemberModal({
   const [otp, setOtp] = useState('');
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
   const [hasExistingAccount, setHasExistingAccount] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
 
@@ -303,7 +302,6 @@ function AddFamilyMemberModal({
         return;
       }
       setHasExistingAccount(data.has_existing_account);
-      setOtpSent(true);
       setStep('otp');
     } catch {
       setError('Could not send OTP. Please try again.');

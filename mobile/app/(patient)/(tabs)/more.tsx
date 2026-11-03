@@ -44,6 +44,12 @@ const CARE: Item[] = [
     note: 'Blood banks, pathology labs and test bookings',
     href: '/(patient)/lab-tests',
   },
+  {
+    icon: 'git-branch',
+    label: 'Family Tree',
+    note: 'View your family connections and approval requests',
+    href: '/(patient)/family-tree',
+  },
 ];
 
 const ACCOUNT: Item[] = [

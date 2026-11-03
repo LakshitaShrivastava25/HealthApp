@@ -1,5 +1,5 @@
 import { type ReactNode, useRef, useState } from 'react';
-import { Bell, ChevronDown, Plus, UserPlus, X } from 'lucide-react';
+import { Bell, ChevronDown, Plus, UserPlus, X, Phone, CheckCircle, Clock, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, Button } from './ui';
 import { MobileMenuButton } from '@shared/layout/ResponsiveShell';
@@ -9,7 +9,7 @@ import useClickOutside from '@shared/useClickOutside';
 import { todayIso } from '@shared/dates';
 import useNotifications from '../hooks/useNotifications';
 import { useAuth } from '../context/AuthContext';
-import { allergiesApi, profilesApi } from '../lib/api';
+import { allergiesApi, familyApi } from '../lib/api';
 import { useBackToClose } from '@shared/hooks/useBackToClose';
 
 /** Straight from Profile.Relation on the model, minus `self`: the account
@@ -230,18 +230,8 @@ export default function Topbar({
   );
 }
 
-/**
- * The full add-a-person form.
- *
- * It collects the same details the profile view shows, rather than the name
- * and relation it used to ask for: a member added with two fields looked
- * complete in the switcher while silently having no blood group, no date of
- * birth and no allergies — exactly the things that matter when their records
- * are the ones on screen.
- *
- * Allergies are a separate model (AllergyRecord, one row per substance), so
- * they are posted after the profile exists and has an id.
- */
+type Step = 'details' | 'otp' | 'done';
+
 function AddFamilyMemberModal({
   onClose,
   onCreated,
@@ -249,8 +239,9 @@ function AddFamilyMemberModal({
   onClose: () => void;
   onCreated: () => void | Promise<void>;
 }) {
-  // Back closes the form instead of leaving the page underneath.
   useBackToClose(true, onClose);
+  const [step, setStep] = useState<Step>('details');
+
   const [fullName, setFullName] = useState('');
   const [relation, setRelation] = useState('father');
   const [dob, setDob] = useState('');
@@ -265,6 +256,14 @@ function AddFamilyMemberModal({
 
   const isChild = (relation === 'son' || relation === 'daughter') &&
     (dob ? new Date().getFullYear() - new Date(dob).getFullYear() < 18 : !age || Number(age) < 18);
+  const phoneRequired = !isChild && relation !== 'self';
+
+  const [otp, setOtp] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [hasExistingAccount, setHasExistingAccount] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -273,29 +272,76 @@ function AddFamilyMemberModal({
     setAllergies((list) => list.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
   }
 
-  // Age is an alternative to date of birth for when the exact date isn't
-  // known (common for older family members). The model only has a real
-  // date_of_birth column, so this is stored as Jan 1 of the matching
-  // birth year — an approximation, not a real date.
   function ageToDob(ageYears: number): string {
     const year = new Date().getFullYear() - ageYears;
     return `${year}-01-01`;
   }
 
-  async function handleSave() {
-    if (!fullName.trim()) return;
+  async function handleSendOtp() {
+    if (phoneRequired && !phoneNumber.trim()) {
+      setError('Phone number is required for adult family members.');
+      return;
+    }
+    if (!fullName.trim()) { setError('Full name is required.'); return; }
     if (age && (!/^\d+$/.test(age) || Number(age) > 130)) {
       setError('Age must be a whole number between 0 and 130.');
       return;
     }
     setError('');
-    setSaving(true);
+
+    if (!phoneNumber.trim()) {
+      await handleCreateMember();
+      return;
+    }
+
+    setOtpSending(true);
     try {
-      const { data: profile } = await profilesApi.create({
+      const { data } = await familyApi.verifyPhone(phoneNumber.trim());
+      if (!data.ok) {
+        setError(data.error || 'Could not send OTP.');
+        setOtpSending(false);
+        return;
+      }
+      setHasExistingAccount(data.has_existing_account);
+      setOtpSent(true);
+      setStep('otp');
+    } catch {
+      setError('Could not send OTP. Please try again.');
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function handleVerifyOtp() {
+    if (!otp.trim()) return;
+    setError('');
+    setOtpVerifying(true);
+    try {
+      const { data } = await familyApi.confirmPhone(phoneNumber.trim(), otp.trim());
+      if (!data.verified) {
+        const msgs: Record<string, string> = {
+          wrong: 'Incorrect OTP. Please try again.',
+          expired: 'OTP expired. Please request a new one.',
+          locked: 'Too many attempts. Please request a new OTP.',
+        };
+        setError(msgs[data.result] || 'Verification failed.');
+        setOtpVerifying(false);
+        return;
+      }
+      await handleCreateMember();
+    } catch {
+      setError('Verification failed. Please try again.');
+      setOtpVerifying(false);
+    }
+  }
+
+  async function handleCreateMember() {
+    setSaving(true);
+    setError('');
+    try {
+      const payload: Record<string, unknown> = {
         full_name: fullName.trim(),
         relation,
-        // Omitted rather than sent empty: the serializer treats a missing
-        // optional field as "not provided", but '' as a value to store.
         ...(dob ? { date_of_birth: dob } : age ? { date_of_birth: ageToDob(Number(age)) } : {}),
         ...(gender ? { gender } : {}),
         ...(bloodGroup ? { blood_group: bloodGroup } : {}),
@@ -303,27 +349,45 @@ function AddFamilyMemberModal({
         ...(heightCm ? { height_cm: Number(heightCm) } : {}),
         ...(weightKg ? { weight_kg: Number(weightKg) } : {}),
         preferred_language: language,
-      });
+      };
+      const { data } = await familyApi.createMember(payload);
 
-      // One row per allergy, and only the ones actually filled in.
+      if (data.status === 'pending_approval') {
+        setPendingApproval(true);
+        setStep('done');
+        return;
+      }
+
       for (const a of allergies) {
         if (!a.substance.trim()) continue;
         await allergiesApi.create({
-          profile: profile.id,
+          profile: data.id,
           kind: a.kind,
           substance: a.substance.trim(),
           reaction: a.reaction.trim(),
         });
       }
-
       await onCreated();
     } catch (err) {
-      // Surface the server's own wording where it has some — a rejected date
-      // of birth should say so rather than "something went wrong".
       const detail = (err as { response?: { data?: Record<string, string[] | string> } })?.response?.data;
       const first = detail && Object.values(detail)[0];
-      setError(Array.isArray(first) ? first[0] : first || 'Could not add this family member. Please try again.');
+      setError(Array.isArray(first) ? first[0] : (typeof first === 'string' ? first : '') || 'Could not add this family member. Please try again.');
       setSaving(false);
+      setOtpVerifying(false);
+    }
+  }
+
+  async function handleResendOtp() {
+    setOtp('');
+    setError('');
+    setOtpSending(true);
+    try {
+      const { data } = await familyApi.verifyPhone(phoneNumber.trim());
+      if (!data.ok) setError(data.error || 'Could not resend OTP.');
+    } catch {
+      setError('Could not resend OTP.');
+    } finally {
+      setOtpSending(false);
     }
   }
 
@@ -341,10 +405,20 @@ function AddFamilyMemberModal({
       >
         <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-border bg-card px-5 py-4">
           <div className="flex items-center gap-2">
-            <UserPlus size={18} className="text-accent-ink" />
+            {step === 'otp' ? <Phone size={18} className="text-accent-ink" /> :
+             step === 'done' ? <CheckCircle size={18} className="text-success" /> :
+             <UserPlus size={18} className="text-accent-ink" />}
             <div>
-              <p className="text-sm font-semibold text-ink-900">Add family member</p>
-              <p className="text-xs text-ink-500">Their records stay separate from yours.</p>
+              <p className="text-sm font-semibold text-ink-900">
+                {step === 'details' && 'Add family member'}
+                {step === 'otp' && 'Verify phone number'}
+                {step === 'done' && (pendingApproval ? 'Approval requested' : 'Member added')}
+              </p>
+              <p className="text-xs text-ink-500">
+                {step === 'details' && 'Their records stay separate from yours.'}
+                {step === 'otp' && `Enter the OTP sent to ${phoneNumber}`}
+                {step === 'done' && pendingApproval && 'Waiting for the account holder to approve.'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-ink-500 hover:bg-surface">
@@ -352,142 +426,166 @@ function AddFamilyMemberModal({
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2">
-              <label htmlFor="fm-name" className="mb-1 block text-[11px] font-semibold text-ink-700">
-                Full name <span className="text-danger">*</span>
-              </label>
-              <input id="fm-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" className={FIELD} />
+        {step === 'details' && (
+          <>
+            <div className="space-y-4 px-5 py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label htmlFor="fm-name" className="mb-1 block text-[11px] font-semibold text-ink-700">
+                    Full name <span className="text-danger">*</span>
+                  </label>
+                  <input id="fm-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" className={FIELD} />
+                </div>
+                <div>
+                  <label htmlFor="fm-relation" className="mb-1 block text-[11px] font-semibold text-ink-700">
+                    Relation <span className="text-danger">*</span>
+                  </label>
+                  <select id="fm-relation" value={relation} onChange={(e) => setRelation(e.target.value)} className={FIELD}>
+                    {RELATIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="fm-phone" className="mb-1 block text-[11px] font-semibold text-ink-700">
+                    Phone number {phoneRequired ? <span className="text-danger">*</span> : isChild && <span className="text-ink-400 font-normal">(optional)</span>}
+                  </label>
+                  <input id="fm-phone" type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. 9876543210" className={FIELD} />
+                </div>
+                <div>
+                  <label htmlFor="fm-dob" className="mb-1 block text-[11px] font-semibold text-ink-700">Date of birth (or enter age below)</label>
+                  <input id="fm-dob" type="date" max={todayIso()} value={dob} onChange={(e) => setDob(e.target.value)} className={FIELD} />
+                </div>
+                <div>
+                  <label htmlFor="fm-age" className="mb-1 block text-[11px] font-semibold text-ink-700">Age (years)</label>
+                  <input id="fm-age" type="number" min={0} max={130} value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 45" className={FIELD} />
+                </div>
+                <div>
+                  <label htmlFor="fm-gender" className="mb-1 block text-[11px] font-semibold text-ink-700">Gender</label>
+                  <select id="fm-gender" value={gender} onChange={(e) => setGender(e.target.value)} className={FIELD}>
+                    <option value="">Not specified</option>
+                    {GENDERS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="fm-blood" className="mb-1 block text-[11px] font-semibold text-ink-700">Blood group</label>
+                  <select id="fm-blood" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value)} className={FIELD}>
+                    <option value="">Not known</option>
+                    {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="fm-height" className="mb-1 block text-[11px] font-semibold text-ink-700">Height (cm)</label>
+                  <input id="fm-height" type="number" min={1} max={300} value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="170" className={FIELD} />
+                </div>
+                <div>
+                  <label htmlFor="fm-weight" className="mb-1 block text-[11px] font-semibold text-ink-700">Weight (kg)</label>
+                  <input id="fm-weight" type="number" min={1} max={500} value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="65" className={FIELD} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label htmlFor="fm-lang" className="mb-1 block text-[11px] font-semibold text-ink-700">Preferred language</label>
+                  <select id="fm-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={FIELD}>
+                    {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Allergies</p>
+                  <button onClick={() => setAllergies((l) => [...l, { kind: 'drug', substance: '', reaction: '' }])} className="flex items-center gap-1 text-xs font-medium text-accent-ink">
+                    <Plus size={13} /> Add allergy
+                  </button>
+                </div>
+                {allergies.length === 0 ? (
+                  <p className="mt-1 text-xs text-ink-500">None recorded. You can add these later too.</p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {allergies.map((a, i) => (
+                      <div key={i} className="grid grid-cols-1 sm:grid-cols-[7rem_1fr_1fr_auto] gap-2">
+                        <select value={a.kind} onChange={(e) => updateAllergy(i, { kind: e.target.value })} className={FIELD} aria-label={`Allergy ${i + 1} type`}>
+                          {ALLERGY_KINDS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                        </select>
+                        <input value={a.substance} onChange={(e) => updateAllergy(i, { substance: e.target.value })} placeholder="Substance" aria-label={`Allergy ${i + 1} substance`} className={FIELD} />
+                        <input value={a.reaction} onChange={(e) => updateAllergy(i, { reaction: e.target.value })} placeholder="Reaction (optional)" aria-label={`Allergy ${i + 1} reaction`} className={FIELD} />
+                        <button onClick={() => setAllergies((l) => l.filter((_, idx) => idx !== i))} aria-label={`Remove allergy ${i + 1}`} className="rounded-lg px-2 text-ink-500 hover:bg-surface">
+                          <X size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {error && <p className="text-xs text-danger">{error}</p>}
+            </div>
+
+            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-card px-5 py-3">
+              <Button variant="ghost" onClick={onClose} disabled={saving || otpSending}>Cancel</Button>
+              <Button onClick={handleSendOtp} disabled={saving || otpSending || !fullName.trim()}>
+                {otpSending ? 'Sending OTP...' : phoneNumber.trim() ? 'Verify & Add' : 'Add member'}
+              </Button>
+            </div>
+          </>
+        )}
+
+        {step === 'otp' && (
+          <div className="px-5 py-6 space-y-4">
+            <div className="flex items-center gap-3 rounded-xl bg-surface p-4">
+              <Shield size={24} className="text-accent-ink shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-ink-900">OTP sent to {phoneNumber}</p>
+                <p className="text-xs text-ink-500">
+                  {hasExistingAccount
+                    ? 'This number belongs to an existing user. After verification, an approval request will be sent to them.'
+                    : 'Enter the 6-digit code to verify this phone number.'}
+                </p>
+              </div>
             </div>
 
             <div>
-              <label htmlFor="fm-relation" className="mb-1 block text-[11px] font-semibold text-ink-700">
-                Relation <span className="text-danger">*</span>
-              </label>
-              <select id="fm-relation" value={relation} onChange={(e) => setRelation(e.target.value)} className={FIELD}>
-                {RELATIONS.map(([v, label]) => (
-                  <option key={v} value={v}>{label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="fm-phone" className="mb-1 block text-[11px] font-semibold text-ink-700">
-                Phone number {isChild && <span className="text-ink-400 font-normal">(optional for children)</span>}
-              </label>
-              <input id="fm-phone" type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. 9876543210" className={FIELD} />
-            </div>
-
-            <div>
-              <label htmlFor="fm-dob" className="mb-1 block text-[11px] font-semibold text-ink-700">Date of birth (or enter age below)</label>
-              {/* Capped at today, and the server rejects a future date too. */}
-              <input id="fm-dob" type="date" max={todayIso()} value={dob} onChange={(e) => setDob(e.target.value)} className={FIELD} />
-            </div>
-
-            <div>
-              <label htmlFor="fm-age" className="mb-1 block text-[11px] font-semibold text-ink-700">
-                Age (years)
-              </label>
-              {/* Alternative to date of birth, for when the exact date isn't known.
-                  Ignored if date of birth is also filled in. */}
+              <label htmlFor="fm-otp" className="mb-1 block text-[11px] font-semibold text-ink-700">Enter OTP</label>
               <input
-                id="fm-age"
-                type="number"
-                min={0}
-                max={130}
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                placeholder="e.g. 45"
-                className={FIELD}
+                id="fm-otp"
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                placeholder="6-digit code"
+                className={`${FIELD} text-center text-lg tracking-[0.3em]`}
+                autoFocus
               />
             </div>
 
-            <div>
-              <label htmlFor="fm-gender" className="mb-1 block text-[11px] font-semibold text-ink-700">Gender</label>
-              <select id="fm-gender" value={gender} onChange={(e) => setGender(e.target.value)} className={FIELD}>
-                <option value="">Not specified</option>
-                {GENDERS.map(([v, label]) => (
-                  <option key={v} value={v}>{label}</option>
-                ))}
-              </select>
-            </div>
+            <button onClick={handleResendOtp} disabled={otpSending} className="text-xs text-accent-ink hover:underline disabled:opacity-50">
+              {otpSending ? 'Sending...' : 'Resend OTP'}
+            </button>
 
-            <div>
-              <label htmlFor="fm-blood" className="mb-1 block text-[11px] font-semibold text-ink-700">Blood group</label>
-              <select id="fm-blood" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value)} className={FIELD}>
-                <option value="">Not known</option>
-                {BLOOD_GROUPS.map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
+            {error && <p className="text-xs text-danger">{error}</p>}
 
-            <div>
-              <label htmlFor="fm-height" className="mb-1 block text-[11px] font-semibold text-ink-700">Height (cm)</label>
-              <input id="fm-height" type="number" min={1} max={300} value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="170" className={FIELD} />
-            </div>
-
-            <div>
-              <label htmlFor="fm-weight" className="mb-1 block text-[11px] font-semibold text-ink-700">Weight (kg)</label>
-              <input id="fm-weight" type="number" min={1} max={500} value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="65" className={FIELD} />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label htmlFor="fm-lang" className="mb-1 block text-[11px] font-semibold text-ink-700">Preferred language</label>
-              <select id="fm-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={FIELD}>
-                {LANGUAGES.map((l) => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
+            <div className="flex gap-2 pt-2">
+              <Button variant="ghost" onClick={() => { setStep('details'); setError(''); }} disabled={otpVerifying}>Back</Button>
+              <Button onClick={handleVerifyOtp} disabled={otpVerifying || otp.length < 6} className="flex-1">
+                {otpVerifying || saving ? 'Verifying...' : 'Verify & Continue'}
+              </Button>
             </div>
           </div>
+        )}
 
-          <div className="border-t border-border pt-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Allergies</p>
-              <button
-                onClick={() => setAllergies((l) => [...l, { kind: 'drug', substance: '', reaction: '' }])}
-                className="flex items-center gap-1 text-xs font-medium text-accent-ink"
-              >
-                <Plus size={13} /> Add allergy
-              </button>
+        {step === 'done' && pendingApproval && (
+          <div className="px-5 py-8 text-center space-y-4">
+            <div className="mx-auto w-14 h-14 rounded-full bg-warning/10 flex items-center justify-center">
+              <Clock size={28} className="text-warning" />
             </div>
-            {allergies.length === 0 ? (
-              <p className="mt-1 text-xs text-ink-500">None recorded. You can add these later too.</p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {allergies.map((a, i) => (
-                  <div key={i} className="grid grid-cols-1 sm:grid-cols-[7rem_1fr_1fr_auto] gap-2">
-                    <select value={a.kind} onChange={(e) => updateAllergy(i, { kind: e.target.value })} className={FIELD} aria-label={`Allergy ${i + 1} type`}>
-                      {ALLERGY_KINDS.map(([v, label]) => (
-                        <option key={v} value={v}>{label}</option>
-                      ))}
-                    </select>
-                    <input value={a.substance} onChange={(e) => updateAllergy(i, { substance: e.target.value })} placeholder="Substance" aria-label={`Allergy ${i + 1} substance`} className={FIELD} />
-                    <input value={a.reaction} onChange={(e) => updateAllergy(i, { reaction: e.target.value })} placeholder="Reaction (optional)" aria-label={`Allergy ${i + 1} reaction`} className={FIELD} />
-                    <button
-                      onClick={() => setAllergies((l) => l.filter((_, idx) => idx !== i))}
-                      aria-label={`Remove allergy ${i + 1}`}
-                      className="rounded-lg px-2 text-ink-500 hover:bg-surface"
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div>
+              <p className="text-sm font-semibold text-ink-900">Approval request sent</p>
+              <p className="text-xs text-ink-500 mt-1">
+                The owner of {phoneNumber} needs to approve your request.
+                Once approved, they'll appear in your family members.
+              </p>
+            </div>
+            <Button onClick={onClose} className="mx-auto">Done</Button>
           </div>
-
-          {error && <p className="text-xs text-danger">{error}</p>}
-        </div>
-
-        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-card px-5 py-3">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !fullName.trim()}>
-            {saving ? 'Adding...' : 'Add member'}
-          </Button>
-        </div>
+        )}
       </div>
     </div>
   );

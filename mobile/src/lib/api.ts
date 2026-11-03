@@ -233,6 +233,17 @@ export const profilesApi = {
     api.post(`/profiles/${profileId}/ask/`, { question }),
 };
 
+export const familyApi = {
+  verifyPhone: (phone_number: string) => api.post('/verify-phone/', { phone_number }),
+  confirmPhone: (phone_number: string, otp: string) => api.post('/confirm-phone/', { phone_number, otp }),
+  createMember: (data: Record<string, unknown>) => api.post('/create-member/', data),
+  linkRequests: (direction: 'sent' | 'received' = 'received') =>
+    api.get('/link-requests/', { params: { direction } }),
+  respondToRequest: (id: string, action: 'approve' | 'deny') =>
+    api.post(`/link-requests/${id}/respond/`, { action }),
+  tree: () => api.get('/tree/'),
+};
+
 export const documentsApi = {
   list: (profileId: string, category?: string) =>
     api.get('/documents/', { params: { profile_id: profileId, category: category || undefined } }),

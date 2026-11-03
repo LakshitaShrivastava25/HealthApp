@@ -71,6 +71,7 @@ class Profile(models.Model):
     gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
     blood_group = models.CharField(max_length=5, blank=True)
     phone_number = models.CharField(max_length=15, blank=True)
+    phone_verified = models.BooleanField(default=False)
     height_cm = models.PositiveSmallIntegerField(null=True, blank=True)
     weight_kg = models.PositiveSmallIntegerField(null=True, blank=True)
     preferred_language = models.CharField(max_length=30, default='English')
@@ -97,6 +98,44 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"{self.full_name} ({self.relation})"
+
+
+class FamilyLinkRequest(models.Model):
+    """
+    When a user adds a family member whose phone number belongs to an
+    existing Account, a link request is created instead of a direct
+    profile.  The owner of that phone must approve before the requesting
+    account can see them in their family tree.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        APPROVED = 'approved', 'Approved'
+        DENIED = 'denied', 'Denied'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    from_account = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_link_requests',
+    )
+    to_account = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='received_link_requests',
+    )
+    to_phone = models.CharField(max_length=15)
+    relation = models.CharField(max_length=20, choices=Profile.Relation.choices)
+    profile_data = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    linked_profile = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='link_request',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.from_account} → {self.to_phone} ({self.status})"
 
 
 class AllergyRecord(models.Model):

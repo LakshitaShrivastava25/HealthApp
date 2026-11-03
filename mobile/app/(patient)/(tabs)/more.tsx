@@ -38,6 +38,12 @@ const CARE: Item[] = [
     note: 'A scannable QR for paramedics — you choose what it shows',
     href: '/(patient)/emergency',
   },
+  {
+    icon: 'thermometer',
+    label: 'Lab Tests',
+    note: 'Blood banks, pathology labs and test bookings',
+    href: '/(patient)/lab-tests',
+  },
 ];
 
 const ACCOUNT: Item[] = [

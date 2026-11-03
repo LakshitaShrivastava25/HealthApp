@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'doctors',
     'admin_portal',
     'push',
+    'labs',
 ]
 
 MIDDLEWARE = [

@@ -259,8 +259,12 @@ function AddFamilyMemberModal({
   const [bloodGroup, setBloodGroup] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [weightKg, setWeightKg] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [language, setLanguage] = useState('English');
   const [allergies, setAllergies] = useState<AllergyDraft[]>([]);
+
+  const isChild = (relation === 'son' || relation === 'daughter') &&
+    (dob ? new Date().getFullYear() - new Date(dob).getFullYear() < 18 : !age || Number(age) < 18);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -295,6 +299,7 @@ function AddFamilyMemberModal({
         ...(dob ? { date_of_birth: dob } : age ? { date_of_birth: ageToDob(Number(age)) } : {}),
         ...(gender ? { gender } : {}),
         ...(bloodGroup ? { blood_group: bloodGroup } : {}),
+        ...(phoneNumber.trim() ? { phone_number: phoneNumber.trim() } : {}),
         ...(heightCm ? { height_cm: Number(heightCm) } : {}),
         ...(weightKg ? { weight_kg: Number(weightKg) } : {}),
         preferred_language: language,
@@ -365,6 +370,13 @@ function AddFamilyMemberModal({
                   <option key={v} value={v}>{label}</option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label htmlFor="fm-phone" className="mb-1 block text-[11px] font-semibold text-ink-700">
+                Phone number {isChild && <span className="text-ink-400 font-normal">(optional for children)</span>}
+              </label>
+              <input id="fm-phone" type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. 9876543210" className={FIELD} />
             </div>
 
             <div>

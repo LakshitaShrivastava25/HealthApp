@@ -33,6 +33,7 @@ type Medication = {
   instructions: string;
   frequency: string;
   is_active: boolean;
+  start_date: string | null;
   end_date: string | null;
   reminders: Reminder[];
   generic_name: string;
@@ -77,6 +78,19 @@ function formatDate(iso: string | null) {
   if (!iso) return '';
   const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function medicineDateLabel(startDate: string | null, endDate: string | null): string {
+  if (!startDate) return '';
+  const start = formatDate(startDate);
+  if (endDate) {
+    const diffMs = new Date(endDate).getTime() - new Date(startDate).getTime();
+    const days = Math.round(diffMs / 86400000);
+    return `${start} – ${formatDate(endDate)} · ${days} day${days !== 1 ? 's' : ''}`;
+  }
+  const diffMs = Date.now() - new Date(startDate).getTime();
+  const days = Math.round(diffMs / 86400000);
+  return `Since ${start} · ${days} day${days !== 1 ? 's' : ''}`;
 }
 
 function doctorLabel(name: string) {
@@ -163,6 +177,7 @@ export default function Medicines() {
         dosage: newDosage,
         instructions: newInstructions,
         frequency: newFrequency,
+        start_date: new Date().toISOString().slice(0, 10),
       });
       if (newTime) {
         await medicinesApi.addReminder(medication.id, newTime);
@@ -390,6 +405,7 @@ function MedicineCard({
           )}
           {details && <p className="text-xs text-ink-500 mt-0.5">{details}</p>}
           {m.frequency && <p className="text-xs text-ink-300 mt-0.5">{m.frequency}</p>}
+          {m.start_date && <p className="text-xs text-ink-400 mt-0.5">{medicineDateLabel(m.start_date, m.end_date)}</p>}
           {m.status_reason && <p className="text-xs text-ink-700 mt-2 leading-relaxed">{m.status_reason}</p>}
         </div>
         {m.is_active && m.reminders.length > 0 && (

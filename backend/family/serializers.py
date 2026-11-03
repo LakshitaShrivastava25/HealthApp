@@ -11,8 +11,8 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'id', 'full_name', 'relation', 'date_of_birth', 'gender',
-            'blood_group', 'height_cm', 'weight_kg', 'preferred_language',
-            'reference_code', 'initials', 'created_at',
+            'blood_group', 'phone_number', 'height_cm', 'weight_kg',
+            'preferred_language', 'reference_code', 'initials', 'created_at',
         ]
         # reference_code is generated server-side and is the identifier a
         # patient shares — never something a client gets to choose.

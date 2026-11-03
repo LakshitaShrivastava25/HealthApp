@@ -15,6 +15,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from family.models import Notification
+from push.services import notify_account
 
 # Same threshold the frontend already uses to turn a due date red, so a
 # person doesn't get notified on a different schedule from what the UI
@@ -29,18 +30,24 @@ RUN_INTERVAL_MINUTES = 5
 WEEKDAY_ABBR = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 
+ONBOARDING_SCHEDULE_DAYS = [1, 3, 7]
+MAX_ONBOARDING_REMINDERS = 3
+
+
 class Command(BaseCommand):
-    help = "Generate premium-due and medicine-reminder notifications."
+    help = "Generate premium-due, medicine-reminder, and onboarding notifications."
 
     def handle(self, *args, **options):
         now = timezone.localtime()
         premium_created = self._generate_premium_due(now)
         medicine_created = self._generate_medicine_reminders(now)
+        onboarding_created = self._generate_onboarding_reminders(now)
 
-        total = premium_created + medicine_created
+        total = premium_created + medicine_created + onboarding_created
         self.stdout.write(
             f"premium_due notifications created:       {premium_created}\n"
             f"medicine_reminder notifications created: {medicine_created}\n"
+            f"onboarding notifications created:        {onboarding_created}\n"
             f"total created:                           {total}"
         )
 
@@ -168,3 +175,80 @@ class Command(BaseCommand):
         if spec in ('', 'daily'):
             return True
         return today_abbr in [d.strip() for d in spec.split(',')]
+
+    # -- onboarding reminders (profile completion & document upload) -----
+    def _generate_onboarding_reminders(self, now):
+        from accounts.models import Account
+        from documents.models import Document
+        from family.models import Profile
+
+        today = now.date()
+        created = 0
+
+        for day_offset in ONBOARDING_SCHEDULE_DAYS:
+            target_date = today - timedelta(days=day_offset)
+            accounts = Account.objects.filter(
+                date_joined__date=target_date,
+                is_active=True,
+            )
+            for account in accounts:
+                self_profile = Profile.objects.filter(
+                    account=account, relation='self'
+                ).first()
+                if not self_profile:
+                    continue
+
+                # Profile incomplete: missing key health fields
+                profile_incomplete = not all([
+                    self_profile.blood_group,
+                    self_profile.height_cm,
+                    self_profile.weight_kg,
+                    self_profile.date_of_birth,
+                ])
+                if profile_incomplete:
+                    already = Notification.objects.filter(
+                        profile=self_profile,
+                        notification_type=Notification.Type.PROFILE_INCOMPLETE,
+                    ).count()
+                    if already < MAX_ONBOARDING_REMINDERS:
+                        title = 'Complete your health profile'
+                        message = (
+                            'Your CuraPath profile is missing some details '
+                            '(blood group, height, weight). Complete it to '
+                            'get the most from your health records.'
+                        )
+                        Notification.objects.create(
+                            profile=self_profile,
+                            notification_type=Notification.Type.PROFILE_INCOMPLETE,
+                            title=title,
+                            message=message,
+                        )
+                        notify_account(account, title, message,
+                                       {'type': 'profile_incomplete'})
+                        created += 1
+
+                # No documents uploaded
+                has_docs = Document.objects.filter(profile=self_profile).exists()
+                if not has_docs:
+                    already = Notification.objects.filter(
+                        profile=self_profile,
+                        notification_type=Notification.Type.NO_DOCUMENTS,
+                    ).count()
+                    if already < MAX_ONBOARDING_REMINDERS:
+                        title = 'Upload your medical documents'
+                        message = (
+                            "You haven't uploaded any medical documents yet. "
+                            "Add your bills, insurance, or reports to keep "
+                            "your health records complete."
+                        )
+                        Notification.objects.create(
+                            profile=self_profile,
+                            notification_type=Notification.Type.NO_DOCUMENTS,
+                            title=title,
+                            message=message,
+                        )
+                        notify_account(account, title, message,
+                                       {'type': 'no_documents'})
+                        created += 1
+
+        return created

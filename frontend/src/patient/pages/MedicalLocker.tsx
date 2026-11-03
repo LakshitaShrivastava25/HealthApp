@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Search, UploadCloud, FileText, ShieldCheck, FolderHeart } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
+import ECGProgressBar from '../components/ECGProgressBar';
 import DocumentDetailModal from '../components/DocumentDetailModal';
 import { useAuth } from '../context/AuthContext';
 import { documentsApi } from '../lib/api';
@@ -52,6 +53,8 @@ export default function MedicalLocker() {
   );
   const [loadError, setLoadError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadComplete, setUploadComplete] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,9 +84,12 @@ export default function MedicalLocker() {
     const file = e.target.files?.[0];
     if (!file || !activeProfile) return;
     setUploading(true);
+    setUploadProgress(0);
+    setUploadComplete(false);
     setUploadNotice(null);
     try {
-      const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other');
+      const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other', (pct) => setUploadProgress(pct / 100));
+      setUploadComplete(true);
       await documentsChanged();
       if (data?.upload?.outcome === 'exact_duplicate') {
         // The same file (under any name) is already here: nothing was added
@@ -175,6 +181,15 @@ export default function MedicalLocker() {
             </button>
           ))}
         </div>
+
+        {uploading && (
+          <Card className="mb-5">
+            <ECGProgressBar progress={uploadProgress} isComplete={uploadComplete} />
+            <p className="text-center text-xs text-ink-500">
+              {uploadComplete ? 'Upload complete — processing your document…' : 'Uploading your document…'}
+            </p>
+          </Card>
+        )}
 
         {loadError && <p className="mb-4 text-sm text-danger" role="alert">{loadError}</p>}
 

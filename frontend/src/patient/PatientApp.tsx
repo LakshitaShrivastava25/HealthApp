@@ -15,6 +15,7 @@ const FindCare = lazyPage('patient', () => import('./pages/FindCare'));
 const EmergencyCard = lazyPage('patient', () => import('./pages/EmergencyCard'));
 const DoctorAccess = lazyPage('patient', () => import('./pages/DoctorAccess'));
 const Settings = lazyPage('patient', () => import('./pages/Settings'));
+const LabTests = lazyPage('patient', () => import('./pages/LabTests'));
 const ComingSoon = lazyPage('patient', () => import('./pages/ComingSoon'));
 const HelpSupport = lazyPage('patient', () => import('./pages/HelpSupport'));
 
@@ -53,6 +54,7 @@ export default function patientRoutes() {
         <Route path="insurance" element={<Insurance />} />
         <Route path="medicines" element={<Medicines />} />
         <Route path="find-care" element={<FindCare />} />
+        <Route path="lab-tests" element={<LabTests />} />
         <Route path="emergency" element={<EmergencyCard />} />
         <Route path="doctor-access" element={<DoctorAccess />} />
         <Route path="settings" element={<Settings />} />

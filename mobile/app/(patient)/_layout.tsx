@@ -39,6 +39,7 @@ export default function PatientLayout() {
       <Stack.Screen name="emergency" options={{ title: 'Emergency Card' }} />
       <Stack.Screen name="doctor-access" options={{ title: 'Doctor Access' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+      <Stack.Screen name="lab-tests" options={{ title: 'Lab Tests' }} />
       <Stack.Screen name="help" options={{ title: 'Help & Support' }} />
       <Stack.Screen name="document/[id]" options={{ title: 'Document' }} />
     </Stack>

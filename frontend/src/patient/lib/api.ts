@@ -64,13 +64,20 @@ export const documentsApi = {
   list: (profileId: string, category?: string) =>
     api.get('/documents/', { params: { profile_id: profileId, category } }),
   get: (id: string) => api.get(`/documents/${id}/`),
-  upload: (profileId: string, file: File, category: string) => {
+  upload: (profileId: string, file: File, category: string, onProgress?: (pct: number) => void) => {
     const form = new FormData();
     form.append('profile', profileId);
     form.append('file', file);
     form.append('category', category);
     form.append('title', file.name);
-    return api.post('/documents/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post('/documents/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress
+        ? (e: { loaded: number; total?: number }) => {
+            if (e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        : undefined,
+    });
   },
   // Re-runs the AI pipeline on a document whose processing failed. The
   // file is already stored, so a retry costs only the call.
@@ -176,4 +183,22 @@ export const emergencyApi = {
 
 export const doctorsApi = {
   list: () => api.get('/doctors/'),
+};
+
+export const labsApi = {
+  providers: (params?: { type?: string; city?: string; pincode?: string }) =>
+    api.get('/labs/providers/', { params }),
+  provider: (id: string) => api.get(`/labs/providers/${id}/`),
+  tests: (params?: { provider?: string; search?: string; category?: string }) =>
+    api.get('/labs/tests/', { params }),
+  bookings: () => api.get('/labs/bookings/'),
+  createBooking: (data: {
+    profile: string;
+    test_offering: string;
+    booking_type: string;
+    address?: string;
+    preferred_time_slot?: string;
+  }) => api.post('/labs/bookings/', data),
+  cancelBooking: (id: string) =>
+    api.patch(`/labs/bookings/${id}/status/`, { status: 'cancelled' }),
 };

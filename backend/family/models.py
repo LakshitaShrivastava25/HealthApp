@@ -70,6 +70,7 @@ class Profile(models.Model):
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
     blood_group = models.CharField(max_length=5, blank=True)
+    phone_number = models.CharField(max_length=15, blank=True)
     height_cm = models.PositiveSmallIntegerField(null=True, blank=True)
     weight_kg = models.PositiveSmallIntegerField(null=True, blank=True)
     preferred_language = models.CharField(max_length=30, default='English')
@@ -138,6 +139,8 @@ class Notification(models.Model):
     class Type(models.TextChoices):
         PREMIUM_DUE = 'premium_due', 'Premium Due'
         MEDICINE_REMINDER = 'medicine_reminder', 'Medicine Reminder'
+        PROFILE_INCOMPLETE = 'profile_incomplete', 'Profile Incomplete'
+        NO_DOCUMENTS = 'no_documents', 'No Documents Uploaded'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='notifications')

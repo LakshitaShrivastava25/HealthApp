@@ -237,11 +237,18 @@ export const documentsApi = {
   list: (profileId: string, category?: string) =>
     api.get('/documents/', { params: { profile_id: profileId, category: category || undefined } }),
   get: (id: string) => api.get(`/documents/${id}/`),
-  upload: (profileId: string, file: UploadFile, category: string) =>
+  upload: (profileId: string, file: UploadFile, category: string, onProgress?: (pct: number) => void) =>
     api.post(
       '/documents/',
       fileForm(file, { profile: profileId, category, title: file.name }),
-      MULTIPART
+      {
+        ...MULTIPART,
+        onUploadProgress: onProgress
+          ? (e: { loaded: number; total?: number }) => {
+              if (e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+            }
+          : undefined,
+      },
     ),
   // Review-screen edits, then an explicit confirm — the only transition to
   // PROCESSED (same flow as the website's DocumentDetailModal).
@@ -344,6 +351,24 @@ export const doctorAccessApi = {
 
 export const doctorsApi = {
   list: () => api.get('/doctors/'),
+};
+
+export const labsApi = {
+  providers: (params?: { type?: string; city?: string; pincode?: string }) =>
+    api.get('/labs/providers/', { params }),
+  provider: (id: string) => api.get(`/labs/providers/${id}/`),
+  tests: (params?: { provider?: string; search?: string; category?: string }) =>
+    api.get('/labs/tests/', { params }),
+  bookings: () => api.get('/labs/bookings/'),
+  createBooking: (data: {
+    profile: string;
+    test_offering: string;
+    booking_type: string;
+    address?: string;
+    preferred_time_slot?: string;
+  }) => api.post('/labs/bookings/', data),
+  cancelBooking: (id: string) =>
+    api.patch(`/labs/bookings/${id}/status/`, { status: 'cancelled' }),
 };
 
 // -- doctor portal --------------------------------------------------------

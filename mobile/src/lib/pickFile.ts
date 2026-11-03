@@ -1,4 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
 
@@ -14,6 +15,8 @@ import type { UploadFile } from './api';
  */
 
 const ACCEPTED = ['application/pdf', 'image/jpeg', 'image/png'];
+const MAX_DIMENSION = 1920;
+const JPEG_QUALITY = 0.83;
 
 function guessMimeFromName(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -30,6 +33,32 @@ function nameFor(uri: string, fallbackExt: string, given?: string | null) {
   return `upload-${Date.now()}.${fallbackExt}`;
 }
 
+/**
+ * Resize + compress an image so it stays readable but doesn't bloat the
+ * upload. Medical documents need text clarity, so quality stays >= 83%.
+ */
+async function compressImage(asset: ImagePicker.ImagePickerAsset): Promise<ImagePicker.ImagePickerAsset> {
+  const { width, height } = asset;
+  const needsResize = width > MAX_DIMENSION || height > MAX_DIMENSION;
+
+  const actions: ImageManipulator.Action[] = [];
+  if (needsResize) {
+    if (width >= height) {
+      actions.push({ resize: { width: MAX_DIMENSION } });
+    } else {
+      actions.push({ resize: { height: MAX_DIMENSION } });
+    }
+  }
+
+  const result = await ImageManipulator.manipulateAsync(
+    asset.uri,
+    actions,
+    { compress: JPEG_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
+  );
+
+  return { ...asset, uri: result.uri, width: result.width, height: result.height };
+}
+
 export async function pickFromCamera(): Promise<UploadFile | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) {
@@ -41,11 +70,11 @@ export async function pickFromCamera(): Promise<UploadFile | null> {
   }
   const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
   if (result.canceled || !result.assets?.length) return null;
-  const asset = result.assets[0];
+  const asset = await compressImage(result.assets[0]);
   return {
     uri: asset.uri,
     name: nameFor(asset.uri, 'jpg', asset.fileName),
-    type: asset.mimeType ?? 'image/jpeg',
+    type: 'image/jpeg',
   };
 }
 
@@ -57,11 +86,11 @@ export async function pickFromLibrary(): Promise<UploadFile | null> {
   }
   const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 });
   if (result.canceled || !result.assets?.length) return null;
-  const asset = result.assets[0];
+  const asset = await compressImage(result.assets[0]);
   return {
     uri: asset.uri,
     name: nameFor(asset.uri, 'jpg', asset.fileName),
-    type: asset.mimeType ?? 'image/jpeg',
+    type: 'image/jpeg',
   };
 }
 

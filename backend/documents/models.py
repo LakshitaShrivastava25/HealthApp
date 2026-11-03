@@ -53,6 +53,7 @@ class Document(models.Model):
     original_filename = models.CharField(max_length=255, blank=True)
     file_sha256 = models.CharField(max_length=64, blank=True, db_index=True)
     file_size = models.PositiveIntegerField(null=True, blank=True)
+    original_file_size = models.PositiveIntegerField(null=True, blank=True)
     # One hash per page of normalised extracted text ('' for a blank page).
     page_fingerprints = models.JSONField(default=list, blank=True)
     # Set on a verified copy of another document. A copy keeps its file but

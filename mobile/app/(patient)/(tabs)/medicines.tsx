@@ -35,6 +35,8 @@ type Medication = {
   instructions: string;
   frequency: string;
   is_active: boolean;
+  start_date: string | null;
+  end_date: string | null;
   reminders: Reminder[];
   generic_name: string;
   brand_names: string[];
@@ -84,6 +86,19 @@ function formatDate(iso: string | null) {
   return `${d} ${months[m - 1]} ${y}`;
 }
 
+function medicineDateLabel(startDate: string | null, endDate: string | null): string {
+  if (!startDate) return '';
+  const start = formatDate(startDate);
+  if (endDate) {
+    const diffMs = new Date(endDate).getTime() - new Date(startDate).getTime();
+    const days = Math.round(diffMs / 86400000);
+    return `${start} – ${formatDate(endDate)} · ${days} day${days !== 1 ? 's' : ''}`;
+  }
+  const diffMs = Date.now() - new Date(startDate).getTime();
+  const days = Math.round(diffMs / 86400000);
+  return `Since ${start} · ${days} day${days !== 1 ? 's' : ''}`;
+}
+
 function doctorLabel(name: string) {
   if (!name) return '';
   return /^dr\b/i.test(name) ? name : `Dr ${name}`;
@@ -111,6 +126,8 @@ export default function Medicines() {
   const [dosage, setDosage] = useState('');
   const [instructions, setInstructions] = useState('');
   const [frequency, setFrequency] = useState('daily');
+  const [startDate, setStartDate] = useState(todayIso());
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [reminderTime, setReminderTime] = useState(new Date(new Date().setHours(8, 0, 0, 0)));
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -182,6 +199,7 @@ export default function Medicines() {
         dosage: dosage.trim(),
         instructions: instructions.trim(),
         frequency: frequency.trim() || 'daily',
+        start_date: startDate || todayIso(),
       }));
     } catch {
       setFormError("Couldn't save that medicine. Check your connection and try again.");
@@ -204,6 +222,7 @@ export default function Medicines() {
     setDosage('');
     setInstructions('');
     setFrequency('daily');
+    setStartDate(todayIso());
     setShowForm(false);
     setSaving(false);
     await load();
@@ -280,6 +299,27 @@ export default function Medicines() {
             placeholder="e.g. After food"
           />
           <Input label="Frequency" value={frequency} onChangeText={setFrequency} placeholder="e.g. daily" />
+
+          <Text style={[type.caption, { marginBottom: spacing.xs }]}>Start date</Text>
+          <Pressable style={styles.timeButton} onPress={() => setShowStartDatePicker(true)}>
+            <Feather name="calendar" size={15} color={colors.brandPurple} />
+            <Text style={type.label}>{formatDate(startDate)}</Text>
+          </Pressable>
+          {showStartDatePicker && (
+            <DateTimePicker
+              value={new Date(startDate + 'T00:00:00')}
+              mode="date"
+              maximumDate={new Date()}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_event, selected) => {
+                if (Platform.OS !== 'ios') setShowStartDatePicker(false);
+                if (selected) {
+                  const pad = (n: number) => String(n).padStart(2, '0');
+                  setStartDate(`${selected.getFullYear()}-${pad(selected.getMonth() + 1)}-${pad(selected.getDate())}`);
+                }
+              }}
+            />
+          )}
 
           <Text style={[type.caption, { marginBottom: spacing.xs }]}>Reminder time</Text>
           <Pressable style={styles.timeButton} onPress={() => setShowTimePicker(true)}>
@@ -400,6 +440,11 @@ function MedicineCard({
             {[m.dosage, m.instructions].filter(Boolean).join(' · ') || 'No dosage recorded'}
           </Text>
           {!!m.frequency && <Text style={type.micro}>{m.frequency}</Text>}
+          {!!m.start_date && (
+            <Text style={[type.micro, { color: colors.ink500 }]}>
+              {medicineDateLabel(m.start_date, m.end_date)}
+            </Text>
+          )}
         </View>
       </Row>
       <View style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }}>

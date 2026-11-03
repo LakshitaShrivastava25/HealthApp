@@ -44,8 +44,12 @@ export default function AddFamilyMemberForm({
   const [bloodGroup, setBloodGroup] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [weightKg, setWeightKg] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [language, setLanguage] = useState('English');
   const [allergies, setAllergies] = useState<AllergyDraft[]>([]);
+
+  const isChild = (relation === 'son' || relation === 'daughter') &&
+    (dob ? new Date().getFullYear() - new Date(dob).getFullYear() < 18 : true);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +73,7 @@ export default function AddFamilyMemberForm({
         ...(dob ? { date_of_birth: dob } : {}),
         ...(gender ? { gender } : {}),
         ...(bloodGroup ? { blood_group: bloodGroup } : {}),
+        ...(phoneNumber.trim() ? { phone_number: phoneNumber.trim() } : {}),
         ...(heightCm.trim() ? { height_cm: Number(heightCm) } : {}),
         ...(weightKg.trim() ? { weight_kg: Number(weightKg) } : {}),
         preferred_language: language,
@@ -116,6 +121,14 @@ export default function AddFamilyMemberForm({
       />
 
       <ChipSelect label="Relation *" options={RELATIONS} value={relation} onChange={setRelation} />
+
+      <Input
+        label={isChild ? 'Phone number (optional for children)' : 'Phone number'}
+        value={phoneNumber}
+        onChangeText={setPhoneNumber}
+        placeholder="e.g. 9876543210"
+        keyboardType="phone-pad"
+      />
 
       {/* Capped at today; the server rejects a future date of birth too. */}
       <DateField

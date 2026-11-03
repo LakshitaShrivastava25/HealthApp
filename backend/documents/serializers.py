@@ -17,12 +17,14 @@ class DocumentSerializer(serializers.ModelSerializer):
             'id', 'profile', 'file', 'file_type', 'title', 'category', 'status',
             'doctor_name', 'hospital_name', 'document_date',
             'structured_data', 'uploaded_at', 'processed_at',
-            'original_filename', 'duplicate_of', 'duplicate_kind',
+            'original_filename', 'file_size', 'original_file_size',
+            'duplicate_of', 'duplicate_kind',
             'possible_duplicate', 'copies', 'upload_history',
         ]
         read_only_fields = [
             'id', 'status', 'structured_data', 'uploaded_at', 'processed_at',
-            'original_filename', 'duplicate_of', 'duplicate_kind',
+            'original_filename', 'file_size', 'original_file_size',
+            'duplicate_of', 'duplicate_kind',
         ]
         # PDFs and photos only, checked by content (documents/validators.py).
         extra_kwargs = {'file': {'validators': [validate_upload]}}

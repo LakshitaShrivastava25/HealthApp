@@ -38,6 +38,7 @@ export type Profile = {
   blood_group?: string;
   date_of_birth?: string | null;
   gender?: string;
+  phone_number?: string;
   height_cm?: number | null;
   weight_kg?: number | null;
   preferred_language?: string;
@@ -308,9 +309,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         doctorRef.current = cached.doctor ?? null;
         setAccount(cached.account);
         setProfiles(cachedProfiles);
-        // The family member viewed last time, not always the first one.
-        const rememberedId = await rememberedActiveProfile(cached.account.id);
-        setActiveProfileState(cachedProfiles.find((p) => p.id === rememberedId) ?? cachedProfiles[0] ?? null);
+        // Always open on the primary user's own profile, not the last-viewed
+        // family member — switching is a temporary in-session action (Feature 4).
+        const selfProfile = cachedProfiles.find((p) => p.relation === 'self');
+        setActiveProfileState(selfProfile ?? cachedProfiles[0] ?? null);
         setDoctor(cached.doctor ?? null);
         setHasRegistered(!!cached.doctor);
         if (!STAFF_ROLES.includes(cached.account.role)) {

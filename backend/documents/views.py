@@ -1,6 +1,8 @@
 import logging
+import threading
 
-from django.db import transaction
+from django.conf import settings
+from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -14,6 +16,7 @@ from doctors.access import acting_doctor, readable_profile_ids
 from family.models import Profile
 from family.permissions import assert_owns_profile, profile_id_param
 from medicines.consolidation import rebuild_profile_medications
+from .compression import compress_uploaded_image
 from .derived import rebuild_derived_records
 from .duplicates import file_digest, find_exact_original
 from .models import Document, DocumentUpload, TimelineEvent
@@ -25,6 +28,35 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _process_document_background(document_pk):
+    """Run OCR + Claude extraction in a background thread.
+
+    Uses its own DB connection (Django closes the request's connection
+    after the response is sent, so the request's connection is gone by the
+    time this runs). The thread is a stopgap until Celery is provisioned.
+    """
+    in_test = getattr(settings, 'TESTING', False)
+    try:
+        doc = Document.objects.get(pk=document_pk)
+        try:
+            ClaudeService().process_document(doc)
+        except Exception:
+            logger.exception('process_document crashed for document %s', document_pk)
+            doc.status = Document.Status.NEEDS_REVIEW
+            doc.structured_data = {
+                '_extraction_failed': True,
+                'note': (
+                    'Your file was saved, but automatic processing failed unexpectedly. '
+                    'You can add the details yourself, or try again from the document screen.'
+                ),
+            }
+            doc.processed_at = timezone.now()
+            doc.save(update_fields=['status', 'structured_data', 'processed_at'])
+    finally:
+        if not in_test:
+            connection.close()
 
 
 class DocumentViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
@@ -81,6 +113,14 @@ class DocumentViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
         assert_owns_profile(request.user, profile)
 
         upload = serializer.validated_data['file']
+        content_type = getattr(upload, 'content_type', '') or ''
+        compressed, content_type, original_size, compressed_size = compress_uploaded_image(upload, content_type)
+
+        if compressed_size < original_size:
+            from django.core.files.uploadedfile import SimpleUploadedFile
+            upload = SimpleUploadedFile(upload.name, compressed, content_type=content_type)
+            serializer.validated_data['file'] = upload
+
         sha256, size = file_digest(upload)
         filename = (upload.name or '')[:255]
 
@@ -95,6 +135,7 @@ class DocumentViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
                     original_filename=filename,
                     file_sha256=sha256,
                     file_size=size,
+                    original_file_size=original_size,
                 )
             DocumentUpload.objects.create(
                 profile=profile,
@@ -118,22 +159,20 @@ class DocumentViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
             }
             return Response(data, status=status.HTTP_200_OK)
 
-        # TODO: move to a Celery task (documents/tasks.py) once Celery+Redis
-        # are provisioned, so upload doesn't block on OCR+Claude latency.
-        try:
-            ClaudeService().process_document(document)
-        except Exception:
-            logger.exception('process_document crashed for document %s', document.pk)
-            document.status = Document.Status.NEEDS_REVIEW
-            document.structured_data = {
-                '_extraction_failed': True,
-                'note': (
-                    'Your file was saved, but automatic processing failed unexpectedly. '
-                    'You can add the details yourself, or try again from the document screen.'
-                ),
-            }
-            document.processed_at = timezone.now()
-            document.save(update_fields=['status', 'structured_data', 'processed_at'])
+        # Run OCR + Claude extraction in a background thread so the upload
+        # returns immediately. The document lands with status=PROCESSING;
+        # the client polls or uses push notifications for the result.
+        # During tests, process synchronously so assertions can inspect the
+        # result without waiting for a thread.
+        if getattr(settings, 'TESTING', False):
+            _process_document_background(document.pk)
+        else:
+            threading.Thread(
+                target=_process_document_background,
+                args=(document.pk,),
+                daemon=True,
+            ).start()
+
         data = dict(self.get_serializer(self._fresh(document)).data)
         data['upload'] = {'outcome': DocumentUpload.Outcome.NEW}
         return Response(data, status=status.HTTP_201_CREATED, headers=self.get_success_headers(data))

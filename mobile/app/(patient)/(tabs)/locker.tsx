@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import { Badge, Card, EmptyState, ErrorNote, Row, Screen, Loading } from '../../../src/components/ui';
+import ECGProgressBar from '../../../src/components/ECGProgressBar';
 import { useAuth } from '../../../src/context/AuthContext';
 import { documentsApi, unwrap, type UploadFile } from '../../../src/lib/api';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../../src/lib/pickFile';
@@ -70,6 +71,8 @@ export default function Locker() {
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadComplete, setUploadComplete] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
@@ -109,10 +112,13 @@ export default function Locker() {
     if (!file || !activeProfile) return;
 
     setUploading(true);
+    setUploadProgress(0);
+    setUploadComplete(false);
     try {
       // Category follows the tab in view, matching the web app: uploading
       // from the Prescriptions tab files it as a prescription.
-      const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other');
+      const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other', (pct) => setUploadProgress(pct / 100));
+      setUploadComplete(true);
       await load();
       if (data?.upload?.outcome === 'exact_duplicate') {
         // The same file (under any name) is already in the locker: nothing
@@ -185,10 +191,10 @@ export default function Locker() {
 
         {uploading && (
           <Card>
-            <Row>
-              <ActivityIndicator color={colors.brandPurple} size="small" />
-              <Text style={type.caption}>Uploading and processing…</Text>
-            </Row>
+            <ECGProgressBar progress={uploadProgress} isComplete={uploadComplete} />
+            <Text style={[type.caption, { textAlign: 'center' }]}>
+              {uploadComplete ? 'Upload complete — processing your document…' : 'Uploading your document…'}
+            </Text>
           </Card>
         )}
 

@@ -224,6 +224,9 @@ export default function DoctorProfile() {
             mode="time"
             is24Hour
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            // Light-only app: without this the spinner's digits follow the
+            // system appearance and vanish against the card in Dark Mode.
+            themeVariant="light"
             onChange={(_e, selected) => {
               if (Platform.OS !== 'ios') setPicking(null);
               if (!selected) return;

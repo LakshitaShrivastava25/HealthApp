@@ -336,6 +336,9 @@ export default function Medicines() {
               mode="time"
               is24Hour
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              // Light-only app: without this the spinner's digits follow the
+              // system appearance and vanish against the card in Dark Mode.
+              themeVariant="light"
               onChange={(_event, selected) => {
                 // Android dismisses itself; iOS keeps the spinner mounted.
                 if (Platform.OS !== 'ios') setShowTimePicker(false);

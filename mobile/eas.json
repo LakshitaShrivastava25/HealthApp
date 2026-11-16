@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.0.0",
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
     "preview": {
@@ -15,12 +15,21 @@
       }
     },
     "production": {
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_USE_PRODUCTION_API": "true",
         "EXPO_PUBLIC_API_URL_PROD": "https://healthapp-backend-li7g.onrender.com/api"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6820794651",
+        "appleTeamId": "53XKYJ62P9"
       }
     }
   }

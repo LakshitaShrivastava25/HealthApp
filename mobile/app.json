@@ -7,9 +7,13 @@
     "scheme": "healthnow",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.bctpvtltd.curapath",
-      "icon": "./assets/images/icon.png"
+      "buildNumber": "2",
+      "icon": "./assets/images/icon.png",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.bctpvtltd.curapath",
@@ -66,9 +70,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "fcc1d7c0-5490-4589-bdb5-cc45f76699e1"
+        "projectId": "bc989c17-46da-4819-bf9d-20f5f48dd5a9"
       }
     },
-    "owner": "ayushdev14"
+    "owner": "bc_expo"
   }
 }

@@ -14,16 +14,7 @@ timeline entry even when no key is configured and nothing could be read out
 of it. Anything the extraction *did* find is added on top.
 """
 
-from datetime import date
-
-
-def _parse_iso_date(value):
-    if not value or not isinstance(value, str):
-        return None
-    try:
-        return date.fromisoformat(value.strip()[:10])
-    except ValueError:
-        return None
+from ai.dates import parse_ai_date as _parse_iso_date
 
 
 def _as_list(value):

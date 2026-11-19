@@ -193,12 +193,21 @@ REST_FRAMEWORK = {
         # Admin Portal email + password. Each credential also locks itself
         # for 15 minutes after 5 wrong passwords (accounts/services.py).
         'staff_login': os.getenv('THROTTLE_STAFF_LOGIN', '20/hour'),
+        # PIN sign-in. Generous on purpose: this counts per IP address, so
+        # a household behind one router — or one person mistyping a few
+        # times — must not be stopped before their PIN is even checked.
+        # The real guard is the per-account ladder in accounts/mpin.py
+        # (3 wrong -> 2 min, escalating, 15 tries total), which these
+        # counters cannot replace: they live in a per-process cache and so
+        # multiply by the worker count.
+        'mpin_login': os.getenv('THROTTLE_MPIN_LOGIN', '200/hour'),
+        'mpin_set': os.getenv('THROTTLE_MPIN_SET', '20/hour'),
     } if not TESTING else {
         # The suite makes hundreds of requests from one address; the
         # throttle tests set their own low rates.
         scope: '100000/hour'
         for scope in ('anon', 'user', 'otp_send', 'otp_verify', 'ai', 'uploads', 'access_requests', 'nmc_precheck',
-                      'staff_login')
+                      'staff_login', 'mpin_login', 'mpin_set')
     },
 }
 
@@ -289,6 +298,23 @@ MASTER_OTP = os.getenv('MASTER_OTP', '').strip()
 # cooldown and the attempt limit still apply. Leave either unset to turn it off.
 REVIEWER_PHONE = os.getenv('REVIEWER_PHONE', '').strip()
 REVIEWER_OTP = os.getenv('REVIEWER_OTP', '').strip()
+
+# --- App Lock (MPIN) ------------------------------------------------
+# The secret mixed into every MPIN hash. It lives here and never in the
+# database, so a stolen dump cannot be attacked offline — without it there
+# is nothing to test a guess against, and a 4-digit PIN has only ten
+# thousand of them. Required outside DEBUG, like DJANGO_SECRET_KEY above:
+# running without it would silently drop that protection.
+MPIN_PEPPER = os.getenv('MPIN_PEPPER', '').strip()
+if not MPIN_PEPPER:
+    if not (DEBUG or TESTING):
+        raise ImproperlyConfigured('Set MPIN_PEPPER to a long random value (DJANGO_DEBUG is off).')
+    MPIN_PEPPER = 'dev-insecure-mpin-pepper'
+
+# How long after an SMS sign-in a device may enrol for App Lock without
+# another code. The number was just proved; asking twice inside a few
+# minutes only costs an SMS.
+MPIN_SETUP_WINDOW_MINUTES = int(os.getenv('MPIN_SETUP_WINDOW_MINUTES', '15'))
 
 # Initial OTP mode ('sms' or 'master') used only when the OTPConfig row is
 # first created. After that, switch it from the admin portal (Settings → OTP),

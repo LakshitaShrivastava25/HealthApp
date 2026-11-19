@@ -48,6 +48,12 @@ class Account(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
+    # When this account last proved itself with an SMS code. App Lock reads
+    # it to let a device enrol just after signing in without charging a
+    # second SMS for the same proof. Deliberately a column rather than the
+    # access token's `iat`: ROTATE_REFRESH_TOKENS re-issues that on every
+    # refresh, so it would say "authenticated seconds ago" forever.
+    last_otp_login_at = models.DateTimeField(null=True, blank=True)
 
     objects = AccountManager()
 
@@ -170,3 +176,136 @@ class StaffCredential(models.Model):
 
     def is_locked(self, now=None):
         return bool(self.locked_until and self.locked_until > (now or timezone.now()))
+
+
+class MPINCredential(models.Model):
+    """
+    The account's 4-digit App Lock PIN — one per account, working on every
+    device the person has signed in on.
+
+    Not hashed the way OTPs are. `_hash_otp` in services.py is a plain
+    SHA-256, which is right for a 6-digit code that lives for ten minutes
+    and allows five guesses, and wrong for a credential that lives for
+    years: ten thousand SHA-256 hashes take microseconds, so a stolen
+    database would give up every PIN it holds.
+
+    So: PBKDF2 (Django's `make_password`) over an HMAC of the PIN keyed by
+    MPIN_PEPPER. The pepper lives only in the environment, never in the
+    database, so a dump on its own is not enough to test a guess against —
+    and `pepper_version` lets it be rotated later without invalidating
+    everyone at once. The account id goes into the HMAC input as well, so
+    two people who pick the same PIN do not share a hash.
+
+    No failure counters here. They belong on TrustedDevice: counting per
+    account would let a thief with one phone lock the owner out of another.
+    """
+
+    # Three wrong guesses cost two minutes, then more. Same ladder as
+    # TrustedDevice, counted per account because a sign-in by number has no
+    # device to count against yet.
+    ATTEMPTS_PER_STEP = 3
+    LOCKOUT_LADDER = (timedelta(minutes=2), timedelta(minutes=15), timedelta(hours=1), timedelta(hours=24))
+
+    account = models.OneToOneField(Account, on_delete=models.CASCADE, related_name='mpin')
+    pin_hash = models.CharField(max_length=256)
+    pepper_version = models.PositiveSmallIntegerField(default=1)
+    set_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    # Only for sign-in by number + PIN. A device that is already enrolled
+    # counts on its own row, so one phone's failures never lock another.
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+    def is_locked(self, now=None):
+        return bool(self.locked_until and self.locked_until > (now or timezone.now()))
+
+    def __str__(self):
+        return f'MPIN for {self.account.phone_number}'
+
+
+class TrustedDevice(models.Model):
+    """
+    One phone that may unlock with the MPIN.
+
+    This is what keeps a four-digit PIN defensible. Unlock is device token
+    plus PIN, and the request carries no phone number at all, so there is
+    nothing to enumerate and no way to reach an account without first
+    holding a secret issued to a device that completed an SMS sign-in.
+    Without it, an attacker needs only a phone number — which is not a
+    secret — and the handful of PINs people actually choose, and can spray
+    thousands of accounts at once. A per-account lockout would also let
+    anyone lock any user out on demand.
+
+    The token is 32 random bytes, handed back once at enrolment and stored
+    only as a SHA-256 digest. Plain SHA-256 is right here, unlike for the
+    PIN above: 256 bits of entropy has nothing to brute force, and the
+    lookup has to be an indexed equality match.
+
+    Failures count per device and escalate. Fifteen wrong guesses in total
+    retire the device for good — 15 tries against 10,000 combinations is a
+    0.15% chance, which is the real answer to "someone stole my phone".
+    """
+
+    class Kind(models.TextChoices):
+        MPIN = 'mpin', 'MPIN'
+        # Held in the keychain behind Face ID / fingerprint, so possession
+        # of the token already proves a live biometric match and no PIN is
+        # asked for. Kept separate from the MPIN token on purpose: a
+        # keychain dump then yields only the one that still needs the PIN.
+        BIOMETRIC = 'biometric', 'Biometric'
+
+    # Three wrong guesses cost two minutes, and each further three costs
+    # more. A flat cooldown would allow roughly ninety guesses an hour,
+    # which walks the whole keyspace inside a week.
+    ATTEMPTS_PER_STEP = 3
+    LOCKOUT_LADDER = (timedelta(minutes=2), timedelta(minutes=15), timedelta(hours=1), timedelta(hours=24))
+    MAX_ATTEMPTS = 15
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='trusted_devices')
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.MPIN)
+    label = models.CharField(max_length=80, blank=True)
+    platform = models.CharField(max_length=10, blank=True)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-last_used_at', '-created_at']
+
+    def __str__(self):
+        return f'{self.label or self.kind} ({self.account.phone_number})'
+
+    def is_locked(self, now=None):
+        return bool(self.locked_until and self.locked_until > (now or timezone.now()))
+
+
+class MPINResetGrant(models.Model):
+    """
+    Proof that an OTP was just verified for this account, good for ten
+    minutes and one use.
+
+    Changing an MPIN has to cost an SMS — otherwise anyone holding an
+    unlocked phone could quietly replace the PIN and keep access after the
+    owner signs out everywhere. A grant carries that proof from the OTP
+    screen to the "choose a new PIN" screen without the second screen
+    having to handle the code itself.
+    """
+
+    TTL = timedelta(minutes=10)
+
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='mpin_grants')
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'MPIN grant for {self.account.phone_number}'
+
+    def is_usable(self, now=None):
+        now = now or timezone.now()
+        return self.used_at is None and self.expires_at > now

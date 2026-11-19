@@ -25,7 +25,7 @@ TEAM_ID="${1:?usage: $0 <APPLE_TEAM_ID>}"
 cd "$(dirname "$0")/.."
 
 export EXPO_PUBLIC_USE_PRODUCTION_API=true
-export EXPO_PUBLIC_API_URL_PROD=https://healthapp-backend-li7g.onrender.com/api
+export EXPO_PUBLIC_API_URL_PROD=https://api.curapath.in/api
 
 # ios/ is generated from app.json and gitignored; regenerate it so config
 # changes (version, permissions, icons) always make it into the build.

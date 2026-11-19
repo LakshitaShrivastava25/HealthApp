@@ -30,7 +30,7 @@ import { Platform } from 'react-native';
 const USE_PRODUCTION_API = true;
 
 /** The live backend. Override from `.env` if the host changes. */
-const DEFAULT_PRODUCTION_API_URL = 'https://healthapp-backend-li7g.onrender.com/api';
+const DEFAULT_PRODUCTION_API_URL = 'https://api.curapath.in/api';
 
 const DJANGO_PORT = 8000;
 

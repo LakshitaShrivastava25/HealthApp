@@ -319,12 +319,12 @@ def request_otp(phone_number: str) -> dict:
     testable locally. Without DEBUG that's a 502: production never pretends
     an SMS went out.
 
-    Checks run in this order: the hourly limit, then master mode (which sends
-    nothing, so it skips the cooldown), then the OTP_RESEND_COOLDOWN_SECONDS
-    gap since the newest OTPRequest for the number (429 + retry_after). The
-    hourly limit goes first so a number out of quota isn't shown a countdown
-    that would only end in "Too many OTP requests". Failed sends delete their
-    row, so they never start a cooldown.
+    Checks run in this order: the hourly limit, then master mode and the
+    reviewer number (neither sends anything, so neither waits on a cooldown),
+    then the OTP_RESEND_COOLDOWN_SECONDS gap since the newest OTPRequest for
+    the number (429 + retry_after). The hourly limit goes first so a number out
+    of quota isn't shown a countdown that would only end in "Too many OTP
+    requests". Failed sends delete their row, so they never start a cooldown.
     """
     now = timezone.now()
     window_start = now - timedelta(hours=1)
@@ -338,6 +338,27 @@ def request_otp(phone_number: str) -> dict:
         # Master mode: nothing is sent, verify_otp accepts the master code.
         # The code itself is never returned to the client.
         logger.info('OTP master mode: skipping SMS for %s', _mask_phone(phone_number))
+        return {'ok': True}
+
+    review_code = reviewer_otp(phone_number)
+    if review_code:
+        # App/Play review login: nothing is sent. The fixed code is stored
+        # hashed like any local OTP, so expiry and the attempt limit apply.
+        #
+        # Checked before the resend cooldown, like master mode above, and for
+        # the same reason: no SMS goes out, so there is nothing to space apart.
+        # It used to sit below, which cost us an App Store rejection — a
+        # reviewer whose first request appeared to fail tapped again and was
+        # told to wait 60 seconds, with no code ever arriving. The hourly cap
+        # still applies: each send writes a row worth 5 verify attempts, and
+        # without a ceiling those rows would add up to a brute force of the
+        # fixed code.
+        OTPRequest.objects.create(
+            phone_number=phone_number,
+            otp_hash=_hash_otp(review_code, phone_number),
+            expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
+        )
+        logger.info('Reviewer login: skipping SMS for %s', _mask_phone(phone_number))
         return {'ok': True}
 
     newest = (
@@ -355,18 +376,6 @@ def request_otp(phone_number: str) -> dict:
                 'status': 429,
                 'retry_after': wait,
             }
-
-    review_code = reviewer_otp(phone_number)
-    if review_code:
-        # Play Store review login: nothing is sent. The fixed code is stored
-        # hashed like any local OTP, so expiry and the attempt limit apply.
-        OTPRequest.objects.create(
-            phone_number=phone_number,
-            otp_hash=_hash_otp(review_code, phone_number),
-            expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
-        )
-        logger.info('Reviewer login: skipping SMS for %s', _mask_phone(phone_number))
-        return {'ok': True}
 
     uses_twilio = _uses_twilio()
     uses_twofactor = settings.USE_TWOFACTOR and bool(settings.TWOFACTOR_API_KEY)

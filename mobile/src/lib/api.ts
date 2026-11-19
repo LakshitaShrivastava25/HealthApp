@@ -6,7 +6,21 @@ import { bumpDataVersion } from './dataVersion';
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
-export const api: AxiosInstance = axios.create();
+/**
+ * Every request needs a ceiling. Axios defaults `timeout` to 0, which means
+ * wait forever, and a request that never settles leaves whatever `busy` flag
+ * the caller set stuck on — the screen spins with no way out. App Review
+ * rejected 1.0 (1) for exactly that: "Send code" against a backend that took
+ * most of a minute to wake, with nothing on this side willing to give up.
+ *
+ * 70s rather than something tight: it matches REFRESH_TIMEOUT_MS below, and a
+ * slow mobile connection on a large upload must still be able to finish. The
+ * point is not to fail fast, it is to fail at all. Individual calls that
+ * should give up sooner pass their own `timeout` (see logout, push-unregister).
+ */
+const REQUEST_TIMEOUT_MS = 70_000;
+
+export const api: AxiosInstance = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 
 export type Mode = 'patient' | 'doctor';
 

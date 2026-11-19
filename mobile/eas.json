@@ -11,7 +11,7 @@
       },
       "env": {
         "EXPO_PUBLIC_USE_PRODUCTION_API": "true",
-        "EXPO_PUBLIC_API_URL_PROD": "https://healthapp-backend-li7g.onrender.com/api"
+        "EXPO_PUBLIC_API_URL_PROD": "https://api.curapath.in/api"
       }
     },
     "production": {
@@ -21,7 +21,7 @@
       },
       "env": {
         "EXPO_PUBLIC_USE_PRODUCTION_API": "true",
-        "EXPO_PUBLIC_API_URL_PROD": "https://healthapp-backend-li7g.onrender.com/api"
+        "EXPO_PUBLIC_API_URL_PROD": "https://api.curapath.in/api"
       }
     }
   },

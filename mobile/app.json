@@ -9,7 +9,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bctpvtltd.curapath",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "icon": "./assets/images/icon.png",
       "config": {
         "usesNonExemptEncryption": false
@@ -22,7 +22,7 @@
         "backgroundColor": "#6D5BD0"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 16,
+      "versionCode": 17,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.RECORD_AUDIO"
@@ -39,6 +39,12 @@
           "cameraPermission": "Allow CuraPath to use your camera to photograph prescriptions and reports.",
           "photosPermission": "Allow CuraPath to access your photos to upload prescriptions and reports.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow CuraPath to use Face ID to unlock your health records."
         }
       ],
       "@react-native-community/datetimepicker",

@@ -14,6 +14,8 @@ import {
   relationLabel,
 } from '../../src/components/profileOptions';
 import { Badge, Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
+import { router } from 'expo-router';
+import { usePin } from '../../src/context/PinContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { allergiesApi, authApi, profilesApi, unwrap } from '../../src/lib/api';
 import { DOCTOR_STATUS_LABEL } from '../../src/lib/councils';
@@ -27,6 +29,7 @@ type Allergy = { id: string; kind: string; substance: string; reaction: string }
 
 export default function Settings() {
   const { account, profiles, activeProfile, refreshProfiles, logout, doctor } = useAuth();
+  const pin = usePin();
   const confirmLogout = useConfirmLogout();
 
   const [editing, setEditing] = useState(false);
@@ -275,6 +278,20 @@ export default function Settings() {
       </Card>
 
       <NotificationSettingsCard note="Medicine reminders and doctor access requests" />
+
+      <Card>
+        <CardHeader
+          title="PIN"
+          subtitle={pin.isRegistered
+            ? 'You sign in with your 4-digit PIN on this phone.'
+            : 'Set a PIN to sign in without waiting for a code.'}
+        />
+        <Pressable onPress={() => router.push('/pin-settings')} style={styles.actionRow}>
+          <Feather name="lock" size={15} color={colors.ink700} />
+          <Text style={[type.label, { flex: 1 }]}>{pin.isRegistered ? 'Manage PIN' : 'Set up PIN'}</Text>
+          <Feather name="chevron-right" size={16} color={colors.ink300} />
+        </Pressable>
+      </Card>
 
       <Card>
         <CardHeader title="Account" />

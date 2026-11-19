@@ -35,6 +35,12 @@ const ITEMS: { icon: keyof typeof Feather.glyphMap; label: string; note: string;
     note: 'Switch login between SMS OTP and master OTP',
     href: '/(admin)/otp-settings',
   },
+  {
+    icon: 'lock' as const,
+    label: 'PIN',
+    note: 'Sign in with a 4-digit PIN on this phone',
+    href: '/pin-settings',
+  },
 ];
 
 export default function AdminMore() {

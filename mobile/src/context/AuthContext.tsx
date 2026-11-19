@@ -13,6 +13,7 @@ import {
 } from '../lib/api';
 import { IS_PRODUCTION, setApiBaseUrl } from '../lib/config';
 import { preferredMode, rememberMode, rememberActiveProfile, rememberedActiveProfile } from '../lib/mode';
+import { clearPin, getPinHint, setPinHint } from '../lib/pin';
 import { clearLocalNotifications, unregisterForPush } from '../lib/notifications';
 import { clearSessionCache, readSessionCache, writeSessionCache } from '../lib/sessionCache';
 import { getAccessToken, getRefreshToken, getStoredApiBaseUrl, storeApiBaseUrl } from '../lib/tokens';
@@ -29,6 +30,8 @@ export type Account = {
   email: string | null;
   role: Role;
   date_joined: string;
+  /** Whether this account has an App Lock PIN set (any device). */
+  has_mpin?: boolean;
 };
 
 export type Profile = {
@@ -107,6 +110,17 @@ type AuthValue = {
 
   sendOtp: (phone: string) => Promise<{ debug_otp?: string }>;
   verifyOtp: (phone: string, otp: string) => Promise<Account>;
+  /** Become the session a fresh token pair represents (PIN sign-in). */
+  adoptSession: (access: string, refresh: string) => Promise<Account>;
+  /**
+   * Record that this account now has a PIN.
+   *
+   * Set locally rather than re-fetched: the server answered 201, so it is
+   * already true, and the screen that enforces "every account has a PIN"
+   * must not depend on a second request succeeding — offline, that would
+   * bounce the person straight back to setup they had just finished.
+   */
+  markMpinSet: () => void;
   logout: () => Promise<void>;
 };
 
@@ -250,6 +264,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await unregisterForPush();
     await clearLocalNotifications();
     clearSessionCache();
+    // App Lock deliberately survives signing out. Revoking the device here
+    // meant the next sign-in fell back to an SMS code, which is the exact
+    // friction the PIN exists to remove — "sign out" ends the session, it
+    // does not un-enrol the phone. The PIN still has to be entered to get
+    // back in, so nothing is left unguarded.
+    //
+    // It is cleared in three places instead: turning App Lock off, signing
+    // in as a different account (below), and the server answering
+    // device_unknown.
     // End the session on the server too. Best effort: offline, the phone
     // still signs out and the token simply lapses after 30 days unused. Not
     // awaited: the request already carries the token, so signing out never
@@ -275,6 +298,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!account) return;
     writeSessionCache({ account, profiles, doctor });
+    void (async () => {
+      const hint = await getPinHint();
+      // A different person signed in on this phone. Their PIN must not
+      // inherit the previous account's App Lock, and the old device token
+      // is useless to them anyway.
+      if (hint && hint.accountId !== account.id) await clearPin();
+      // What the lock screen may show before anyone unlocks it: who it
+      // belongs to and a number to mask. Nothing medical.
+      await setPinHint({
+        accountId: account.id,
+        phone: account.phone_number,
+        biometric: hint?.accountId === account.id ? hint.biometric : false,
+      });
+    })();
   }, [account, profiles, doctor]);
 
   // Restore a session on cold start, and let the API layer end it if a
@@ -351,10 +388,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data;
   }, []);
 
-  const verifyOtp = useCallback(
-    async (phone: string, otp: string) => {
-      const { data } = await authApi.verifyOtp(phone, otp);
-      await startSession(data.access, data.refresh);
+  /**
+   * Take a freshly issued token pair and become that session.
+   *
+   * Extracted from verifyOtp because App Lock needs exactly the same steps
+   * after an MPIN unlock: the lock screen gets tokens from a different
+   * endpoint, but what has to happen afterwards is identical.
+   */
+  const adoptSession = useCallback(
+    async (access: string, refresh: string) => {
+      await startSession(access, refresh);
       // A fresh sign-in picks its mode afresh (the last one this account
       // used on this phone, else User mode).
       modeChosen.current = false;
@@ -365,6 +408,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return loadSession();
     },
     [loadSession]
+  );
+
+  const markMpinSet = useCallback(() => {
+    setAccount((current) => (current && !current.has_mpin ? { ...current, has_mpin: true } : current));
+  }, []);
+
+  const verifyOtp = useCallback(
+    async (phone: string, otp: string) => {
+      const { data } = await authApi.verifyOtp(phone, otp);
+      return adoptSession(data.access, data.refresh);
+    },
+    [adoptSession]
   );
 
   const value = useMemo<AuthValue>(
@@ -384,11 +439,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshDoctor,
       sendOtp,
       verifyOtp,
+      adoptSession,
+      markMpinSet,
       logout,
     }),
     [
       isLoading, account, doctor, mode, switchMode, profiles, activeProfile,
-      refreshProfiles, hasRegistered, refreshDoctor, sendOtp, verifyOtp, logout,
+      refreshProfiles, hasRegistered, refreshDoctor, sendOtp, verifyOtp, adoptSession, markMpinSet, logout,
     ]
   );
 

@@ -171,3 +171,94 @@ class CloudinaryStorage(SignedUrlMixin, Storage):
         self._configure()
         import cloudinary.uploader
         cloudinary.uploader.destroy(name, invalidate=True, **self._options())
+
+@deconstructible
+class LightsailStorage(SignedUrlMixin, Storage):
+    """
+    Private AWS Lightsail Object Storage using its S3-compatible API.
+    Files are accessed through our existing signed download endpoint.
+    """
+
+    def _client(self):
+        import boto3
+        from botocore.config import Config
+
+        return boto3.client(
+            's3',
+            region_name=settings.AWS_S3_REGION_NAME,
+            endpoint_url=settings.AWS_S3_ENDPOINT_URL,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            config=Config(s3={'addressing_style': 'path'}),
+        )
+
+    def _bucket(self):
+        return settings.AWS_STORAGE_BUCKET_NAME
+
+    def _save(self, name, content):
+        data = _read_bytes(content)
+        content_type = (
+            getattr(content, 'content_type', None)
+            or mimetypes.guess_type(name)[0]
+            or 'application/octet-stream'
+        )
+
+        self._client().put_object(
+            Bucket=self._bucket(),
+            Key=name,
+            Body=data,
+            ContentType=content_type,
+        )
+        return name
+
+    def _open(self, name, mode='rb'):
+        try:
+            response = self._client().get_object(
+                Bucket=self._bucket(),
+                Key=name,
+            )
+        except Exception as exc:
+            from botocore.exceptions import ClientError
+
+            if isinstance(exc, ClientError):
+                if exc.response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 404:
+                    raise FileNotFoundError(name) from exc
+            raise
+
+        return ContentFile(response['Body'].read(), name=name)
+
+    def exists(self, name):
+        from botocore.exceptions import ClientError
+
+        try:
+            self._client().head_object(
+                Bucket=self._bucket(),
+                Key=name,
+            )
+            return True
+        except ClientError as exc:
+            status = exc.response.get('ResponseMetadata', {}).get('HTTPStatusCode')
+            if status == 404:
+                return False
+            raise
+
+    def size(self, name):
+        from botocore.exceptions import ClientError
+
+        try:
+            response = self._client().head_object(
+                Bucket=self._bucket(),
+                Key=name,
+            )
+            return response['ContentLength']
+        except ClientError as exc:
+            status = exc.response.get('ResponseMetadata', {}).get('HTTPStatusCode')
+            if status == 404:
+                raise FileNotFoundError(name) from exc
+            raise
+
+    def delete(self, name):
+        self._client().delete_object(
+            Bucket=self._bucket(),
+            Key=name,
+        )

@@ -1,0 +1,126 @@
+# Emails the result of a production deploy or rollback, pass or fail.
+# Called by production.yml and rollback.yml; does nothing on its own.
+#
+# Repository secrets (Settings -> Secrets and variables -> Actions):
+#   SMTP_SERVER, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USERNAME, SMTP_PASSWORD
+# Repository variables:
+#   DEPLOY_NOTIFY_EMAILS  comma-separated recipients
+#   DEPLOY_MAIL_FROM      sender address the SMTP account may send as
+# Without them the result still appears in the run summary, and GitHub's own
+# "failed workflow" email still reaches whoever pushed.
+
+name: Notify
+
+on:
+  workflow_call:
+    inputs:
+      kind:
+        type: string
+        default: deploy
+      ci_result:
+        type: string
+        default: success
+      deploy_result:
+        type: string
+        default: ''
+      stage:
+        type: string
+        default: ''
+      rolled_back:
+        type: string
+        default: ''
+      migrations:
+        type: string
+        default: ''
+      log_tail:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  email:
+    name: Email result
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      HAS_SMTP: ${{ secrets.SMTP_SERVER != '' && vars.DEPLOY_NOTIFY_EMAILS != '' }}
+    steps:
+      - name: Compose message
+        id: compose
+        env:
+          KIND: ${{ inputs.kind }}
+          CI_RESULT: ${{ inputs.ci_result }}
+          DEPLOY_RESULT: ${{ inputs.deploy_result }}
+          STAGE: ${{ inputs.stage }}
+          ROLLED_BACK: ${{ inputs.rolled_back }}
+          MIGRATIONS: ${{ inputs.migrations }}
+          LOG_TAIL: ${{ inputs.log_tail }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          short="${GITHUB_SHA:0:7}"
+          if [ "$KIND" = rollback ]; then
+            if [ "$DEPLOY_RESULT" = success ]; then
+              outcome="ROLLBACK OK"; what="Production was rolled back and the API is healthy."
+            else
+              outcome="ROLLBACK FAILED"; what="The rollback did not complete (stage: ${STAGE:-unknown}). Check the server now."
+            fi
+          elif [ "$CI_RESULT" != success ]; then
+            outcome="FAILED"; what="Tests or build failed. Nothing was deployed; production is unchanged."
+          elif [ "$DEPLOY_RESULT" = success ]; then
+            outcome="SUCCESS"; what="Production (Lightsail) is serving $short. API and website health checks passed."
+          else
+            case "$ROLLED_BACK" in
+              yes) what="Deploy failed at stage '${STAGE:-unknown}' and was rolled back to the previous release. The site is up on the old code." ;;
+              impossible) what="Deploy failed at stage '${STAGE:-unknown}' and there was no previous release to roll back to. CHECK THE SITE NOW." ;;
+              *) what="Deploy failed at stage '${STAGE:-unknown}' before the new code went live. Production is unchanged." ;;
+            esac
+            outcome="FAILED"
+          fi
+
+          {
+            echo "subject=[CuraPath] Production ${KIND} ${outcome}: ${short}"
+            delim="EOF_$(openssl rand -hex 8)"
+            echo "body<<$delim"
+            echo "$what"
+            echo
+            echo "Commit:     $short — ${COMMIT_MSG%%$'\n'*}"
+            echo "Pushed by:  $GITHUB_ACTOR"
+            [ -n "$MIGRATIONS" ] && echo "Migrations: $MIGRATIONS"
+            echo "Run:        $RUN_URL"
+            echo "Commit:     $COMMIT_URL"
+            if [ -n "$LOG_TAIL" ]; then
+              echo
+              echo "Last lines of the server log:"
+              echo "$LOG_TAIL"
+            fi
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run summary
+        env:
+          SUBJECT: ${{ steps.compose.outputs.subject }}
+          BODY: ${{ steps.compose.outputs.body }}
+        run: |
+          { echo "### $SUBJECT"; echo; echo '```'; echo "$BODY"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Send email
+        if: env.HAS_SMTP == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT || '465' }}
+          secure: ${{ (secrets.SMTP_PORT || '465') == '465' }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          from: CuraPath Deploy <${{ vars.DEPLOY_MAIL_FROM || secrets.SMTP_USERNAME }}>
+          to: ${{ vars.DEPLOY_NOTIFY_EMAILS }}
+          subject: ${{ steps.compose.outputs.subject }}
+          body: ${{ steps.compose.outputs.body }}
+
+      - name: Email not configured
+        if: env.HAS_SMTP != 'true'
+        run: echo "::warning::SMTP_SERVER / DEPLOY_NOTIFY_EMAILS not set; result is in the run summary only."

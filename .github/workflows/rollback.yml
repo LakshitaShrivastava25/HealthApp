@@ -1,0 +1,95 @@
+# Manual production rollback: Actions -> "Rollback production" -> Run workflow.
+# Leave "release" empty to go back one release, or give an id from
+# `rollback.sh --list`. Code only; the database is not touched.
+
+name: Rollback production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release id (empty = the one before the live release)
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back Lightsail
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    outputs:
+      log_tail: ${{ steps.collect.outputs.log_tail }}
+    env:
+      DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT || '/srv/curapath' }}
+      GUNICORN_SERVICE: ${{ vars.GUNICORN_SERVICE }}
+      API_HEALTH_URL: ${{ vars.PROD_API_URL || 'https://api.curapath.in/api' }}/health/
+      RELEASE: ${{ inputs.release }}
+    steps:
+      - name: Validate input
+        run: |
+          case "$RELEASE" in ''|[0-9]*-[0-9a-f]*) ;; *) echo "::error::Release id looks wrong: $RELEASE"; exit 1 ;; esac
+          case "$RELEASE" in */*|*' '*|*'.'*) echo "::error::Release id looks wrong: $RELEASE"; exit 1 ;; esac
+
+      - name: Prepare SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host lightsail
+            HostName $SSH_HOST
+            User $SSH_USER
+            Port $SSH_PORT
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Roll back
+        run: |
+          remote_env="DEPLOY_ROOT=$(printf %q "$DEPLOY_ROOT") GUNICORN_SERVICE=$(printf %q "$GUNICORN_SERVICE") API_HEALTH_URL=$(printf %q "$API_HEALTH_URL")"
+          set +e
+          ssh lightsail "$remote_env '$DEPLOY_ROOT/bin/rollback.sh' $RELEASE" 2>&1 | tee rollback.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Collect log
+        id: collect
+        if: always()
+        run: |
+          touch rollback.log
+          delim="EOF_$(openssl rand -hex 8)"
+          { echo "log_tail<<$delim"; grep -v '^DEPLOY_SUMMARY ' rollback.log | tail -n 40; echo "$delim"; } >> "$GITHUB_OUTPUT"
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+  notify:
+    name: Notify
+    needs: rollback
+    if: always() && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/notify.yml
+    with:
+      kind: rollback
+      deploy_result: ${{ needs.rollback.result }}
+      log_tail: ${{ needs.rollback.outputs.log_tail }}
+    secrets: inherit

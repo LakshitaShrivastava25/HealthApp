@@ -48,7 +48,11 @@ jobs:
           SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
         run: |
           install -d -m 700 ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          # Rebuild the key from whatever was pasted: tolerates CR characters, spaces and
+          # lost line breaks that a copy from a web terminal can introduce.
+          key_body="$(printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' | sed -E 's/-----(BEGIN|END) OPENSSH PRIVATE KEY-----//g' | tr -d '[:space:]')"
+          { echo '-----BEGIN OPENSSH PRIVATE KEY-----'; printf '%s' "$key_body" | fold -w 70; echo; echo '-----END OPENSSH PRIVATE KEY-----'; } > ~/.ssh/deploy_key
+          unset key_body
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           cat > ~/.ssh/config <<EOF

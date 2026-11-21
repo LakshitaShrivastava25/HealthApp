@@ -1,41 +1,40 @@
 import secrets
 
-from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
-    help = (
-        'Round-trip a small file through the configured storage (upload, read '
-        'back, delete) to prove the Cloudinary keys work before deploying.'
-    )
+    help = 'Test the configured storage backend: upload, download, verify and delete.'
 
     def handle(self, *args, **options):
-        backend = settings.STORAGES['default']['BACKEND'].rsplit('.', 1)[-1]
+        storage = default_storage
+        backend = type(storage).__name__
         self.stdout.write(f'Storage backend: {backend}')
-        if not settings.USE_CLOUDINARY:
-            self.stdout.write(self.style.WARNING(
-                'Cloudinary keys not found — set CLOUDINARY_URL, or CLOUDINARY_CLOUD_NAME + '
-                'CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET.'
-            ))
-            return
-        self.stdout.write(f'Cloud name: {settings.CLOUDINARY_CLOUD_NAME}')
 
-        payload = f'curapath storage check {secrets.token_hex(8)}'.encode()
+        name = f'storage-check/{secrets.token_hex(16)}.txt'
+        payload = f'CuraPath storage test {secrets.token_hex(16)}'.encode()
+        uploaded = False
+
         try:
-            name = default_storage.save('storage-check/check.txt', ContentFile(payload))
-            self.stdout.write(f'Uploaded as {name}')
-            with default_storage.open(name) as fh:
-                read_back = fh.read()
-            if read_back != payload:
-                raise CommandError(f'Read back different bytes than were uploaded: {read_back[:80]!r}')
-            self.stdout.write('Read back the same bytes through a signed download link')
-            default_storage.delete(name)
-            self.stdout.write('Deleted the test file')
+            saved_name = storage.save(name, ContentFile(payload))
+            uploaded = True
+            with storage.open(saved_name, 'rb') as fh:
+                data = fh.read()
+            if data != payload:
+                raise CommandError('Downloaded file does not match what was uploaded.')
+            if not storage.exists(saved_name):
+                raise CommandError('Uploaded file is not reported as existing.')
         except CommandError:
             raise
         except Exception as exc:
-            raise CommandError(f'{type(exc).__name__}: {exc}') from exc
-        self.stdout.write(self.style.SUCCESS('Cloudinary storage works.'))
+            raise CommandError(f'Storage round-trip failed: {type(exc).__name__}: {exc}')
+        finally:
+            if uploaded:
+                try:
+                    storage.delete(saved_name)
+                except Exception as exc:
+                    self.stderr.write(f'Could not delete test file: {exc}')
+
+        self.stdout.write(self.style.SUCCESS(f'Storage round-trip OK ({backend}).'))

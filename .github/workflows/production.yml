@@ -1,9 +1,14 @@
-# Push to main -> CI -> deploy production on AWS Lightsail.
+# Push to main -> CI -> deploy production on AWS Lightsail -> email result.
 #
-# Phase 2: CI gate and the production frontend build only.
-# Phase 3 adds the deploy job (SSH to Lightsail, release directories,
-# migration approval, health checks, automatic rollback) after the server
-# details are confirmed. Until then a push to main deploys nothing from here.
+# The only way code reaches production: a merge into main (normally from qa).
+# Deploy runs only when the repository variable PROD_DEPLOY_ENABLED is 'true',
+# so this file can be merged before the server is prepared (deploy/README.md).
+#
+# Environment "production" (Settings -> Environments):
+#   secrets   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS, [SSH_PORT]
+#   variables GUNICORN_SERVICE, [DEPLOY_ROOT=/srv/curapath]
+# Repository variables: PROD_DEPLOY_ENABLED, [PROD_API_URL], [PROD_WEB_URL]
+# Email: see notify.yml.
 
 name: Production (Lightsail)
 
@@ -16,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  # Never cancel a production run part-way; queue the next one instead.
+  # Shared with rollback.yml. Never cancel a production run part-way.
   group: deploy-production
   cancel-in-progress: false
 
@@ -27,3 +32,141 @@ jobs:
     with:
       frontend_api_url: ${{ vars.PROD_API_URL || 'https://api.curapath.in/api' }}
       upload_frontend: true
+
+  deploy:
+    name: Deploy to Lightsail
+    needs: ci
+    if: github.ref == 'refs/heads/main' && vars.PROD_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: ${{ vars.PROD_WEB_URL || 'https://curapath.in/' }}
+    outputs:
+      stage: ${{ steps.summary.outputs.stage }}
+      rolled_back: ${{ steps.summary.outputs.rolled_back }}
+      migrations: ${{ steps.summary.outputs.migrations }}
+      log_tail: ${{ steps.summary.outputs.log_tail }}
+    env:
+      DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT || '/srv/curapath' }}
+      GUNICORN_SERVICE: ${{ vars.GUNICORN_SERVICE }}
+      API_HEALTH_URL: ${{ vars.PROD_API_URL || 'https://api.curapath.in/api' }}/health/
+      WEB_URL: ${{ vars.PROD_WEB_URL || 'https://curapath.in/' }}
+      # One-time first run only (deploy/README.md, "Bootstrap").
+      BOOTSTRAP: ${{ vars.PROD_DEPLOY_BOOTSTRAP == 'true' && '1' || '0' }}
+    steps:
+      - name: Check configuration
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          missing=0
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || { echo "::error::Secret $name is not set (environment: production)."; missing=1; }
+          done
+          [ -n "$GUNICORN_SERVICE" ] || { echo "::error::Variable GUNICORN_SERVICE is not set (environment: production)."; missing=1; }
+          exit $missing
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Get the frontend build CI produced for this commit
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend-dist
+
+      - name: Build release bundle
+        run: |
+          mkdir -p bundle/frontend
+          git archive HEAD backend deploy | tar -x -C bundle
+          cp -R frontend-dist/. bundle/frontend/
+          echo "$GITHUB_SHA" > bundle/backend/REVISION
+          test -f bundle/frontend/index.html
+          tar -czf "release-$GITHUB_SHA.tar.gz" -C bundle .
+          echo "Bundle: $(du -h "release-$GITHUB_SHA.tar.gz" | cut -f1)"
+
+      - name: Prepare SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host lightsail
+            HostName $SSH_HOST
+            User $SSH_USER
+            Port $SSH_PORT
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Upload release
+        run: |
+          ssh lightsail "mkdir -p '$DEPLOY_ROOT/incoming'"
+          scp -q "release-$GITHUB_SHA.tar.gz" "lightsail:$DEPLOY_ROOT/incoming/release-$GITHUB_SHA.tar.gz"
+          scp -q deploy/remote-deploy.sh "lightsail:$DEPLOY_ROOT/incoming/remote-deploy-$GITHUB_SHA.sh"
+
+      - name: Deploy (migrate, switch, verify; auto-rollback on failure)
+        id: deploy
+        run: |
+          remote_env="DEPLOY_ROOT=$(printf %q "$DEPLOY_ROOT") GUNICORN_SERVICE=$(printf %q "$GUNICORN_SERVICE") API_HEALTH_URL=$(printf %q "$API_HEALTH_URL") WEB_URL=$(printf %q "$WEB_URL") BOOTSTRAP=$BOOTSTRAP"
+          set +e
+          ssh lightsail "$remote_env bash '$DEPLOY_ROOT/incoming/remote-deploy-$GITHUB_SHA.sh' '$GITHUB_SHA' '$DEPLOY_ROOT/incoming/release-$GITHUB_SHA.tar.gz'" 2>&1 | tee deploy.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Collect result
+        id: summary
+        if: always()
+        run: |
+          touch deploy.log
+          get() { grep -E "^DEPLOY_SUMMARY $1=" deploy.log | tail -1 | cut -d= -f2-; }
+          stage="$(get stage)"
+          echo "stage=${stage:-before-deploy}" >> "$GITHUB_OUTPUT"
+          echo "rolled_back=$(get rolled_back)" >> "$GITHUB_OUTPUT"
+          echo "migrations=$(get migrations)" >> "$GITHUB_OUTPUT"
+          delim="EOF_$(openssl rand -hex 8)"
+          { echo "log_tail<<$delim"; grep -v '^DEPLOY_SUMMARY ' deploy.log | tail -n 40; echo "$delim"; } >> "$GITHUB_OUTPUT"
+
+      - name: Verify from the internet
+        if: env.BOOTSTRAP != '1'
+        run: |
+          body="$(curl -fsS --max-time 15 "$API_HEALTH_URL")"
+          echo "$body"
+          case "$body" in *'"commit":"'"$GITHUB_SHA"'"'*) ;; *) echo "::error::API does not report $GITHUB_SHA"; exit 1 ;; esac
+          curl -fsS --max-time 15 -o /dev/null "$WEB_URL"
+          echo "Production is serving $GITHUB_SHA."
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+  notify:
+    name: Notify
+    needs: [ci, deploy]
+    # Email when CI failed on main, or a deploy actually ran (pass or fail).
+    if: always() && github.ref == 'refs/heads/main' && (needs.ci.result != 'success' || needs.deploy.result != 'skipped')
+    uses: ./.github/workflows/notify.yml
+    with:
+      kind: deploy
+      ci_result: ${{ needs.ci.result }}
+      deploy_result: ${{ needs.deploy.result }}
+      stage: ${{ needs.deploy.outputs.stage }}
+      rolled_back: ${{ needs.deploy.outputs.rolled_back }}
+      migrations: ${{ needs.deploy.outputs.migrations }}
+      log_tail: ${{ needs.deploy.outputs.log_tail }}
+    secrets: inherit

@@ -128,12 +128,26 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Uploaded files must survive Render's ephemeral disk — see
-# documents/storage.py. Cloudinary in production: set either CLOUDINARY_URL
-# (cloudinary://<api_key>:<api_secret>@<cloud_name>, as shown on the
-# Cloudinary dashboard) or CLOUDINARY_CLOUD_NAME + _API_KEY + _API_SECRET.
-# Without them — and always under `manage.py test`, so the suite never
-# uploads to the real account — files go into the database instead.
+# AWS Lightsail Object Storage
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', '')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', '')
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME', '')
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'ap-south-1')
+AWS_S3_ENDPOINT_URL = os.getenv(
+    'AWS_S3_ENDPOINT_URL',
+    'https://s3.ap-south-1.amazonaws.com'
+)
+USE_S3_STORAGE = (
+    os.getenv('USE_S3_STORAGE', 'false').lower() == 'true'
+    and all([
+        AWS_ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY,
+        AWS_STORAGE_BUCKET_NAME,
+    ])
+    and sys.argv[1:2] != ['test']
+)
+
+# Cloudinary configuration (fallback)
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', '')
 CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY', '')
 CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET', '')
@@ -144,9 +158,16 @@ USE_CLOUDINARY = (
     all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET])
     and sys.argv[1:2] != ['test']
 )
+
+if USE_S3_STORAGE:
+    DEFAULT_STORAGE_BACKEND = 'documents.storage.LightsailStorage'
+elif USE_CLOUDINARY:
+    DEFAULT_STORAGE_BACKEND = 'documents.storage.CloudinaryStorage'
+else:
+    DEFAULT_STORAGE_BACKEND = 'documents.storage.DatabaseStorage'
 STORAGES = {
     'default': {
-        'BACKEND': 'documents.storage.CloudinaryStorage' if USE_CLOUDINARY else 'documents.storage.DatabaseStorage',
+        'BACKEND': DEFAULT_STORAGE_BACKEND,
     },
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
 }
@@ -241,6 +262,15 @@ CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175,http://localhost:5176,http://127.0.0.1:5176'
 ).split(',')
+
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        'CSRF_TRUSTED_ORIGINS',
+        'https://curapath.in,https://www.curapath.in'
+    ).split(',')
+    if o.strip()
+]
 
 # --- Third-party keys (set these in .env — never commit real values) ---
 # The Claude API key must live ONLY here on the backend — never in the

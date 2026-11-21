@@ -5,11 +5,15 @@
     "version": "1.0.13",
     "orientation": "portrait",
     "scheme": "healthnow",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.bctpvtltd.curapath",
-      "icon": "./assets/images/icon.png"
+      "buildNumber": "3",
+      "icon": "./assets/images/icon.png",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.bctpvtltd.curapath",
@@ -18,7 +22,7 @@
         "backgroundColor": "#6D5BD0"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 16,
+      "versionCode": 17,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.RECORD_AUDIO"
@@ -35,6 +39,12 @@
           "cameraPermission": "Allow CuraPath to use your camera to photograph prescriptions and reports.",
           "photosPermission": "Allow CuraPath to access your photos to upload prescriptions and reports.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow CuraPath to use Face ID to unlock your health records."
         }
       ],
       "@react-native-community/datetimepicker",
@@ -66,9 +76,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "fcc1d7c0-5490-4589-bdb5-cc45f76699e1"
+        "projectId": "bc989c17-46da-4819-bf9d-20f5f48dd5a9"
       }
     },
-    "owner": "ayushdev14"
+    "owner": "bc_expo"
   }
 }

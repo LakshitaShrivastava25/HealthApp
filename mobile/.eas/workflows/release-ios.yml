@@ -1,0 +1,41 @@
+# Tag a release, get a TestFlight build.
+#
+#   npm version --no-git-tag-version 1.0.8   # optional: bump the marketing version
+#   git tag ios-v1.0.8
+#   git push origin ios-v1.0.8
+#
+# Deliberately NOT "every push to main". This is a monorepo — most commits
+# touch backend/ or frontend/ and have no business producing an iOS build —
+# and the free plan allows 15 iOS builds a month, which accidental triggers
+# would eat through quickly.
+#
+# The build number is not set here. `eas.json` has autoIncrement on the
+# production profile with appVersionSource "remote", so EAS owns it and
+# bumps it on every build. Apple rejects a repeated build number, and a
+# human remembering to edit app.json is exactly the step that gets missed.
+#
+# Requires, once: the Expo GitHub App installed on LakshitaShrivastava25/HealthApp
+# with the base directory set to `mobile`, and an App Store Connect API key
+# assigned to the app (`eas credentials --platform ios`).
+
+name: Release iOS
+
+on:
+  push:
+    tags:
+      - 'ios-v*'
+
+jobs:
+  build_ios:
+    name: Build iOS app
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  submit_ios:
+    name: Upload to TestFlight
+    type: testflight
+    needs: [build_ios]
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}

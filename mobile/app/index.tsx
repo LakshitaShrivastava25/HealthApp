@@ -20,7 +20,7 @@ import { RedirectOnce } from '../src/components/RedirectOnce';
  * account without one has nothing any patient screen can render.
  */
 export default function Index() {
-  const { isLoading, isAuthenticated, portal, profiles } = useAuth();
+  const { isLoading, isAuthenticated, portal, profiles, account } = useAuth();
   const [seenIntro, setSeenIntro] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -37,6 +37,11 @@ export default function Index() {
 
   // First launch on this device gets the intro slides before sign-in.
   if (!isAuthenticated) return <RedirectOnce href={seenIntro ? '/login' : '/onboarding'} />;
+
+  // The PIN is how this account signs in, so one has to exist. Enforced
+  // here rather than on the login screen so every route in is covered —
+  // a fresh sign-in, a restored session, a notification tap.
+  if (account && account.has_mpin === false) return <RedirectOnce href="/mpin-setup" />;
 
   switch (portal) {
     case 'admin':

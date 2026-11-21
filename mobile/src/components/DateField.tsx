@@ -71,6 +71,12 @@ export default function DateField({
             maximumDate={maximumDate}
             minimumDate={minimumDate}
             accentColor={colors.brandPurple}
+            // The app draws a light palette only. Without this the picker
+            // follows the system appearance, so on a phone in Dark Mode iOS
+            // paints white day numbers onto the white card and the calendar
+            // looks empty. `textColor` can't fix it — the library ignores it
+            // for any display but 'spinner'.
+            themeVariant="light"
             onChange={(event, selected) => {
               // Android shows a dialog that closes itself; iOS stays inline.
               if (Platform.OS !== 'ios') setOpen(false);

@@ -229,13 +229,15 @@ export default function DocumentDetailModal({
   function hydrateReview(d: DocumentDetail) {
     const sd = (d.structured_data || {}) as Record<string, unknown>;
     const fromAi = (k: string) => (typeof sd[k] === 'string' ? (sd[k] as string) : '');
-    setRTitle(d.title || fromAi('title'));
-    setRCategory(d.category || fromAi('category') || 'other');
+    setRTitle(d.title);
+    setRCategory(d.category || 'other');
     // Never seed the picker with a future date. The column can no longer
     // hold one, but structured_data still carries whatever extraction read,
     // and prefilling that would leave the field showing a value its own max
     // forbids and the server rejects — a dead end the person cannot explain.
-    const suggestedDate = d.document_date || fromAi('document_date') || '';
+    // 'date' is the key the live prompts return — see the mobile app's
+    // seedReview for the same rule.
+    const suggestedDate = d.document_date || fromAi('date') || '';
     setRDate(suggestedDate && suggestedDate > todayIso() ? '' : suggestedDate);
     setRHospital(d.hospital_name || fromAi('hospital_name'));
     setRDoctor(d.doctor_name || fromAi('doctor_name'));

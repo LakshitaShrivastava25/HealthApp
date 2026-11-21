@@ -17,3 +17,6 @@ expo-env.d.ts
 # Builds still get it: .easignore leaves it in, or set the EAS file variable
 # GOOGLE_SERVICES_JSON (see app.config.js).
 google-services.json
+
+# Output of scripts/build-ipa.sh (archive, ExportOptions, the .ipa itself).
+/build

@@ -1,0 +1,90 @@
+# Push to qa -> CI -> deploy the QA environment on Render.
+#
+# Render must NOT auto-deploy on its own (Settings -> Auto-Deploy: Off) and
+# its service must track the qa branch; this workflow triggers it through a
+# deploy hook only after CI passed, then waits until Render actually serves
+# this commit. Nothing here can reach production (Lightsail).
+
+name: QA (Render)
+
+on:
+  push:
+    branches: [qa]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer qa push supersedes an older one still in progress.
+  group: deploy-qa
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      frontend_api_url: ${{ vars.QA_API_URL }}
+
+  deploy:
+    name: Deploy to Render (QA)
+    needs: ci
+    if: github.ref == 'refs/heads/qa'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: qa
+      url: ${{ vars.QA_WEB_URL }}
+    env:
+      QA_API_URL: ${{ vars.QA_API_URL }}
+      QA_WEB_URL: ${{ vars.QA_WEB_URL }}
+    steps:
+      - name: Check configuration
+        env:
+          BACKEND_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}
+        run: |
+          missing=0
+          [ -n "$BACKEND_HOOK" ] || { echo "::error::Secret RENDER_DEPLOY_HOOK_BACKEND is not set (Settings -> Environments -> qa)."; missing=1; }
+          [ -n "$QA_API_URL" ]   || { echo "::error::Variable QA_API_URL is not set (Settings -> Secrets and variables -> Actions -> Variables, repository level)."; missing=1; }
+          exit $missing
+
+      - name: Trigger backend deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}
+        # -o /dev/null: the response echoes deploy ids only, but keep logs clean.
+        run: curl --fail --silent --show-error --max-time 30 -X POST "$HOOK" -o /dev/null
+
+      - name: Trigger frontend deploy (if configured)
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "No RENDER_DEPLOY_HOOK_FRONTEND set; skipping (QA web may deploy elsewhere)."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST "$HOOK" -o /dev/null
+
+      - name: Wait for Render to serve this commit
+        run: |
+          url="${QA_API_URL%/}/health/"
+          deadline=$(( $(date +%s) + 20 * 60 ))
+          while :; do
+            body=$(curl --silent --max-time 15 "$url" || true)
+            commit=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            status=$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)
+            if [ "$status" = "ok" ] && [ "$commit" = "$GITHUB_SHA" ]; then
+              echo "QA backend is live on $GITHUB_SHA and its database is reachable."
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::QA did not serve $GITHUB_SHA within 20 minutes (last seen: status='${status:-none}', commit='${commit:-none}'). Check the deploy log in the Render dashboard."
+              exit 1
+            fi
+            echo "Waiting... (status='${status:-none}', commit='${commit:0:12}')"
+            sleep 20
+          done
+
+      - name: QA website responds
+        if: env.QA_WEB_URL != ''
+        run: curl --fail --silent --show-error --max-time 30 -o /dev/null "$QA_WEB_URL"

@@ -173,6 +173,39 @@ class DocumentPipelineTests(TestCase):
         self.assertIn('Hypertension', titles)    # the diagnosis
         self.assertIn('Lipid profile', titles)   # the test
 
+    @override_settings(ANTHROPIC_API_KEY='sk-ant-key')
+    def test_a_date_printed_the_indian_way_still_reaches_the_column(self):
+        """
+        The model is told to convert DD/MM/YYYY to ISO, but it is not bound
+        to. When it passes the printed form through, that used to parse as
+        None and the document came back with no date at all.
+        """
+        import json
+        result = {**PRESCRIPTION_RESULT, 'date': '14/03/2026'}
+        with patch.object(ClaudeService, '_call', return_value=json.dumps(result)):
+            response = self.upload()
+
+        document = Document.objects.get(pk=response.data['id'])
+        self.assertEqual(str(document.document_date), '2026-03-14')
+
+    @override_settings(ANTHROPIC_API_KEY='sk-ant-key')
+    def test_a_future_date_is_dropped_but_explained(self):
+        """
+        A misread year must not reach the column — but the review screen
+        needs to say why the field is blank, or the person sees an empty
+        date beside a document that plainly has one printed on it.
+        """
+        import json
+        from django.utils import timezone
+        future = timezone.localdate().replace(year=timezone.localdate().year + 1)
+        result = {**PRESCRIPTION_RESULT, 'date': future.isoformat()}
+        with patch.object(ClaudeService, '_call', return_value=json.dumps(result)):
+            response = self.upload()
+
+        document = Document.objects.get(pk=response.data['id'])
+        self.assertIsNone(document.document_date)
+        self.assertIn(future.isoformat(), document.structured_data.get('_date_rejected', ''))
+
         medicine = Medication.objects.get(profile=self.profile, name='Amlodipine 5mg')
         self.assertEqual(medicine.dosage, '1 tablet')
         self.assertEqual(medicine.frequency, 'once daily')

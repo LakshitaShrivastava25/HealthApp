@@ -773,6 +773,32 @@ class ReviewerLoginTests(TestCase):
         services.OTPRequest.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
         self.assertEqual(self._verify('123456').status_code, 400)
 
+    def test_resending_is_not_blocked_by_the_cooldown(self):
+        """
+        An App Store rejection came from this. The reviewer's first request
+        looked like it had failed — the backend was asleep and the app had no
+        timeout — so they tapped again and were told to wait 60 seconds, with
+        no code ever arriving. Nothing is sent for this number, so there is
+        nothing for a cooldown to space apart.
+        """
+        self.assertEqual(self._send().status_code, 200)
+        again = self._send()
+        self.assertEqual(again.status_code, 200)
+        self.assertNotIn('retry_after', again.data)
+        # The code from the newest row still works.
+        self.assertEqual(self._verify('123456').status_code, 200)
+        self.twilio.assert_not_called()
+
+    def test_the_hourly_cap_still_applies(self):
+        """
+        Skipping the cooldown must not mean skipping every limit: each send
+        writes a row worth OTP_MAX_ATTEMPTS guesses, so without a ceiling
+        these would add up to a brute force of the fixed code.
+        """
+        for _ in range(services.OTP_RATE_LIMIT_PER_HOUR):
+            self.assertEqual(self._send().status_code, 200)
+        self.assertEqual(self._send().status_code, 429)
+
     def test_code_needs_a_send_first(self):
         self.assertEqual(self._verify('123456').status_code, 400)
 

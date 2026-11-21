@@ -23,13 +23,13 @@ whether a key is configured — see text_extraction.py.
 
 import json
 import logging
-from datetime import date, timedelta
 from pathlib import Path
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
 
+from .dates import parse_ai_date
 from .text_extraction import extract_text
 
 try:
@@ -38,21 +38,6 @@ except ImportError:
     anthropic = None
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_iso_date(value):
-    """
-    A YYYY-MM-DD string from an AI response, or None.
-
-    Never raises: the model is instructed to return this shape but is not
-    bound to, and one malformed date must not fail an entire upload.
-    """
-    if not value or not isinstance(value, str):
-        return None
-    try:
-        return date.fromisoformat(value.strip()[:10])
-    except ValueError:
-        return None
 
 
 class ClaudeUnavailable(Exception):
@@ -75,7 +60,7 @@ MAX_EXTRACTED_CHARS = 240_000
 
 
 class ClaudeService:
-    MODEL = "claude-sonnet-4-5"
+    MODEL = "claude-sonnet-5-5"
 
     def __init__(self):
         self.api_key = settings.ANTHROPIC_API_KEY
@@ -250,7 +235,7 @@ class ClaudeService:
             # header stays blank — the same bug the insurance flow already hit.
             document.doctor_name = (result.get('doctor_name') or document.doctor_name or '')[:150]
             document.hospital_name = (result.get('hospital_name') or document.hospital_name or '')[:150]
-            parsed_date = _parse_iso_date(result.get('date'))
+            parsed_date = parse_ai_date(result.get('date'))
             # A misread year ("2027" for "2017") must not land in the record:
             # document_date is validated against today on every API write, so
             # letting extraction write one anyway would be the one way past
@@ -259,6 +244,14 @@ class ClaudeService:
             # review screen asks the person for the date either way.
             if parsed_date and parsed_date <= timezone.localdate():
                 document.document_date = parsed_date
+            elif parsed_date:
+                # Say so rather than dropping it in silence. Otherwise the
+                # review screen shows an empty date beside a document that
+                # plainly has one printed on it, and nothing explains why.
+                result['_date_rejected'] = (
+                    f'Read "{parsed_date.isoformat()}" as the document date, which is in '
+                    'the future — please check it and enter the right one.'
+                )
             if not document.title or document.title == document.original_filename:
                 # The apps send the filename as the title, and hospital
                 # portals name files like "Caches_AMB-1002-26349476.pdf".

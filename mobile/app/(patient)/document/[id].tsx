@@ -81,10 +81,14 @@ const REVIEW_KEYS: (keyof ReviewForm)[] = ['title', 'category', 'document_date',
 function seedReview(d: Doc): ReviewForm {
   const sd = (d.structured_data || {}) as Record<string, unknown>;
   const fromAi = (k: string) => (typeof sd[k] === 'string' ? (sd[k] as string) : '');
-  const suggestedDate = d.document_date || fromAi('document_date') || '';
+  // 'date' is the key the live prompts return (prescription_structuring.txt,
+  // report_structuring.txt). The backend copies it to document_date only when
+  // it parses and is not in the future, so this fallback is what surfaces an
+  // extracted date the column rejected.
+  const suggestedDate = d.document_date || fromAi('date') || '';
   return {
-    title: d.title || fromAi('title'),
-    category: d.category || fromAi('category') || 'other',
+    title: d.title,
+    category: d.category || 'other',
     document_date: suggestedDate && suggestedDate > toIsoDate(new Date()) ? '' : suggestedDate,
     hospital_name: d.hospital_name || fromAi('hospital_name'),
     doctor_name: d.doctor_name || fromAi('doctor_name'),

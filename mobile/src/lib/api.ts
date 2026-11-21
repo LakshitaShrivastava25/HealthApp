@@ -6,7 +6,21 @@ import { bumpDataVersion } from './dataVersion';
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
-export const api: AxiosInstance = axios.create();
+/**
+ * Every request needs a ceiling. Axios defaults `timeout` to 0, which means
+ * wait forever, and a request that never settles leaves whatever `busy` flag
+ * the caller set stuck on — the screen spins with no way out. App Review
+ * rejected 1.0 (1) for exactly that: "Send code" against a backend that took
+ * most of a minute to wake, with nothing on this side willing to give up.
+ *
+ * 70s rather than something tight: it matches REFRESH_TIMEOUT_MS below, and a
+ * slow mobile connection on a large upload must still be able to finish. The
+ * point is not to fail fast, it is to fail at all. Individual calls that
+ * should give up sooner pass their own `timeout` (see logout, push-unregister).
+ */
+const REQUEST_TIMEOUT_MS = 70_000;
+
+export const api: AxiosInstance = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 
 export type Mode = 'patient' | 'doctor';
 
@@ -218,6 +232,54 @@ export const authApi = {
   // not kick off a refresh of the session being ended.
   logout: (refresh: string) =>
     axios.post(`${getApiBaseUrl()}/auth/logout/`, { refresh }, { timeout: 5000 }),
+};
+
+// -- App Lock ------------------------------------------------------------
+/**
+ * `unlock` and `grant` use plain axios, not the shared instance, and the
+ * reason is not cosmetic: the instance's response interceptor treats any
+ * 401 as an expired session and tries to refresh, then ends the session
+ * when that fails. A wrong PIN answers 401. Routed through `api`, one
+ * mistyped digit would silently sign the person out — the same trap the
+ * comment on `authApi.logout` above describes.
+ *
+ * Both also carry their own timeout. A lock screen that spins forever is
+ * the worst possible failure for this feature: there is nothing else on it
+ * to do, and no way past.
+ */
+const LOCK_TIMEOUT_MS = 30_000;
+
+export const mpinApi = {
+  unlock: (device_token: string, mpin?: string) =>
+    axios.post(
+      `${getApiBaseUrl()}/auth/mpin/unlock/`,
+      { device_token, ...(mpin ? { mpin } : {}) },
+      { timeout: LOCK_TIMEOUT_MS },
+    ),
+  /** Sign in by number + PIN on a phone that has never unlocked here. */
+  unlockByPhone: (phone_number: string, mpin: string) =>
+    axios.post(
+      `${getApiBaseUrl()}/auth/mpin/unlock/`,
+      { phone_number, mpin },
+      { timeout: LOCK_TIMEOUT_MS },
+    ),
+  grant: (phone_number: string, otp: string) =>
+    axios.post(
+      `${getApiBaseUrl()}/auth/mpin/grant/`,
+      { phone_number, otp },
+      { timeout: LOCK_TIMEOUT_MS },
+    ),
+  // These run with a live session, so the shared instance is right.
+  set: (body: { mpin: string; otp_grant?: string; label?: string; platform?: string }) =>
+    api.post('/auth/mpin/', body),
+  disable: () => api.delete('/auth/mpin/'),
+  devices: () => api.get('/auth/mpin/devices/'),
+  enrollDevice: (body: { label?: string; platform?: string; kind?: 'mpin' | 'biometric' }) =>
+    api.post('/auth/mpin/devices/', body),
+  // Best-effort on the way out, so a short timeout: a phone with no signal
+  // must still be able to finish signing out.
+  revokeDevice: (device_token: string) =>
+    api.delete('/auth/mpin/devices/', { data: { device_token }, timeout: 4000 }),
 };
 
 // -- patient -------------------------------------------------------------

@@ -30,6 +30,12 @@ from medicines.models import Medication
 from .models import ConsultationNote, Doctor, DoctorPatientAccess
 
 
+# Adult family members must carry a phone number (family/serializers.py).
+# Sending a valid payload keeps the doctor-mode tests about the permission
+# (403 from perform_create), not about validation (400).
+ADULT_PHONE = '+919100000099'
+
+
 def _client(account):
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION='Bearer ' + str(RefreshToken.for_user(account).access_token))
@@ -97,7 +103,7 @@ class DualRoleTests(TestCase):
 
     def test_user_mode_can_add_a_family_member(self):
         response = self.api.post(
-            '/api/profiles/?acting_as=patient', {'full_name': 'My Mother', 'relation': 'mother'}, format='json'
+            '/api/profiles/?acting_as=patient', {'full_name': 'My Mother', 'relation': 'mother', 'phone_number': ADULT_PHONE}, format='json'
         )
         self.assertEqual(response.status_code, 201, response.data)
         self.assertTrue(Profile.objects.filter(account=self.dual, full_name='My Mother').exists())
@@ -197,7 +203,7 @@ class DualRoleTests(TestCase):
 
     def test_doctor_mode_is_read_only(self):
         response = self.api.post(
-            '/api/profiles/?acting_as=doctor', {'full_name': 'X', 'relation': 'other'}, format='json'
+            '/api/profiles/?acting_as=doctor', {'full_name': 'X', 'relation': 'other', 'phone_number': ADULT_PHONE}, format='json'
         )
         self.assertEqual(response.status_code, 403)
         response = self.api.post(
@@ -231,7 +237,9 @@ class DualRoleTests(TestCase):
     def test_legacy_requests_from_a_doctor_account_act_as_doctor(self):
         response = self.api.get('/api/documents/', {'profile_id': str(self.patient_profile.id)})
         self.assertEqual(len(_ids(response)), 1)
-        response = self.api.post('/api/profiles/', {'full_name': 'X', 'relation': 'other'}, format='json')
+        response = self.api.post(
+            '/api/profiles/', {'full_name': 'X', 'relation': 'other', 'phone_number': ADULT_PHONE}, format='json'
+        )
         self.assertEqual(response.status_code, 403)
 
     # -- the parameter cannot widen access ----------------------------------

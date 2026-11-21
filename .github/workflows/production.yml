@@ -1,0 +1,29 @@
+# Push to main -> CI -> deploy production on AWS Lightsail.
+#
+# Phase 2: CI gate and the production frontend build only.
+# Phase 3 adds the deploy job (SSH to Lightsail, release directories,
+# migration approval, health checks, automatic rollback) after the server
+# details are confirmed. Until then a push to main deploys nothing from here.
+
+name: Production (Lightsail)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel a production run part-way; queue the next one instead.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      frontend_api_url: ${{ vars.PROD_API_URL || 'https://api.curapath.in/api' }}
+      upload_frontend: true

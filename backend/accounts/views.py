@@ -75,15 +75,12 @@ class VerifyOTPView(APIView):
             return Response({'detail': message}, status=http_status)
 
         account, created = Account.objects.get_or_create(phone_number=phone_number)
-        if not account.is_active and services.reviewer_otp(phone_number):
-            # Play reviewers test Delete account; the next review still needs a login.
+        if not account.is_active:
+            # Reactivate a previously deleted account so the user can re-register
+            # with the same phone number.
             account.is_active = True
             account.save(update_fields=['is_active'])
-        if not account.is_active:
-            return Response(
-                {'detail': 'This account has been deleted. Contact support if this was a mistake.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            created = True
         if account.phone_number in settings.ADMIN_PHONE_NUMBERS and account.role != Account.Role.ADMIN:
             account.role = Account.Role.ADMIN
             account.is_staff = True

@@ -7,7 +7,7 @@ import { setTokens as setAdminTokens } from '../../admin/lib/api';
 import { clearTokens, getAccessToken, getRefreshToken, setTokens, type Mode } from './client';
 import { doctorModeApi, userApi } from './clients';
 import { landingPath, rememberMode } from './mode';
-import { clearPin, getPinHint, setPinHint } from './pin';
+import { clearPin, getMpinToken, getPinHint, setPinHint } from './pin';
 import { STAFF_ROLES, type Account, type DoctorRecord, type Profile } from './types';
 
 /**
@@ -21,7 +21,9 @@ import { STAFF_ROLES, type Account, type DoctorRecord, type Profile } from './ty
 
 type Snapshot = { account: Account; profiles: Profile[]; doctor: DoctorRecord | null };
 
-export type VerifyResult = { kind: 'staff' } | { kind: 'member'; home: string; hasMpin: boolean };
+export type VerifyResult =
+  | { kind: 'staff' }
+  | { kind: 'member'; home: string; hasMpin: boolean; account: Account | null };
 
 /** What every sign-in endpoint answers: verify-otp, PIN unlock, PIN grant. */
 export type SignInTokens = { access: string; refresh: string; account?: Account };
@@ -194,14 +196,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [account, doctor, mode, location.pathname]);
 
-  // Remember whose browser this is, for PIN sign-in: the account and the
-  // number to pre-fill on /login. A different person signing in here must
+  // Keep the PIN sign-in hint (account + number to pre-fill on /login) in
+  // step with the signed-in account. A different person signing in here must
   // not inherit the previous account's PIN registration.
+  //
+  // Only refreshed while this browser is registered: "Remove this browser"
+  // clears both, and writing the number back on the next page load used to
+  // put the PIN prompt straight back on /login. PinContext writes the hint
+  // when the browser gets its device token.
   useEffect(() => {
     if (!account) return;
     const hint = getPinHint();
     if (hint && hint.accountId !== account.id) clearPin();
-    setPinHint({ accountId: account.id, phone: account.phone_number });
+    if (getMpinToken()) setPinHint({ accountId: account.id, phone: account.phone_number });
   }, [account]);
 
   const refreshProfiles = useCallback(async () => {
@@ -243,6 +250,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // catches a missing PIN once the account does load, and guessing
         // wrong the other way would ask someone for a PIN they already have.
         hasMpin: snapshot ? snapshot.account.has_mpin !== false : true,
+        account: snapshot?.account ?? data.account ?? null,
       };
     },
     [load]

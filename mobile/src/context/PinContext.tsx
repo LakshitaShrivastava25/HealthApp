@@ -112,7 +112,29 @@ export function PinProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const afterSignIn = useCallback(
-    async (data: { access: string; refresh: string; device_token?: string }) => {
+    async (data: {
+      access: string;
+      refresh: string;
+      device_token?: string;
+      account?: { id: string; phone_number: string };
+    }) => {
+      if (data.account) {
+        // Signing into a different account than the one this phone was
+        // registered to: drop the old account's tokens first, then remember
+        // the new one — otherwise AuthContext, seeing a different account,
+        // would clear the token just issued for this one.
+        const previous = await getPinHint();
+        if (previous && previous.accountId !== data.account.id) {
+          await clearPin();
+          setIsRegistered(false);
+          setBiometric((b) => ({ ...b, enabled: false }));
+        }
+        await setPinHint({
+          accountId: data.account.id,
+          phone: data.account.phone_number,
+          biometric: previous?.accountId === data.account.id ? previous.biometric : false,
+        });
+      }
       if (data.device_token) {
         await setMpinToken(data.device_token);
         setIsRegistered(true);
@@ -129,10 +151,12 @@ export function PinProvider({ children }: { children: ReactNode }) {
     async (phone: string, pin: string) => {
       setError(null);
       try {
-        const token = await getMpinToken();
-        // A registered phone signs in by token, which names no account at
-        // all. Only an unregistered one has to send the number.
-        const { data } = token ? await mpinApi.unlock(token, pin) : await mpinApi.unlockByPhone(phone, pin);
+        const [token, hint] = await Promise.all([getMpinToken(), getPinHint()]);
+        // This phone's token only speaks for the account it was issued to.
+        // Any other number signs in by number + PIN, which works on any
+        // phone and registers this one for that account on success.
+        const useToken = token && hint?.phone === phone;
+        const { data } = useToken ? await mpinApi.unlock(token, pin) : await mpinApi.unlockByPhone(phone, pin);
         await afterSignIn(data);
         return true;
       } catch (err) {

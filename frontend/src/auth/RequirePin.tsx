@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '@shared/session/SessionContext';
 
 /** Pages a signed-in account without a PIN may still open. */
-const EXEMPT = ['/pin/setup', '/login', '/privacy', '/terms', '/delete-account'];
+// /patient/setup is the registration page: details + PIN on one screen.
+const EXEMPT = ['/pin/setup', '/patient/setup', '/login', '/privacy', '/terms', '/delete-account'];
 
 /**
  * Sends anyone without a PIN to set one, from wherever they are — the
@@ -15,7 +16,7 @@ const EXEMPT = ['/pin/setup', '/login', '/privacy', '/terms', '/delete-account']
  * was signed in before PINs existed. Renders nothing; it only redirects.
  */
 export default function RequirePin() {
-  const { isAuthenticated, account } = useSession();
+  const { isAuthenticated, account, profiles } = useSession();
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
@@ -25,8 +26,10 @@ export default function RequirePin() {
     // someone to set a PIN on a guess would be worse than waiting.
     if (account.has_mpin !== false) return;
     if (EXEMPT.some((path) => pathname === path || pathname.startsWith(`${path}/`))) return;
-    navigate('/pin/setup', { replace: true });
-  }, [isAuthenticated, account, pathname, navigate]);
+    // No profile yet = registration was never finished: the registration
+    // page takes the details and the PIN together. Otherwise just the PIN.
+    navigate(profiles.length === 0 ? '/patient/setup' : '/pin/setup', { replace: true });
+  }, [isAuthenticated, account, profiles.length, pathname, navigate]);
 
   return null;
 }

@@ -24,6 +24,7 @@ import { authApi, doctorApi, profileApi } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { COUNTRIES, DEFAULT_COUNTRY, type Country } from '@shared/data/countries';
 import FileViewer from '@shared/components/FileViewer';
+import PinSettingsSection from '@shared/session/PinSettingsSection';
 
 type Doctor = {
   full_name: string;
@@ -458,6 +459,11 @@ export default function Profile() {
             <Check size={15} /> {saving ? 'Saving...' : 'Save changes'}
           </Button>
         </form>
+
+        {/* Outside the form: its buttons must never submit the profile. */}
+        <Card className="p-5 mt-6">
+          <PinSettingsSection />
+        </Card>
       </main>
     </>
   );

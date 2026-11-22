@@ -28,3 +28,6 @@ export { describeSendOtpError, describeVerifyOtpError, consumedVerifyAttempt, MA
 export { useOtpTimers, RESEND_COOLDOWN_SECONDS, MAX_SENDS_PER_HOUR } from './useOtpTimers';
 export { useReducedMotion } from './useReducedMotion';
 export { C, EASE_OUT, EASE_IN_OUT } from './tokens';
+
+// PIN sign-in steps shared by /login (Forgot PIN, first PIN) and /pin/setup.
+export { OtpStep, ChooseStep, PIN_LENGTH } from './PinSteps';

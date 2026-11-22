@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
 
-const LENGTH = 6;
-
 /**
- * Six-box one-time-code entry.
+ * Split-box code entry: the 6-digit SMS code by default, or the 4-digit
+ * sign-in PIN with `length={4} masked`.
  *
  * Split boxes look better than one field, but only if they behave like
  * one field — so everything people actually do is handled here:
@@ -32,6 +31,9 @@ export default function OTPInput({
   disabled = false,
   invalid = false,
   autoFocus = false,
+  length: LENGTH = 6,
+  masked = false,
+  label = 'One-time code',
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -39,6 +41,11 @@ export default function OTPInput({
   disabled?: boolean;
   invalid?: boolean;
   autoFocus?: boolean;
+  /** Number of boxes. */
+  length?: number;
+  /** Show dots instead of digits, and never offer autofill (a PIN). */
+  masked?: boolean;
+  label?: string;
 }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
   /**
@@ -86,7 +93,7 @@ export default function OTPInput({
     } else {
       firedFor.current = null;
     }
-  }, [value, onComplete]);
+  }, [value, onComplete, LENGTH]);
 
   // Shake on each new rejection. Driven by the false→true edge rather
   // than a remount, because remounting the inputs would steal focus from
@@ -154,7 +161,7 @@ export default function OTPInput({
     <motion.div
       animate={shake}
       role="group"
-      aria-label="One-time code, 6 digits"
+      aria-label={`${label}, ${LENGTH} digits`}
       className="flex items-center justify-between gap-1.5 sm:gap-2"
     >
       {Array.from({ length: LENGTH }, (_, i) => {
@@ -167,8 +174,9 @@ export default function OTPInput({
             }}
             value={value[i] ?? ''}
             disabled={disabled}
+            type={masked ? 'password' : 'text'}
             inputMode="numeric"
-            autoComplete={i === 0 ? 'one-time-code' : 'off'}
+            autoComplete={!masked && i === 0 ? 'one-time-code' : 'off'}
             aria-label={`Digit ${i + 1} of ${LENGTH}`}
             aria-invalid={invalid || undefined}
             maxLength={LENGTH}

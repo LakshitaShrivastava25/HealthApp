@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowUpRight, RotateCw } from 'lucide-react';
 import {
   AuthCard,
   AuthShell,
+  ChooseStep,
   DevOtpChip,
   FormError,
   CuraPathLogo,
   OTPInput,
+  PIN_LENGTH,
   PhoneField,
   PrimaryButton,
   SecurityBadge,
@@ -21,13 +23,22 @@ import {
   useOtpTimers,
 } from '@shared/auth';
 import { usePhoneInput } from '@shared/components/PhoneInput';
+import { COUNTRIES } from '@shared/data/countries';
 import { useSession } from '@shared/session/SessionContext';
+import { usePin } from '@shared/session/PinContext';
+import { mpinApi } from '@shared/session/mpinApi';
+import { getPinHint, maskPhone } from '@shared/session/pin';
 import { useBackToClose } from '@shared/hooks/useBackToClose';
 
-type StepName = 'phone' | 'otp' | 'staff';
+type StepName = 'phone' | 'pin' | 'otp' | 'set-pin' | 'staff';
 
 /** How long the success beat holds before the app takes over. */
 const SUCCESS_HOLD_MS = 1250;
+
+/** 65 -> "1:05" */
+function formatWait(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 /**
  * /login — the one sign-in for the whole website, matching the mobile app.
@@ -39,9 +50,15 @@ const SUCCESS_HOLD_MS = 1250;
  *
  * A staff number is recognised and handed to the Admin Portal with its
  * session already in place, so staff do not enter a second code.
+ *
+ * PIN sign-in, as in the mobile app: a browser that has signed in before
+ * pre-fills its number and goes straight to the 4-digit PIN. A code is only
+ * used to register a new browser, to set a first PIN, or for Forgot PIN —
+ * never as a second way in once the PIN exists.
  */
 export default function Login() {
-  const { isAuthenticated, account, sendOtp, verifyOtp } = useSession();
+  const { isAuthenticated, account, sendOtp, verifyOtp, adoptSession } = useSession();
+  const pin = usePin();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -62,6 +79,51 @@ export default function Login() {
   const [verifying, setVerifying] = useState(false);
 
   const timers = useOtpTimers();
+
+  // --- PIN sign-in state -------------------------------------------------
+  const [knownPhone] = useState(() => getPinHint()?.phone ?? null);
+  const [mpin, setMpin] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  /** The code step is for Forgot PIN (ends at "choose a new PIN"), not sign-in. */
+  const [resetting, setResetting] = useState(false);
+  const [grant, setGrant] = useState('');
+  /** Where to go once the PIN is set. */
+  const [home, setHome] = useState('/');
+
+  // Pre-fill the number this browser last signed in with, so a returning
+  // person only types their PIN.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !knownPhone) return;
+    prefilled.current = true;
+    const match = [...COUNTRIES]
+      .sort((a, b) => b.dialCode.length - a.dialCode.length)
+      .find((c) => knownPhone.startsWith(c.dialCode));
+    if (!match) return;
+    setCountry(match);
+    setDigits(knownPhone.slice(match.dialCode.length));
+  }, [knownPhone, setCountry, setDigits]);
+
+  /**
+   * Whether the PIN leads. Only when this browser has signed in before *and*
+   * the number on screen is still that one — a different number's PIN would
+   * belong to someone else's account.
+   */
+  const pinFirst = !!knownPhone && fullNumber === knownPhone;
+
+  // Seconds still to wait, counted from the server's own deadline.
+  const [waitSeconds, setWaitSeconds] = useState(0);
+  useEffect(() => {
+    if (!pin.waitUntil) {
+      setWaitSeconds(0);
+      return;
+    }
+    const until = pin.waitUntil;
+    const tick = () => setWaitSeconds(Math.max(0, Math.ceil((until - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [pin.waitUntil]);
 
   async function handleSendOtp(isResend = false) {
     setError(null);
@@ -85,18 +147,87 @@ export default function Login() {
     }
   }
 
+  /** The one decision on the phone step: a registered browser goes to its PIN, anything else gets a code. */
+  function handleContinue() {
+    if (!isComplete || sending) return;
+    setError(null);
+    if (pinFirst) {
+      pin.clearError();
+      setMpin('');
+      setStep('pin');
+      return;
+    }
+    setResetting(false);
+    void handleSendOtp();
+  }
+
+  const handlePinSignIn = useCallback(
+    async (code: string) => {
+      if (code.length !== PIN_LENGTH || pinBusy || waitSeconds > 0) return;
+      setPinBusy(true);
+      try {
+        const result = await pin.signInWithPin(fullNumber, code);
+        if (!result) {
+          setMpin('');
+          return;
+        }
+        if (result.kind === 'staff') {
+          setStep('staff');
+          return;
+        }
+        setTarget(from ?? result.home);
+      } finally {
+        setPinBusy(false);
+      }
+    },
+    [from, fullNumber, pin, pinBusy, waitSeconds]
+  );
+
+  /** Forgot PIN: the same code flow, but it ends at "choose a new PIN". */
+  function handleForgotPin() {
+    setError(null);
+    pin.clearError();
+    setResetting(true);
+    setMpin('');
+    void handleSendOtp();
+  }
+
   const handleVerifyOtp = useCallback(
     async (code: string) => {
       if (code.length !== 6 || verifying) return;
       setError(null);
       setVerifying(true);
       try {
+        if (resetting) {
+          // Forgot PIN: trade the code for a grant (which also signs them
+          // in), then let them choose a new PIN.
+          const { data } = await mpinApi.grant(fullNumber, code);
+          const result = await adoptSession(data);
+          if (result.kind === 'staff') {
+            setStep('staff');
+            return;
+          }
+          setGrant(data.grant);
+          setHome(from ?? result.home);
+          setStep('set-pin');
+          return;
+        }
         const result = await verifyOtp(fullNumber, code);
         if (result.kind === 'staff') {
           setStep('staff');
           return;
         }
-        setTarget(from ?? result.home);
+        if (result.hasMpin) {
+          // They already have a PIN; this code only registers the browser.
+          // Done quietly — their usual PIN works here from now on.
+          await pin.registerDevice().catch(() => undefined);
+          setTarget(from ?? result.home);
+        } else {
+          // No PIN yet. Setting one is required, so go straight there
+          // rather than letting them reach the app and be sent back.
+          setHome(from ?? result.home);
+          setStep('set-pin');
+        }
       } catch (err) {
         setError(describeVerifyOtpError(err, { rejectedAttempts }));
         if (consumedVerifyAttempt(err)) setRejectedAttempts((n) => n + 1);
@@ -105,7 +236,7 @@ export default function Login() {
         setVerifying(false);
       }
     },
-    [from, fullNumber, navigate, rejectedAttempts, verifyOtp, verifying]
+    [adoptSession, from, fullNumber, pin, rejectedAttempts, resetting, verifyOtp, verifying]
   );
 
   // The success card holds for a beat, then hands over to the app.
@@ -123,11 +254,13 @@ export default function Login() {
     return () => clearTimeout(id);
   }, [step, navigate]);
 
-  // On the code step, Back returns to the phone-number step (number kept)
-  // instead of leaving the login page.
-  useBackToClose(step === 'otp', () => {
+  // On the code and PIN steps, Back returns to the phone-number step
+  // (number kept) instead of leaving the login page.
+  useBackToClose(step === 'otp' || step === 'pin', () => {
     setOtp('');
+    setMpin('');
     setError(null);
+    pin.clearError();
     setStep('phone');
   });
 
@@ -142,7 +275,16 @@ export default function Login() {
   }
 
   // Already signed in (a bookmark, the back button): nothing to do here.
-  if (isAuthenticated && account && !target && !verifying && step !== 'staff') {
+  // Not while choosing a PIN, though — that step runs signed in.
+  if (
+    isAuthenticated &&
+    account &&
+    !target &&
+    !verifying &&
+    !pinBusy &&
+    step !== 'staff' &&
+    step !== 'set-pin'
+  ) {
     return <Navigate to="/" replace />;
   }
 
@@ -178,8 +320,12 @@ export default function Login() {
           {step === 'phone' && (
             <Step key="phone">
               <StepHeading
-                title={<>Welcome <span aria-hidden="true">👋</span></>}
-                subtitle="Sign in with your mobile number to continue"
+                title={pinFirst ? 'Welcome back' : <>Welcome <span aria-hidden="true">👋</span></>}
+                subtitle={
+                  pinFirst
+                    ? 'Enter your PIN to sign in. Forgot it? You can reset it on the next screen.'
+                    : 'Sign in with your mobile number to continue'
+                }
               />
 
               <PhoneField
@@ -187,7 +333,7 @@ export default function Login() {
                 onCountryChange={setCountry}
                 digits={digits}
                 onDigitsChange={setDigits}
-                onSubmit={() => isComplete && handleSendOtp()}
+                onSubmit={handleContinue}
                 disabled={sending}
               />
 
@@ -198,9 +344,9 @@ export default function Login() {
                   state={sending ? 'loading' : 'idle'}
                   loadingLabel="Sending code…"
                   disabled={!isComplete}
-                  onClick={() => handleSendOtp()}
+                  onClick={handleContinue}
                 >
-                  Send OTP
+                  {pinFirst ? 'Continue' : 'Send OTP'}
                 </PrimaryButton>
               </div>
 
@@ -216,10 +362,81 @@ export default function Login() {
             </Step>
           )}
 
+          {step === 'pin' && (
+            <Step key="pin">
+              <StepHeading
+                title="Enter your PIN"
+                subtitle={
+                  <>
+                    For <span className="font-medium text-ink-700">{maskPhone(fullNumber)}</span>
+                    {' · '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMpin('');
+                        pin.clearError();
+                        setStep('phone');
+                      }}
+                      className="font-medium text-brand-purple underline-offset-2 hover:underline"
+                    >
+                      change
+                    </button>
+                  </>
+                }
+              />
+
+              <div className="mx-auto max-w-[248px]">
+                <OTPInput
+                  value={mpin}
+                  onChange={(v) => {
+                    setMpin(v);
+                    if (pin.error) pin.clearError();
+                  }}
+                  onComplete={handlePinSignIn}
+                  length={PIN_LENGTH}
+                  masked
+                  label="PIN"
+                  disabled={pinBusy || waitSeconds > 0}
+                  invalid={!!pin.error}
+                  autoFocus
+                />
+              </div>
+
+              {waitSeconds > 0 ? (
+                <p className="mt-3 text-center text-[12px] font-medium text-warning">
+                  Too many wrong tries. Try again in {formatWait(waitSeconds)}, or reset your PIN.
+                </p>
+              ) : (
+                pin.attemptsLeft != null &&
+                pin.attemptsLeft > 0 &&
+                !pin.error && (
+                  <p className="mt-3 text-center text-[12px] text-ink-500">
+                    {pin.attemptsLeft} {pin.attemptsLeft === 1 ? 'try' : 'tries'} left
+                  </p>
+                )
+              )}
+
+              <FormError message={pin.error ?? error} />
+
+              {pinBusy && <p className="mt-3 text-center text-[12px] text-ink-500">Signing in…</p>}
+
+              <button
+                type="button"
+                onClick={handleForgotPin}
+                disabled={pinBusy || sending}
+                className="mt-5 block w-full text-center text-[12.5px] font-semibold text-brand-purple underline-offset-2 hover:underline disabled:opacity-50"
+              >
+                {sending ? 'Sending code…' : 'Forgot PIN?'}
+              </button>
+
+              <SecurityBadge />
+            </Step>
+          )}
+
           {step === 'otp' && (
             <Step key="otp">
               <StepHeading
-                title="Enter the 6-digit code"
+                title={resetting ? 'Reset your PIN' : 'Enter the 6-digit code'}
                 subtitle={
                   <>
                     Sent to <span className="font-medium text-ink-700">{fullNumber}</span>
@@ -283,11 +500,24 @@ export default function Login() {
                   disabled={otp.length !== 6}
                   onClick={() => handleVerifyOtp(otp)}
                 >
-                  Verify &amp; Login
+                  {resetting ? 'Verify' : <>Verify &amp; Login</>}
                 </PrimaryButton>
               </div>
 
               <SecurityBadge />
+            </Step>
+          )}
+
+          {step === 'set-pin' && (
+            <Step key="set-pin">
+              <ChooseStep
+                title={resetting ? 'Set a new PIN' : 'Create your PIN'}
+                subtitle="You will use this to sign in from now on, instead of waiting for a code each time."
+                onDone={async (next) => {
+                  await pin.setPin(next, grant || undefined);
+                  setTarget(home);
+                }}
+              />
             </Step>
           )}
 

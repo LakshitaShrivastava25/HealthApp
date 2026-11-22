@@ -231,17 +231,23 @@ export default function Login() {
    * phone on success, so later unlocks are device-bound.
    */
   /**
-   * The one decision this screen makes: a phone that is already registered
-   * goes to its PIN, anything else gets a code to register with.
+   * Sign in: number, then PIN — on any phone. A code is only for
+   * registering (handleRegister) and for Forgot PIN.
    */
   function handleContinue() {
     if (!phoneReady || busy) return;
     setError(null);
-    if (pinFirst) {
-      setMpin('');
-      setStep('pin');
-      return;
-    }
+    pin.clearError();
+    setMpin('');
+    setStep('pin');
+  }
+
+  /** New number, or an account without a PIN yet: a code, then "create your PIN". */
+  function handleRegister() {
+    if (!phoneReady || busy) return;
+    setError(null);
+    pin.clearError();
+    setMpin('');
     setResetting(false);
     void handleSendOtp();
   }
@@ -403,7 +409,7 @@ export default function Login() {
                   <Text style={[type.caption, styles.stepNote]}>
                     {pinFirst
                       ? 'Enter your PIN to sign in. Forgot it? You can reset it on the next screen.'
-                      : "We'll text you a 6-digit code. Doctors sign in here too, then register from More → Register as a doctor and switch between User and Doctor mode."}
+                      : 'Sign in with your mobile number and 4-digit PIN. New to CuraPath? Register with a one-time code. Doctors sign in here too, then register from More → Register as a doctor.'}
                   </Text>
                   <PhoneInput
                     ref={phoneInputRef}
@@ -416,8 +422,17 @@ export default function Login() {
                     returnKeyType="go"
                     onSubmitEditing={handleContinue}
                   />
-                  <Button onPress={handleContinue} disabled={!phoneReady} loading={busy}>
-                    {pinFirst ? 'Continue' : 'Send code'}
+                  <Button onPress={handleContinue} disabled={!phoneReady || busy}>
+                    Continue with PIN
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onPress={handleRegister}
+                    disabled={!phoneReady}
+                    loading={busy}
+                    style={{ marginTop: spacing.sm }}
+                  >
+                    New user? Register with OTP
                   </Button>
                 </>
               ) : step === 'pin' ? (
@@ -482,6 +497,11 @@ export default function Login() {
                       PIN — it is never a second way to sign in. */}
                   <Pressable onPress={handleForgotPin} style={styles.pinLinkRow} disabled={busy}>
                     <Text style={styles.pinLink}>Forgot PIN?</Text>
+                  </Pressable>
+                  <Pressable onPress={handleRegister} style={styles.pinLinkRow} disabled={busy}>
+                    <Text style={[type.caption, { textAlign: 'center' }]}>
+                      New user, or never set a PIN? Register with OTP
+                    </Text>
                   </Pressable>
                 </>
               ) : step === 'set-pin' ? (

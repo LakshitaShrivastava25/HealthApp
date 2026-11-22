@@ -3,7 +3,7 @@ import axios from 'axios';
 
 import { useSession, type VerifyResult } from './SessionContext';
 import { mpinApi, pinErrorMessage, type TokenResponse } from './mpinApi';
-import { browserLabel, clearPin, getMpinToken, setMpinToken, setPinHint } from './pin';
+import { browserLabel, clearPin, getMpinToken, getPinHint, setMpinToken, setPinHint } from './pin';
 import type { Account } from './types';
 
 /**
@@ -101,9 +101,10 @@ export function PinProvider({ children }: { children: ReactNode }) {
       setError(null);
       let data: TokenResponse;
       try {
-        const token = getMpinToken();
-        // A registered browser signs in by token, which names no account at
-        // all. Only an unregistered one has to send the number.
+        // This browser's token only speaks for the account it was issued to.
+        // Any other number signs in by number + PIN, which also registers the
+        // browser for that account on success.
+        const token = getPinHint()?.phone === phone ? getMpinToken() : null;
         ({ data } = token ? await mpinApi.unlock(token, pin) : await mpinApi.unlockByPhone(phone, pin));
       } catch (err) {
         applyFailure(err);

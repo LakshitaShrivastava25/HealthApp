@@ -7,6 +7,7 @@ import { setTokens as setAdminTokens } from '../../admin/lib/api';
 import { clearTokens, getAccessToken, getRefreshToken, setTokens, type Mode } from './client';
 import { doctorModeApi, userApi } from './clients';
 import { landingPath, rememberMode } from './mode';
+import { clearPin, getPinHint, setPinHint } from './pin';
 import { STAFF_ROLES, type Account, type DoctorRecord, type Profile } from './types';
 
 /**
@@ -20,7 +21,10 @@ import { STAFF_ROLES, type Account, type DoctorRecord, type Profile } from './ty
 
 type Snapshot = { account: Account; profiles: Profile[]; doctor: DoctorRecord | null };
 
-export type VerifyResult = { kind: 'staff' } | { kind: 'member'; home: string };
+export type VerifyResult = { kind: 'staff' } | { kind: 'member'; home: string; hasMpin: boolean };
+
+/** What every sign-in endpoint answers: verify-otp, PIN unlock, PIN grant. */
+export type SignInTokens = { access: string; refresh: string; account?: Account };
 
 type SessionValue = {
   isLoading: boolean;
@@ -45,6 +49,10 @@ type SessionValue = {
 
   sendOtp: (phone: string) => Promise<{ debug_otp?: string }>;
   verifyOtp: (phone: string, otp: string) => Promise<VerifyResult>;
+  /** Take over a token pair from any sign-in (OTP, PIN, PIN reset) and load the session. */
+  adoptSession: (tokens: SignInTokens) => Promise<VerifyResult>;
+  /** The account now has a PIN; stops the set-a-PIN redirect without a reload. */
+  markMpinSet: () => void;
   logout: () => void;
 };
 
@@ -186,6 +194,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [account, doctor, mode, location.pathname]);
 
+  // Remember whose browser this is, for PIN sign-in: the account and the
+  // number to pre-fill on /login. A different person signing in here must
+  // not inherit the previous account's PIN registration.
+  useEffect(() => {
+    if (!account) return;
+    const hint = getPinHint();
+    if (hint && hint.accountId !== account.id) clearPin();
+    setPinHint({ accountId: account.id, phone: account.phone_number });
+  }, [account]);
+
   const refreshProfiles = useCallback(async () => {
     const list = await fetchProfiles();
     applyProfiles(list, account?.id);
@@ -203,12 +221,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return data;
   }, []);
 
-  const verifyOtp = useCallback(
-    async (phone: string, otp: string): Promise<VerifyResult> => {
-      const { data } = await userApi.post('/auth/verify-otp/', { phone_number: phone, otp });
-      if (STAFF_ROLES.includes(data.account?.role)) {
+  const adoptSession = useCallback(
+    async (data: SignInTokens): Promise<VerifyResult> => {
+      if (data.account && STAFF_ROLES.includes(data.account.role)) {
         // Staff work in the Admin Portal, under its own session — handed
-        // over directly, so a staff member does not enter a second code.
+        // over directly, so a staff member does not sign in a second time.
         handOffToAdmin(data.access, data.refresh);
         return { kind: 'staff' };
       }
@@ -222,10 +239,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         home: snapshot
           ? landingPath(snapshot.account.id, !!snapshot.doctor, snapshot.profiles.length)
           : '/',
+        // Unknown (not loaded) counts as "has one": the set-a-PIN redirect
+        // catches a missing PIN once the account does load, and guessing
+        // wrong the other way would ask someone for a PIN they already have.
+        hasMpin: snapshot ? snapshot.account.has_mpin !== false : true,
       };
     },
     [load]
   );
+
+  const verifyOtp = useCallback(
+    async (phone: string, otp: string): Promise<VerifyResult> => {
+      const { data } = await userApi.post('/auth/verify-otp/', { phone_number: phone, otp });
+      return adoptSession(data);
+    },
+    [adoptSession]
+  );
+
+  const markMpinSet = useCallback(() => {
+    setAccount((current) => (current && current.has_mpin !== true ? { ...current, has_mpin: true } : current));
+  }, []);
 
   const logout = useCallback(() => {
     // End the session on the server too, without waiting on the network.
@@ -269,11 +302,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       mode,
       sendOtp,
       verifyOtp,
+      adoptSession,
+      markMpinSet,
       logout,
     }),
     [
       isLoading, isAuthenticated, loadFailed, load, account, profiles, activeProfile,
-      refreshProfiles, doctor, refreshDoctor, mode, sendOtp, verifyOtp, logout, setActiveProfile,
+      refreshProfiles, doctor, refreshDoctor, mode, sendOtp, verifyOtp, adoptSession, markMpinSet, logout, setActiveProfile,
     ]
   );
 

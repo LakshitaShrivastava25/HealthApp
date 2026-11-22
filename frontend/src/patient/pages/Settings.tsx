@@ -20,6 +20,8 @@ import { useAuth } from '../context/AuthContext';
 import { allergiesApi, authApi, profilesApi } from '../lib/api';
 import { todayIso } from '@shared/dates';
 import { useLogoutConfirm } from '@shared/hooks/useLogoutConfirm';
+import PinSettingsSection from '@shared/session/PinSettingsSection';
+import { clearPin } from '@shared/session/pin';
 
 const notBuiltItems = [
   { icon: ShieldCheck, label: 'Security & Privacy' },
@@ -143,6 +145,9 @@ export default function Settings() {
     setDeleting(true);
     try {
       await authApi.deleteAccount();
+      // The server already dropped this browser's PIN registration; forget
+      // the token and the remembered number too.
+      clearPin();
       logout();
       window.location.replace('/login');
     } finally {
@@ -287,6 +292,10 @@ export default function Settings() {
               </div>
             </div>
           )}
+        </Card>
+
+        <Card className="p-5 mb-6">
+          <PinSettingsSection />
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

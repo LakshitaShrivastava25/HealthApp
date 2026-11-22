@@ -5,6 +5,8 @@ export type Account = {
   email: string | null;
   role: 'patient' | 'doctor' | 'admin' | 'ocr_reviewer' | 'claims_ops';
   date_joined: string;
+  /** Whether the account has a sign-in PIN. Absent from sessions loaded before the field existed. */
+  has_mpin?: boolean;
 };
 
 export const STAFF_ROLES: Account['role'][] = ['admin', 'ocr_reviewer', 'claims_ops'];

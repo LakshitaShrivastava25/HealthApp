@@ -2,16 +2,19 @@ import { Suspense } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import Login from './auth/Login';
 import RootRedirect from './auth/RootRedirect';
+import RequirePin from './auth/RequirePin';
 import patientRoutes from './patient/PatientApp';
 import doctorRoutes from './doctor/DoctorApp';
 import adminRoutes from './admin/AdminApp';
 import { SessionProvider } from '@shared/session/SessionContext';
+import { PinProvider } from '@shared/session/PinContext';
 import { lazyPage } from '@shared/lazyPage';
 import PageFallback from '@shared/components/PageFallback';
 
 const PrivacyPolicy = lazyPage('public', () => import('./legal/PrivacyPolicy'));
 const Terms = lazyPage('public', () => import('./legal/Terms'));
 const DeleteAccount = lazyPage('public', () => import('./legal/DeleteAccount'));
+const PinSetup = lazyPage('public', () => import('./auth/PinSetup'));
 
 /**
  * The one router for the whole website.
@@ -37,7 +40,12 @@ const DeleteAccount = lazyPage('public', () => import('./legal/DeleteAccount'));
 function SessionLayout() {
   return (
     <SessionProvider>
-      <Outlet />
+      {/* PIN sign-in, as in the mobile app: PinProvider holds this browser's
+          registration; RequirePin sends an account without a PIN to set one. */}
+      <PinProvider>
+        <RequirePin />
+        <Outlet />
+      </PinProvider>
     </SessionProvider>
   );
 }
@@ -53,6 +61,7 @@ export default function App() {
           <Route path="/delete-account" element={<DeleteAccount />} />
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/pin/setup" element={<PinSetup />} />
           {patientRoutes()}
           {doctorRoutes()}
           {/* Anything unrecognised starts again from the top, which sends a

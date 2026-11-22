@@ -51,10 +51,10 @@ function formatWait(seconds: number) {
  * A staff number is recognised and handed to the Admin Portal with its
  * session already in place, so staff do not enter a second code.
  *
- * PIN sign-in, as in the mobile app: a browser that has signed in before
- * pre-fills its number and goes straight to the 4-digit PIN. A code is only
- * used to register a new browser, to set a first PIN, or for Forgot PIN —
- * never as a second way in once the PIN exists.
+ * Sign-in is number + 4-digit PIN, on any browser. A one-time code is only
+ * for registering (new number, or an account with no PIN yet — it ends at
+ * "create your PIN") and for Forgot PIN. A browser that has signed in before
+ * also pre-fills its number.
  */
 export default function Login() {
   const { isAuthenticated, account, sendOtp, verifyOtp, adoptSession } = useSession();
@@ -149,16 +149,21 @@ export default function Login() {
     }
   }
 
-  /** The one decision on the phone step: a registered browser goes to its PIN, anything else gets a code. */
+  /** Sign in: number, then PIN — on any browser. */
   function handleContinue() {
     if (!isComplete || sending) return;
     setError(null);
-    if (pinFirst) {
-      pin.clearError();
-      setMpin('');
-      setStep('pin');
-      return;
-    }
+    pin.clearError();
+    setMpin('');
+    setStep('pin');
+  }
+
+  /** Register (or an account without a PIN yet): a code, then "create your PIN". */
+  function handleRegister() {
+    if (!isComplete || sending) return;
+    setError(null);
+    pin.clearError();
+    setMpin('');
     setResetting(false);
     void handleSendOtp();
   }
@@ -328,7 +333,7 @@ export default function Login() {
                 subtitle={
                   pinFirst
                     ? 'Enter your PIN to sign in. Forgot it? You can reset it on the next screen.'
-                    : 'Sign in with your mobile number to continue'
+                    : 'Sign in with your mobile number and 4-digit PIN'
                 }
               />
 
@@ -339,20 +344,23 @@ export default function Login() {
                 onDigitsChange={setDigits}
                 onSubmit={handleContinue}
                 disabled={sending}
-                hint={pinFirst ? 'This browser is set up for PIN sign-in — no code needed.' : undefined}
+                hint={pinFirst ? 'This browser is set up for PIN sign-in — no code needed.' : 'You’ll enter your 4-digit PIN next.'}
               />
 
               <FormError message={error} />
 
               <div className="mt-5">
-                <PrimaryButton
-                  state={sending ? 'loading' : 'idle'}
-                  loadingLabel="Sending code…"
-                  disabled={!isComplete}
-                  onClick={handleContinue}
-                >
-                  {pinFirst ? 'Continue' : 'Send OTP'}
+                <PrimaryButton disabled={!isComplete || sending} onClick={handleContinue}>
+                  Continue with PIN
                 </PrimaryButton>
+                <button
+                  type="button"
+                  onClick={handleRegister}
+                  disabled={!isComplete || sending}
+                  className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-brand-purple/40 bg-white text-[13px] font-semibold text-brand-purple transition-colors hover:bg-brand-lavender disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sending ? 'Sending code…' : 'New user? Register with OTP'}
+                </button>
               </div>
 
               <SecurityBadge />
@@ -361,8 +369,9 @@ export default function Login() {
                   accounts/views.py creates the account on first successful
                   verification, and a doctor registers from inside it. */}
               <p className="mt-5 border-t border-border/70 pt-4 text-center text-[11.5px] leading-relaxed text-ink-500">
-                New to CuraPath? Just enter your number — signing in for the first time creates your account.
-                Doctors sign in here too, then register from <span className="font-medium text-ink-700">Register as a doctor</span>.
+                New to CuraPath? Choose <span className="font-medium text-ink-700">Register with OTP</span> — verifying your
+                number creates your account, then you set your PIN. Doctors sign in here too, then register from{' '}
+                <span className="font-medium text-ink-700">Register as a doctor</span>.
               </p>
             </Step>
           )}
@@ -432,6 +441,14 @@ export default function Login() {
                 className="mt-5 block w-full text-center text-[12.5px] font-semibold text-brand-purple underline-offset-2 hover:underline disabled:opacity-50"
               >
                 {sending ? 'Sending code…' : 'Forgot PIN?'}
+              </button>
+              <button
+                type="button"
+                onClick={handleRegister}
+                disabled={pinBusy || sending}
+                className="mt-2 block w-full text-center text-[12px] text-ink-500 underline-offset-2 hover:underline disabled:opacity-50"
+              >
+                New user, or never set a PIN? Register with OTP
               </button>
 
               <SecurityBadge />

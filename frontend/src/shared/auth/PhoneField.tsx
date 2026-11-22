@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Phone } from 'lucide-react';
 import { COUNTRIES, type Country } from '@shared/data/countries';
 import { normalisePhoneDigits } from '@shared/phoneDigits';
@@ -21,6 +21,7 @@ export default function PhoneField({
   onSubmit,
   disabled = false,
   label = 'Mobile number',
+  hint,
 }: {
   country: Country;
   onCountryChange: (c: Country) => void;
@@ -29,6 +30,8 @@ export default function PhoneField({
   onSubmit?: () => void;
   disabled?: boolean;
   label?: string;
+  /** Line under the field. Defaults to where the code will be texted. */
+  hint?: ReactNode;
 }) {
   const id = useId();
 
@@ -93,7 +96,7 @@ export default function PhoneField({
       </div>
 
       <p id={`${id}-hint`} className="mt-1.5 text-[11px] text-ink-500">
-        We&apos;ll text a 6-digit code to {country.dialCode} {digits || '·'.repeat(country.digits)}
+        {hint ?? <>We&apos;ll text a 6-digit code to {country.dialCode} {digits || '·'.repeat(country.digits)}</>}
       </p>
     </div>
   );

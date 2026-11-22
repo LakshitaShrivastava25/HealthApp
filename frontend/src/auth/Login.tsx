@@ -339,6 +339,7 @@ export default function Login() {
                 onDigitsChange={setDigits}
                 onSubmit={handleContinue}
                 disabled={sending}
+                hint={pinFirst ? 'This browser is set up for PIN sign-in — no code needed.' : undefined}
               />
 
               <FormError message={error} />

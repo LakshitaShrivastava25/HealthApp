@@ -20,6 +20,7 @@ from .serializers import (
     MedicationSerializer,
     MedicationStatusSerializer,
     ReminderScheduleSerializer,
+    apply_reminder_times,
 )
 
 
@@ -120,6 +121,19 @@ class MedicationViewSet(viewsets.ModelViewSet):
             'reminders', Prefetch('occurrences', queryset=MedicationOccurrence.objects.select_related('source_document'))
         ).get(pk=medication.pk)
 
+    def _apply_times(self, medication, times):
+        """
+        Write the reminder_times from the request, if it carried any, onto the
+        medicine that consolidation settled on — adding a medicine a
+        prescription already listed must put its times on that existing
+        record, not on a row that was just merged away. A request without the
+        field leaves the times exactly as they were.
+        """
+        if times is None:
+            return medication
+        apply_reminder_times(medication, times)
+        return self._refreshed(medication)
+
     def _guard_write(self, message):
         if self._is_doctor():
             raise PermissionDenied(message)
@@ -127,11 +141,14 @@ class MedicationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         self._guard_write("Doctors cannot add medications on behalf of a patient.")
         assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
+        # Not a column on Medication: the times are their own rows, written
+        # once the medicine this request settled on is known.
+        times = serializer.validated_data.pop('reminder_times', None)
         medication = serializer.save(origin=Medication.Origin.MANUAL)
         rebuild_profile_medications(medication.profile)
         # Added by hand but already on the list from a prescription: the
         # response (and any reminder the app adds next) is the one record.
-        serializer.instance = self._refreshed(medication)
+        serializer.instance = self._apply_times(self._refreshed(medication), times)
 
     def perform_update(self, serializer):
         self._guard_write("Doctors cannot edit a patient's medications.")
@@ -146,9 +163,10 @@ class MedicationViewSet(viewsets.ModelViewSet):
                 else Medication.UserStatus.STOPPED
             )
             medication.user_status_at = timezone.now()
+        times = serializer.validated_data.pop('reminder_times', None)
         medication = serializer.save(user_status=medication.user_status, user_status_at=medication.user_status_at)
         rebuild_profile_medications(medication.profile)
-        serializer.instance = self._refreshed(medication)
+        serializer.instance = self._apply_times(self._refreshed(medication), times)
 
     def perform_destroy(self, instance):
         """

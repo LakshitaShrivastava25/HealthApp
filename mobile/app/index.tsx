@@ -41,7 +41,13 @@ export default function Index() {
   // The PIN is how this account signs in, so one has to exist. Enforced
   // here rather than on the login screen so every route in is covered —
   // a fresh sign-in, a restored session, a notification tap.
-  if (account && account.has_mpin === false) return <RedirectOnce href="/mpin-setup" />;
+  // No PIN yet. A new account registers on profile-setup (details + PIN on
+  // one screen); an account that already has a profile only sets the PIN.
+  if (account && account.has_mpin === false) {
+    return (
+      <RedirectOnce href={portal === 'patient' && profiles.length === 0 ? '/profile-setup' : '/mpin-setup'} />
+    );
+  }
 
   switch (portal) {
     case 'admin':

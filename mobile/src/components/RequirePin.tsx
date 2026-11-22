@@ -15,7 +15,7 @@ import { useAuth } from '../context/AuthContext';
  * Renders nothing; it only redirects.
  */
 export default function RequirePin() {
-  const { isAuthenticated, account } = useAuth();
+  const { isAuthenticated, account, portal, profiles } = useAuth();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -24,9 +24,11 @@ export default function RequirePin() {
     // existed, and bouncing someone to setup on a guess would be worse
     // than waiting one request for the truth.
     if (account.has_mpin !== false) return;
-    if (pathname === '/mpin-setup') return;
-    router.replace('/mpin-setup');
-  }, [isAuthenticated, account, pathname]);
+    // profile-setup is the registration screen: details + PIN together.
+    if (pathname === '/mpin-setup' || pathname === '/profile-setup') return;
+    // No profile yet = registration never finished; otherwise just the PIN.
+    router.replace(portal === 'patient' && profiles.length === 0 ? '/profile-setup' : '/mpin-setup');
+  }, [isAuthenticated, account, portal, profiles.length, pathname]);
 
   return null;
 }

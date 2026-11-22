@@ -15,6 +15,7 @@ import {
 
 import { Badge, Card, EmptyState, ErrorNote, Row, Screen, Loading } from '../../../src/components/ui';
 import ECGProgressBar from '../../../src/components/ECGProgressBar';
+import ReviewDetailsForm, { type ReviewForm } from '../../../src/components/ReviewDetailsForm';
 import { useAuth } from '../../../src/context/AuthContext';
 import { documentsApi, unwrap, type UploadFile } from '../../../src/lib/api';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../../src/lib/pickFile';
@@ -75,6 +76,12 @@ export default function Locker() {
   const [uploadComplete, setUploadComplete] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  // Picked but not sent. The review form opens first, so the details the
+  // person enters are saved and confirmed straight after the upload.
+  const [pendingFile, setPendingFile] = useState<UploadFile | null>(null);
+  const [form, setForm] = useState<ReviewForm | null>(null);
+  const setField = (key: keyof ReviewForm, value: string) =>
+    setForm((f) => (f ? { ...f, [key]: value } : f));
 
   const load = useCallback(async () => {
     if (!profileId) return;
@@ -98,7 +105,8 @@ export default function Locker() {
     setRefreshing(false);
   }
 
-  async function upload(pick: () => Promise<UploadFile | null>) {
+  /** Picking a file only opens the review form — nothing is sent yet. */
+  async function choose(pick: () => Promise<UploadFile | null>) {
     setSheetOpen(false);
     setUploadError(null);
     setUploadNotice(null);
@@ -110,15 +118,45 @@ export default function Locker() {
       return;
     }
     if (!file || !activeProfile) return;
+    setForm({
+      title: file.name,
+      category: tab || 'other',
+      document_date: '',
+      hospital_name: '',
+      doctor_name: '',
+    });
+    setPendingFile(file);
+  }
 
+  /**
+   * Upload, then save the entered details and confirm — in that order, so
+   * extraction runs before the person's values are written and cannot
+   * overwrite them. Confirming here is what keeps the document out of
+   * "needs review": they have just reviewed it.
+   */
+  async function upload(file: UploadFile, entered: ReviewForm) {
+    if (!activeProfile) return;
+    setUploadError(null);
     setUploading(true);
     setUploadProgress(0);
     setUploadComplete(false);
     try {
       // Category follows the tab in view, matching the web app: uploading
       // from the Prescriptions tab files it as a prescription.
-      const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other', (pct) => setUploadProgress(pct / 100));
+      const { data } = await documentsApi.upload(activeProfile.id, file, entered.category, (pct) => setUploadProgress(pct / 100));
       setUploadComplete(true);
+      if (data?.id && data?.upload?.outcome !== 'exact_duplicate') {
+        await documentsApi.update(data.id, {
+          title: entered.title.trim(),
+          category: entered.category,
+          document_date: entered.document_date || null,
+          hospital_name: entered.hospital_name.trim(),
+          doctor_name: entered.doctor_name.trim(),
+        });
+        await documentsApi.confirm(data.id);
+      }
+      setPendingFile(null);
+      setForm(null);
       await load();
       if (data?.upload?.outcome === 'exact_duplicate') {
         // The same file (under any name) is already in the locker: nothing
@@ -266,7 +304,7 @@ export default function Locker() {
               { icon: 'image', label: 'Choose from photos', note: 'Pick an existing image', run: pickFromLibrary },
               { icon: 'file', label: 'Choose a file', note: 'PDF, JPG or PNG', run: pickDocument },
             ].map((option) => (
-              <Pressable key={option.label} style={styles.sheetRow} onPress={() => upload(option.run)}>
+              <Pressable key={option.label} style={styles.sheetRow} onPress={() => choose(option.run)}>
                 <View style={styles.fileIcon}>
                   <Feather name={option.icon as 'camera'} size={17} color={colors.brandPurple} />
                 </View>
@@ -276,6 +314,40 @@ export default function Locker() {
                 </View>
               </Pressable>
             ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* The same review form the saved-document screen shows, opened before
+          the file is sent. */}
+      <Modal
+        visible={!!pendingFile && !!form}
+        transparent
+        animationType="slide"
+        onRequestClose={() => (uploading ? undefined : setPendingFile(null))}
+      >
+        <Pressable style={styles.backdrop} onPress={() => (uploading ? undefined : setPendingFile(null))}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {!!form && (
+                <ReviewDetailsForm
+                  form={form}
+                  setField={setField}
+                  subtitle="Check these details before uploading. Anything you leave blank we'll try to read from the document."
+                  error={uploadError}
+                  busy={uploading}
+                  onConfirm={() => {
+                    if (pendingFile) void upload(pendingFile, form);
+                  }}
+                >
+                  {uploading && (
+                    <View style={{ marginBottom: spacing.md }}>
+                      <ECGProgressBar progress={uploadProgress} isComplete={uploadComplete} />
+                    </View>
+                  )}
+                </ReviewDetailsForm>
+              )}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>

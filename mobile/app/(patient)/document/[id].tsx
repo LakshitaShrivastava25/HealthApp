@@ -9,6 +9,7 @@ import { documentsApi } from '../../../src/lib/api';
 import { absoluteUrl } from '../../../src/lib/config';
 import { openFile } from '../../../src/lib/viewer';
 import { colors, radius, spacing, type } from '../../../src/theme';
+import ReviewDetailsForm, { type FieldErrors, type ReviewForm } from '../../../src/components/ReviewDetailsForm';
 
 type Doc = {
   id: string;
@@ -50,25 +51,8 @@ const statusTone = {
 } as const;
 
 /** The real Document.Category values, same set as the website's review form. */
-const CATEGORIES = [
-  { value: 'prescription', label: 'Prescription' },
-  { value: 'report', label: 'Report' },
-  { value: 'scan', label: 'Scan' },
-  { value: 'discharge', label: 'Discharge Summary' },
-  { value: 'other', label: 'Other' },
-];
-
 const POLL_MS = 4000;
 
-type ReviewForm = {
-  title: string;
-  category: string;
-  document_date: string;
-  hospital_name: string;
-  doctor_name: string;
-};
-
-type FieldErrors = Partial<Record<keyof ReviewForm, string>>;
 
 const REVIEW_KEYS: (keyof ReviewForm)[] = ['title', 'category', 'document_date', 'hospital_name', 'doctor_name'];
 
@@ -412,75 +396,20 @@ export default function DocumentDetail() {
       {!!duplicateError && <ErrorNote message={duplicateError} />}
 
       {doc.status === 'needs_review' && !!form && (
-        <Card>
-          <CardHeader
-            title="Review what we read"
-            subtitle="These details were filled in automatically. Correct anything that looks wrong, then confirm."
-          />
-          <Input
-            label="Title"
-            value={form.title}
-            onChangeText={(v) => setField('title', v)}
-            error={fieldErrors.title}
-          />
-          {(() => {
-            const suggested = (doc.structured_data as Record<string, unknown> | undefined)?.title;
-            return typeof suggested === 'string' && suggested && suggested !== form.title ? (
-              <Pressable
-                onPress={() => setField('title', suggested)}
-                style={{ marginTop: -spacing.sm, marginBottom: spacing.md }}
-              >
-                <Text style={[type.micro, { color: colors.brandPurple }]}>
-                  Use suggested title: “{suggested}”
-                </Text>
-              </Pressable>
-            ) : null;
-          })()}
-
-          <Text style={[type.caption, { marginBottom: spacing.xs }]}>Category</Text>
-          <View style={styles.chipRow}>
-            {CATEGORIES.map((c) => (
-              <Pressable
-                key={c.value}
-                onPress={() => setField('category', c.value)}
-                style={[styles.chip, form.category === c.value && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, form.category === c.value && styles.chipTextActive]}>
-                  {c.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {!!fieldErrors.category && <Text style={styles.fieldError}>{fieldErrors.category}</Text>}
-
-          <DateField
-            label="Document date"
-            value={form.document_date}
-            onChange={(v) => setField('document_date', v)}
-            maximumDate={new Date()}
-          />
-          {!!fieldErrors.document_date && (
-            <Text style={[styles.fieldError, { marginTop: -spacing.sm }]}>{fieldErrors.document_date}</Text>
-          )}
-
-          <Input
-            label="Hospital / source"
-            value={form.hospital_name}
-            onChangeText={(v) => setField('hospital_name', v)}
-            error={fieldErrors.hospital_name}
-          />
-          <Input
-            label="Doctor"
-            value={form.doctor_name}
-            onChangeText={(v) => setField('doctor_name', v)}
-            error={fieldErrors.doctor_name}
-          />
-
-          {!!confirmError && <Text style={styles.fieldError}>{confirmError}</Text>}
-          <Button onPress={handleConfirm} loading={confirming}>
-            Confirm these details are correct
-          </Button>
-        </Card>
+        <ReviewDetailsForm
+          form={form}
+          setField={setField}
+          subtitle="These details were filled in automatically. Correct anything that looks wrong, then confirm."
+          suggestedTitle={
+            typeof (doc.structured_data as Record<string, unknown> | undefined)?.title === 'string'
+              ? ((doc.structured_data as Record<string, unknown>).title as string)
+              : undefined
+          }
+          fieldErrors={fieldErrors}
+          error={confirmError}
+          busy={confirming}
+          onConfirm={handleConfirm}
+        />
       )}
 
       {doc.status === 'failed' && (

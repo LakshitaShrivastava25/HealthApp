@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, UploadCloud, FileText, ShieldCheck, FolderHeart } from 'lucide-react';
+import { Search, UploadCloud, FileText, ShieldCheck, FolderHeart, X } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import ECGProgressBar from '../components/ECGProgressBar';
 import DocumentDetailModal from '../components/DocumentDetailModal';
+import ReviewDetailsForm, { type ReviewValues } from '../components/ReviewDetailsForm';
 import { useAuth } from '../context/AuthContext';
 import { documentsApi } from '../lib/api';
 import { useCachedState } from '@shared/hooks/useCachedState';
@@ -57,6 +58,12 @@ export default function MedicalLocker() {
   const [uploadComplete, setUploadComplete] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  // Picked but not sent. The review form opens first, so the details the
+  // person enters are saved and confirmed straight after the upload rather
+  // than being corrected on a second visit they could easily skip.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingValues, setPendingValues] = useState<ReviewValues | null>(null);
+  const [pendingError, setPendingError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadDocuments() {
@@ -80,16 +87,49 @@ export default function MedicalLocker() {
     return loadDocuments();
   }
 
-  async function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
+  /**
+   * Picking a file only opens the review form. Clearing the input here (not
+   * after the upload) matters: without it, cancelling and choosing the same
+   * file again fires no change event.
+   */
+  function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = '';
     if (!file || !activeProfile) return;
+    setUploadNotice(null);
+    setPendingError('');
+    setPendingValues({ title: file.name, category: tab || 'other', date: '', hospital: '', doctor: '' });
+    setPendingFile(file);
+  }
+
+  /**
+   * Upload, then save the entered details and confirm — in that order, so
+   * extraction runs before the person's values are written and cannot
+   * overwrite them. Confirming here is what keeps the document out of
+   * "needs review": they have just reviewed it.
+   */
+  async function uploadPending(file: File, values: ReviewValues) {
+    if (!activeProfile) return;
+    setPendingError('');
     setUploading(true);
     setUploadProgress(0);
     setUploadComplete(false);
     setUploadNotice(null);
     try {
-      const { data } = await documentsApi.upload(activeProfile.id, file, tab || 'other', (pct) => setUploadProgress(pct / 100));
+      const { data } = await documentsApi.upload(activeProfile.id, file, values.category, (pct) => setUploadProgress(pct / 100));
       setUploadComplete(true);
+      if (data?.id && data?.upload?.outcome !== 'exact_duplicate') {
+        await documentsApi.update(data.id, {
+          title: values.title,
+          category: values.category,
+          document_date: values.date || null,
+          hospital_name: values.hospital,
+          doctor_name: values.doctor,
+        });
+        await documentsApi.confirm(data.id);
+      }
+      setPendingFile(null);
+      setPendingValues(null);
       await documentsChanged();
       if (data?.upload?.outcome === 'exact_duplicate') {
         // The same file (under any name) is already here: nothing was added
@@ -104,22 +144,18 @@ export default function MedicalLocker() {
           text: 'This is a copy of a prescription already in your locker (same text on every page). It was kept with the original and not counted twice.',
         });
       }
-      // Open the review screen straight away when the AI produced something
-      // to check. Without this the review step exists but is easy to miss —
-      // the document would just appear in the list already looking done.
-      if (data?.id && data.status === 'needs_review') setOpenDocId(data.id);
     } catch {
       // Uploads wait for processing, so a slow connection can time out even
       // though the file arrived. Re-uploading is safe now — the same file
       // is recognised and not added twice.
-      setUploadNotice({
-        tone: 'error',
-        text: "The upload didn't finish. Check your connection and try again — if it did arrive, it won't be added twice.",
-      });
+      // Kept open with every field as typed: a failed upload must not cost
+      // someone the details they just entered.
+      setPendingError(
+        "The upload didn't finish. Check your connection and try again — if it did arrive, it won't be added twice."
+      );
       await loadDocuments().catch(() => undefined);
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 
@@ -239,6 +275,59 @@ export default function MedicalLocker() {
           </div>
         </div>
       </main>
+
+      {/* The same review form the saved-document view shows, opened before
+          the file is sent. Same shell markup as DocumentDetailModal so this
+          is the existing screen, not a second kind of dialog. */}
+      {pendingFile && pendingValues && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={uploading ? undefined : () => setPendingFile(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={pendingFile.name}
+            className="bg-card rounded-xl2 shadow-card max-w-lg w-full max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 shrink-0 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center">
+                  <FileText size={16} />
+                </div>
+                <p className="text-sm font-semibold text-ink-900 truncate">{pendingFile.name}</p>
+              </div>
+              <button
+                onClick={() => setPendingFile(null)}
+                disabled={uploading}
+                className="text-ink-500 hover:text-ink-900 disabled:opacity-50"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <ReviewDetailsForm
+                values={pendingValues}
+                onChange={(patch) => setPendingValues({ ...pendingValues, ...patch })}
+                intro="Check these details before uploading. Anything you leave blank we'll try to read from the document."
+                error={pendingError}
+                busy={uploading}
+                busyLabel="Uploading..."
+                onConfirm={() => uploadPending(pendingFile, pendingValues)}
+              >
+                {uploading && (
+                  <div className="mt-3">
+                    <ECGProgressBar progress={uploadProgress} isComplete={uploadComplete} />
+                  </div>
+                )}
+              </ReviewDetailsForm>
+            </div>
+          </div>
+        </div>
+      )}
 
       {openDocId && (
         <DocumentDetailModal

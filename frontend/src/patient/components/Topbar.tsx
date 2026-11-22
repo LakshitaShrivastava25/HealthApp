@@ -7,6 +7,7 @@ import ModeSwitch from '@shared/session/ModeSwitch';
 import AmbientBackground from '@shared/components/AmbientBackground';
 import useClickOutside from '@shared/useClickOutside';
 import { todayIso } from '@shared/dates';
+import { BLOOD_GROUPS } from '@shared/bloodGroups';
 import useNotifications from '../hooks/useNotifications';
 import { useAuth } from '../context/AuthContext';
 import { allergiesApi, familyApi } from '../lib/api';
@@ -31,8 +32,6 @@ const GENDERS = [
   ['other', 'Other'],
   ['prefer_not_to_say', 'Prefer not to say'],
 ];
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 /** Matches the language list already offered on the Settings profile form. */
 const LANGUAGES = ['English', 'Hindi', 'Marathi', 'Tamil', 'Telugu', 'Bengali'];

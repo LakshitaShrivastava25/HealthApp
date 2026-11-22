@@ -154,6 +154,14 @@ export default function Register() {
       setError('Choose the State Medical Council you are registered with.');
       return;
     }
+    // Behind the native `required` above, which is what a person actually
+    // hits — but that can be bypassed, and the API must not be called
+    // without the licence either way.
+    if (!licenseDocument) {
+      setError('Please upload your license document');
+      document.getElementById('license-document')?.focus();
+      return;
+    }
     setSaving(true);
     try {
       await doctorApi.register({
@@ -342,15 +350,17 @@ export default function Register() {
             placeholder="500"
           />
           <Field
-            label="License document (optional)"
+            id="license-document"
+            label="License document"
             icon={<FileUp size={15} />}
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
+            required
             onChange={(e) => setLicenseDocument(e.target.files?.[0] ?? null)}
             hint={
               licenseDocument
                 ? `Selected: ${licenseDocument.name}`
-                : 'A scan or photo speeds up verification. You can add this later.'
+                : 'Upload a scan or photo of your medical licence. It is required for verification.'
             }
           />
         </div>

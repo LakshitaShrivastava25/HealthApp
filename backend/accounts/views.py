@@ -11,7 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from doctors.models import DoctorPatientAccess
 from emergency.models import EmergencyProfile
 
-from .models import Account, MPINResetGrant
+from .models import Account, MPINCredential, MPINResetGrant
 from .serializers import (
     AccountSerializer,
     MPINDeviceSerializer,
@@ -60,6 +60,35 @@ class SendOTPView(APIView):
                 headers=headers,
             )
         return Response(result, status=status.HTTP_200_OK)
+
+
+class CheckNumberView(APIView):
+    """
+    Which sign-in step comes after the number: {"next": "pin"} for an
+    active account that has a PIN, otherwise {"next": "otp"} — a new number
+    (registration), an account that never set a PIN, or a deleted one (which
+    verify-otp reactivates).
+
+    This necessarily tells the caller whether a number has a PIN account;
+    the product asks for "registered -> PIN, new -> OTP" on one screen. The
+    number_check throttle keeps it from being a bulk lookup, and it says
+    nothing else (no name, no role, no lockout state).
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [AnonRateThrottle, ScopedRateThrottle]
+    throttle_scope = 'number_check'
+
+    def post(self, request):
+        serializer = SendOTPSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'detail': 'Enter a valid mobile number.'}, status=status.HTTP_400_BAD_REQUEST)
+        has_pin = MPINCredential.objects.filter(
+            account__phone_number=serializer.validated_data['phone_number'],
+            account__is_active=True,
+        ).exists()
+        return Response({'next': 'pin' if has_pin else 'otp'})
 
 
 class VerifyOTPView(APIView):

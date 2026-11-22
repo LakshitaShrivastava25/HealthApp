@@ -223,12 +223,15 @@ REST_FRAMEWORK = {
         # multiply by the worker count.
         'mpin_login': os.getenv('THROTTLE_MPIN_LOGIN', '200/hour'),
         'mpin_set': os.getenv('THROTTLE_MPIN_SET', '20/hour'),
+        # Login's "registered -> PIN, new -> OTP" lookup. Per IP; enough for a
+        # household, too few to walk through numbers.
+        'number_check': os.getenv('THROTTLE_NUMBER_CHECK', '60/hour'),
     } if not TESTING else {
         # The suite makes hundreds of requests from one address; the
         # throttle tests set their own low rates.
         scope: '100000/hour'
         for scope in ('anon', 'user', 'otp_send', 'otp_verify', 'ai', 'uploads', 'access_requests', 'nmc_precheck',
-                      'staff_login', 'mpin_login', 'mpin_set')
+                      'staff_login', 'mpin_login', 'mpin_set', 'number_check')
     },
 }
 

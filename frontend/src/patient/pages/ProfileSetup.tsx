@@ -1,13 +1,16 @@
 import { useEffect, useId, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { CalendarDays, Droplet, User, Users } from 'lucide-react';
+import { CalendarDays, Droplet, KeyRound, User, Users } from 'lucide-react';
 import {
   AuthCard,
   AuthShell,
   CuraPathLogo,
   Field,
   FormError,
+  OTPInput,
+  OtpStep,
+  PIN_LENGTH,
   PrimaryButton,
   SecurityBadge,
   Step,
@@ -17,6 +20,8 @@ import {
 import SessionStatus from '../../auth/SessionStatus';
 import { useAuth } from '../context/AuthContext';
 import { profilesApi } from '../lib/api';
+import { usePin } from '@shared/session/PinContext';
+import { needsOtp, pinErrorMessage } from '@shared/session/mpinApi';
 
 /** How long the success beat holds before the dashboard takes over. */
 const SUCCESS_HOLD_MS = 1250;
@@ -66,10 +71,23 @@ function describeAge(iso: string): string {
  * one exists. A brand-new account comes here straight from sign-in, and so
  * does a doctor who registered without one the first time they switch to
  * User mode.
+ *
+ * For a new account this is the registration page: the details and the
+ * 4-digit PIN (typed twice) on one screen. The PIN is saved first — it is
+ * how they sign in from then on — and the profile straight after.
  */
 export default function ProfileSetup() {
-  const { isLoading, isAuthenticated, loadFailed, profiles, refreshProfiles } = useAuth();
+  const { isLoading, isAuthenticated, loadFailed, account, profiles, refreshProfiles } = useAuth();
+  const pin = usePin();
   const navigate = useNavigate();
+
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinSaved, setPinSaved] = useState(false);
+  /** The server wants a fresh code before it will set the PIN (sign-in too long ago). */
+  const [reverify, setReverify] = useState(false);
+  // Strictly false: an account whose PIN state is unknown is not asked.
+  const askPin = pinSaved || account?.has_mpin === false;
 
   const [fullName, setFullName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
@@ -90,10 +108,34 @@ export default function ProfileSetup() {
   // Already has a profile (and not because this form just made it).
   if (profiles.length > 0 && !done && !saving) return <Navigate to="/patient" replace />;
 
-  async function handleSave() {
+  async function handleSave(grant?: string) {
     setError(null);
+    if (askPin && !pinSaved) {
+      if (newPin.length !== PIN_LENGTH) {
+        setError('Choose a 4-digit PIN.');
+        return;
+      }
+      if (newPin !== confirmPin) {
+        setError('The two PINs do not match. Please type the confirmation again.');
+        setConfirmPin('');
+        return;
+      }
+    }
     setSaving(true);
     try {
+      if (askPin && !pinSaved) {
+        try {
+          await pin.setPin(newPin, grant);
+          setPinSaved(true);
+        } catch (err) {
+          if (needsOtp(err)) {
+            setReverify(true);
+            return;
+          }
+          setError(pinErrorMessage(err, 'Could not set your PIN. Please try again.'));
+          return;
+        }
+      }
       // Age is deliberately absent here. It's derived from date_of_birth
       // for display only — storing it would be wrong the day after signup.
       await profilesApi.create({
@@ -124,10 +166,27 @@ export default function ProfileSetup() {
           <CuraPathLogo portal="patient" />
         </div>
 
+        {reverify && account && (
+          <Step key="reverify">
+            <OtpStep
+              phone={account.phone_number}
+              onVerified={async (data) => {
+                setReverify(false);
+                await handleSave(data.grant);
+              }}
+            />
+          </Step>
+        )}
+
+        {!reverify && (
         <Step key="profile">
           <StepHeading
-            title="Complete your profile"
-            subtitle="Just the basics — you can add more later in Settings."
+            title={askPin ? 'Create your account' : 'Complete your profile'}
+            subtitle={
+              askPin
+                ? 'Your details, and a 4-digit PIN you will use to sign in.'
+                : 'Just the basics — you can add more later in Settings.'
+            }
           />
 
           <div className="space-y-3.5">
@@ -166,21 +225,73 @@ export default function ProfileSetup() {
             />
           </div>
 
+          {askPin && (
+            <div className="mt-5 border-t border-border/70 pt-4">
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-ink-700">
+                <KeyRound size={14} className="text-brand-purple" /> Set your 4-digit PIN
+              </p>
+              <p className="mb-2.5 text-[11px] text-ink-500">
+                You will sign in with your number and this PIN on any device.
+              </p>
+              {pinSaved ? (
+                <p className="text-[12px] font-medium text-success">PIN saved.</p>
+              ) : (
+                <>
+                  <div className="max-w-[248px]">
+                    <OTPInput
+                      value={newPin}
+                      onChange={(v) => {
+                        setNewPin(v);
+                        if (error) setError(null);
+                      }}
+                      length={PIN_LENGTH}
+                      masked
+                      label="New PIN"
+                      disabled={saving}
+                    />
+                  </div>
+                  <p className="mb-2.5 mt-3.5 text-xs font-semibold text-ink-700">Confirm PIN</p>
+                  <div className="max-w-[248px]">
+                    <OTPInput
+                      value={confirmPin}
+                      onChange={(v) => {
+                        setConfirmPin(v);
+                        if (error) setError(null);
+                      }}
+                      length={PIN_LENGTH}
+                      masked
+                      label="Confirm PIN"
+                      disabled={saving}
+                      invalid={confirmPin.length === PIN_LENGTH && confirmPin !== newPin}
+                    />
+                  </div>
+                  {confirmPin.length === PIN_LENGTH && confirmPin !== newPin && (
+                    <p className="mt-1.5 text-[11px] text-danger">The PINs do not match.</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <FormError message={error} />
 
           <div className="mt-5">
             <PrimaryButton
               state={saving ? 'loading' : 'idle'}
               loadingLabel="Saving…"
-              disabled={!fullName.trim()}
-              onClick={handleSave}
+              disabled={
+                !fullName.trim() ||
+                (askPin && !pinSaved && (newPin.length !== PIN_LENGTH || confirmPin.length !== PIN_LENGTH))
+              }
+              onClick={() => handleSave()}
             >
-              Continue to dashboard
+              {askPin ? 'Create account' : 'Continue to dashboard'}
             </PrimaryButton>
           </div>
 
           <SecurityBadge />
         </Step>
+        )}
       </AuthCard>
     </AuthShell>
   );

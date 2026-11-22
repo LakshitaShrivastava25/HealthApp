@@ -28,6 +28,7 @@ import { useSession } from '@shared/session/SessionContext';
 import { usePin, type PinOwner } from '@shared/session/PinContext';
 import { mpinApi } from '@shared/session/mpinApi';
 import { getPinHint, maskPhone } from '@shared/session/pin';
+import axios from 'axios';
 import { useBackToClose } from '@shared/hooks/useBackToClose';
 
 type StepName = 'phone' | 'pin' | 'otp' | 'set-pin' | 'staff';
@@ -51,10 +52,10 @@ function formatWait(seconds: number) {
  * A staff number is recognised and handed to the Admin Portal with its
  * session already in place, so staff do not enter a second code.
  *
- * Sign-in is number + 4-digit PIN, on any browser. A one-time code is only
- * for registering (new number, or an account with no PIN yet — it ends at
- * "create your PIN") and for Forgot PIN. A browser that has signed in before
- * also pre-fills its number.
+ * One Continue after the number: a registered account with a PIN goes to
+ * the PIN (on any browser); a new number gets a one-time code and then the
+ * registration page (details + PIN + confirm PIN). A code is otherwise only
+ * for Forgot PIN. A browser that has signed in before pre-fills its number.
  */
 export default function Login() {
   const { isAuthenticated, account, sendOtp, verifyOtp, adoptSession } = useSession();
@@ -149,23 +150,39 @@ export default function Login() {
     }
   }
 
-  /** Sign in: number, then PIN — on any browser. */
-  function handleContinue() {
-    if (!isComplete || sending) return;
-    setError(null);
-    pin.clearError();
-    setMpin('');
-    setStep('pin');
-  }
+  const [checking, setChecking] = useState(false);
 
-  /** Register (or an account without a PIN yet): a code, then "create your PIN". */
-  function handleRegister() {
-    if (!isComplete || sending) return;
+  /** Registered with a PIN -> PIN step. New number (or no PIN yet) -> code. */
+  async function handleContinue() {
+    if (!isComplete || sending || checking) return;
     setError(null);
     pin.clearError();
     setMpin('');
     setResetting(false);
-    void handleSendOtp();
+    if (pinFirst) {
+      setStep('pin');
+      return;
+    }
+    setChecking(true);
+    let next: 'pin' | 'otp' = 'pin';
+    try {
+      ({ next } = (await mpinApi.checkNumber(fullNumber)).data);
+    } catch (err) {
+      // An API without the lookup (404) can still take the PIN; anything
+      // else is shown, rather than guessing which way to send them.
+      if (!(axios.isAxiosError(err) && err.response?.status === 404)) {
+        setError(
+          axios.isAxiosError(err) && err.response?.status === 429
+            ? 'Too many attempts. Please wait a few minutes and try again.'
+            : 'Could not reach CuraPath. Check your connection and try again.'
+        );
+        return;
+      }
+    } finally {
+      setChecking(false);
+    }
+    if (next === 'pin') setStep('pin');
+    else void handleSendOtp();
   }
 
   const handlePinSignIn = useCallback(
@@ -227,12 +244,14 @@ export default function Login() {
         }
         if (result.hasMpin) {
           // They already have a PIN; this code only registers the browser.
-          // Done quietly — their usual PIN works here from now on.
           await pin.registerDevice(result.account).catch(() => undefined);
           setTarget(from ?? result.home);
+        } else if (result.home === '/patient/setup') {
+          // New account: the registration page takes their details and the
+          // PIN (with confirmation) on one screen.
+          setTarget(result.home);
         } else {
-          // No PIN yet. Setting one is required, so go straight there
-          // rather than letting them reach the app and be sent back.
+          // An older account with a profile but no PIN yet: just the PIN.
           setHome(from ?? result.home);
           setOwner(result.account);
           setStep('set-pin');
@@ -333,7 +352,7 @@ export default function Login() {
                 subtitle={
                   pinFirst
                     ? 'Enter your PIN to sign in. Forgot it? You can reset it on the next screen.'
-                    : 'Sign in with your mobile number and 4-digit PIN'
+                    : 'Enter your mobile number to continue'
                 }
               />
 
@@ -344,23 +363,24 @@ export default function Login() {
                 onDigitsChange={setDigits}
                 onSubmit={handleContinue}
                 disabled={sending}
-                hint={pinFirst ? 'This browser is set up for PIN sign-in — no code needed.' : 'You’ll enter your 4-digit PIN next.'}
+                hint={
+                  pinFirst
+                    ? 'This browser is set up for PIN sign-in — no code needed.'
+                    : 'Registered? You’ll enter your PIN next. New here? We’ll text you a code.'
+                }
               />
 
               <FormError message={error} />
 
               <div className="mt-5">
-                <PrimaryButton disabled={!isComplete || sending} onClick={handleContinue}>
-                  Continue with PIN
-                </PrimaryButton>
-                <button
-                  type="button"
-                  onClick={handleRegister}
-                  disabled={!isComplete || sending}
-                  className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-brand-purple/40 bg-white text-[13px] font-semibold text-brand-purple transition-colors hover:bg-brand-lavender disabled:cursor-not-allowed disabled:opacity-50"
+                <PrimaryButton
+                  state={checking || sending ? 'loading' : 'idle'}
+                  loadingLabel={sending ? 'Sending code…' : 'Checking…'}
+                  disabled={!isComplete}
+                  onClick={handleContinue}
                 >
-                  {sending ? 'Sending code…' : 'New user? Register with OTP'}
-                </button>
+                  Continue
+                </PrimaryButton>
               </div>
 
               <SecurityBadge />
@@ -369,8 +389,8 @@ export default function Login() {
                   accounts/views.py creates the account on first successful
                   verification, and a doctor registers from inside it. */}
               <p className="mt-5 border-t border-border/70 pt-4 text-center text-[11.5px] leading-relaxed text-ink-500">
-                New to CuraPath? Choose <span className="font-medium text-ink-700">Register with OTP</span> — verifying your
-                number creates your account, then you set your PIN. Doctors sign in here too, then register from{' '}
+                New to CuraPath? Enter your number — we verify it with a code, then you add your details and set a
+                PIN. Doctors sign in here too, then register from{' '}
                 <span className="font-medium text-ink-700">Register as a doctor</span>.
               </p>
             </Step>
@@ -442,14 +462,7 @@ export default function Login() {
               >
                 {sending ? 'Sending code…' : 'Forgot PIN?'}
               </button>
-              <button
-                type="button"
-                onClick={handleRegister}
-                disabled={pinBusy || sending}
-                className="mt-2 block w-full text-center text-[12px] text-ink-500 underline-offset-2 hover:underline disabled:opacity-50"
-              >
-                New user, or never set a PIN? Register with OTP
-              </button>
+
 
               <SecurityBadge />
             </Step>

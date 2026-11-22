@@ -1,9 +1,10 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import axios from 'axios';
 
 import { useSession, type VerifyResult } from './SessionContext';
 import { mpinApi, pinErrorMessage, type TokenResponse } from './mpinApi';
-import { browserLabel, clearPin, getMpinToken, setMpinToken } from './pin';
+import { browserLabel, clearPin, getMpinToken, setMpinToken, setPinHint } from './pin';
+import type { Account } from './types';
 
 /**
  * PIN sign-in for the website — the counterpart of the mobile app's
@@ -24,22 +25,43 @@ type PinValue = {
   error: string | null;
   /** Resolves to the signed-in result, or null when refused (see `error`). */
   signInWithPin: (phone: string, pin: string) => Promise<VerifyResult | null>;
-  /** Register this browser against a PIN the account already has. */
-  registerDevice: () => Promise<void>;
+  /**
+   * Register this browser against a PIN the account already has. Pass the
+   * account when calling straight after a sign-in, before the session has
+   * re-rendered with it.
+   */
+  registerDevice: (owner?: PinOwner | null) => Promise<void>;
   /** Set a first PIN, or replace one (which needs an OTP grant). */
-  setPin: (pin: string, grant?: string) => Promise<void>;
+  setPin: (pin: string, grant?: string, owner?: PinOwner | null) => Promise<void>;
   /** Undo this browser's registration — a shared or public computer. */
   removeDevice: () => Promise<void>;
   clearError: () => void;
 };
+
+/** Whose browser this is: what /login pre-fills. */
+export type PinOwner = Pick<Account, 'id' | 'phone_number'>;
 
 const PinContext = createContext<PinValue | null>(null);
 
 const PLATFORM = 'web';
 
 export function PinProvider({ children }: { children: ReactNode }) {
-  const { adoptSession, markMpinSet } = useSession();
+  const { account, adoptSession, markMpinSet } = useSession();
+  const accountRef = useRef(account);
+  accountRef.current = account;
   const [isRegistered, setIsRegistered] = useState(() => !!getMpinToken());
+
+  /**
+   * Store this browser's device token together with whose it is. The hint
+   * is what /login pre-fills, so it exists exactly while the browser is
+   * registered — never on its own.
+   */
+  const register = useCallback((token: string, owner: PinOwner | null | undefined) => {
+    setMpinToken(token);
+    const who = owner ?? accountRef.current;
+    if (who) setPinHint({ accountId: who.id, phone: who.phone_number });
+    setIsRegistered(true);
+  }, []);
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
   const [waitUntil, setWaitUntil] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,33 +109,31 @@ export function PinProvider({ children }: { children: ReactNode }) {
         applyFailure(err);
         return null;
       }
-      if (data.device_token) {
-        setMpinToken(data.device_token);
-        setIsRegistered(true);
-      }
+      if (data.device_token) register(data.device_token, data.account);
       setAttemptsLeft(null);
       setWaitUntil(null);
       return adoptSession(data);
     },
-    [adoptSession, applyFailure]
+    [adoptSession, applyFailure, register]
   );
 
-  const registerDevice = useCallback(async () => {
-    const { data } = await mpinApi.enrollDevice({ label: browserLabel(), platform: PLATFORM });
-    setMpinToken(data.device_token);
-    setIsRegistered(true);
-  }, []);
+  const registerDevice = useCallback(
+    async (owner?: PinOwner | null) => {
+      const { data } = await mpinApi.enrollDevice({ label: browserLabel(), platform: PLATFORM });
+      register(data.device_token, owner);
+    },
+    [register]
+  );
 
   const setPin = useCallback(
-    async (pin: string, grant?: string) => {
+    async (pin: string, grant?: string, owner?: PinOwner | null) => {
       const { data } = await mpinApi.set({
         mpin: pin,
         ...(grant ? { otp_grant: grant } : {}),
         label: browserLabel(),
         platform: PLATFORM,
       });
-      setMpinToken(data.device_token);
-      setIsRegistered(true);
+      register(data.device_token, owner);
       setAttemptsLeft(null);
       setWaitUntil(null);
       setError(null);
@@ -122,7 +142,7 @@ export function PinProvider({ children }: { children: ReactNode }) {
       // just finished.
       markMpinSet();
     },
-    [markMpinSet]
+    [markMpinSet, register]
   );
 
   const removeDevice = useCallback(async () => {

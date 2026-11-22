@@ -25,7 +25,7 @@ import {
 import { usePhoneInput } from '@shared/components/PhoneInput';
 import { COUNTRIES } from '@shared/data/countries';
 import { useSession } from '@shared/session/SessionContext';
-import { usePin } from '@shared/session/PinContext';
+import { usePin, type PinOwner } from '@shared/session/PinContext';
 import { mpinApi } from '@shared/session/mpinApi';
 import { getPinHint, maskPhone } from '@shared/session/pin';
 import { useBackToClose } from '@shared/hooks/useBackToClose';
@@ -89,6 +89,8 @@ export default function Login() {
   const [grant, setGrant] = useState('');
   /** Where to go once the PIN is set. */
   const [home, setHome] = useState('/');
+  /** The account just signed in, whose PIN is being set. */
+  const [owner, setOwner] = useState<PinOwner | null>(null);
 
   // Pre-fill the number this browser last signed in with, so a returning
   // person only types their PIN.
@@ -209,6 +211,7 @@ export default function Login() {
           }
           setGrant(data.grant);
           setHome(from ?? result.home);
+          setOwner(result.account);
           setStep('set-pin');
           return;
         }
@@ -220,12 +223,13 @@ export default function Login() {
         if (result.hasMpin) {
           // They already have a PIN; this code only registers the browser.
           // Done quietly — their usual PIN works here from now on.
-          await pin.registerDevice().catch(() => undefined);
+          await pin.registerDevice(result.account).catch(() => undefined);
           setTarget(from ?? result.home);
         } else {
           // No PIN yet. Setting one is required, so go straight there
           // rather than letting them reach the app and be sent back.
           setHome(from ?? result.home);
+          setOwner(result.account);
           setStep('set-pin');
         }
       } catch (err) {
@@ -514,7 +518,7 @@ export default function Login() {
                 title={resetting ? 'Set a new PIN' : 'Create your PIN'}
                 subtitle="You will use this to sign in from now on, instead of waiting for a code each time."
                 onDone={async (next) => {
-                  await pin.setPin(next, grant || undefined);
+                  await pin.setPin(next, grant || undefined, owner);
                   setTarget(home);
                 }}
               />

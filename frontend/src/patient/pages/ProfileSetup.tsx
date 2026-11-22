@@ -223,7 +223,7 @@ export default function ProfileSetup() {
               onChange={(e) => setBloodGroup(e.target.value)}
               hint="Shown on your emergency card if you add one."
             >
-              <option value="">Not known</option>
+              <option value="">Select (optional)</option>
               {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
             </SelectField>
           </div>

@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
 from .views import (
+    CheckNumberView,
     MeView,
     MPINDeviceView,
     MPINGrantView,
@@ -13,6 +14,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path('check-number/', CheckNumberView.as_view(), name='check-number'),
     path('send-otp/', SendOTPView.as_view(), name='send-otp'),
     path('verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
     # Email + password for the web Admin Portal (curapath.in/admin).

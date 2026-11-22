@@ -19,6 +19,14 @@ export type TokenResponse = { access: string; refresh: string; account?: Account
 export type GrantResponse = TokenResponse & { grant: string; expires_in: number };
 
 export const mpinApi = {
+  /** Login's first step: 'pin' for a registered account with a PIN, else 'otp' (register). */
+  checkNumber: (phone_number: string) =>
+    axios.post<{ next: 'pin' | 'otp' }>(
+      `${API_BASE_URL}/auth/check-number/`,
+      { phone_number },
+      { timeout: SIGN_IN_TIMEOUT_MS }
+    ),
+
   /** A browser registered for PIN sign-in: its token and the PIN, no phone number. */
   unlock: (device_token: string, mpin: string) =>
     axios.post<TokenResponse>(

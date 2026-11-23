@@ -305,6 +305,13 @@ ADMIN_PHONE_NUMBERS = [
 # (below). Master OTP mode overrides both — nothing is sent at all.
 USE_TWOFACTOR = os.getenv('USE_TWOFACTOR', 'false').strip().lower() in ('true', '1', 'yes', 'on')
 
+# Twilio Verify on/off (default on). With USE_TWILIO=false AND USE_TWOFACTOR=false
+# there is no SMS gateway at all, so the server runs in master OTP mode on its
+# own: nothing is sent and every number signs in with MASTER_OTP (which must be
+# your own 6 digits outside DEBUG). An explicit USE_MASTER_OTP still wins, and
+# staff / verified doctors never use the master code.
+USE_TWILIO = os.getenv('USE_TWILIO', 'true').strip().lower() in ('true', '1', 'yes', 'on')
+
 # Twilio Verify OTP (see accounts/services.py). Verify generates, sends and
 # checks the code itself, through Twilio's own DLT registration for India.
 # Authenticate with EITHER an API key (SK... + secret) OR the account's

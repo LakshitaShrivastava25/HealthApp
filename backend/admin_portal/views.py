@@ -247,21 +247,24 @@ class OTPSettingsView(APIView):
     def _payload(self, config, check_balance=True):
         from django.conf import settings as dj_settings
         from accounts.models import OTPConfig
-        from accounts.services import _twilio_credentials, master_otp_mode, twofactor_balance
+        from accounts.services import _twilio_credentials, master_otp_mode, sms_switched_off, twofactor_balance
         use_twofactor = dj_settings.USE_TWOFACTOR
+        sms_off = sms_switched_off()
         master_on, master_code = master_otp_mode()
         return {
             'mode': OTPConfig.Mode.MASTER if master_on else OTPConfig.Mode.SMS,
             'master_otp': master_code,
-            # True when USE_MASTER_OTP in env overrides the toggle here.
-            'mode_locked_by_env': dj_settings.USE_MASTER_OTP is not None,
+            # True when the env decides the mode: USE_MASTER_OTP set, or both
+            # SMS gateways switched off (USE_TWILIO=false, USE_TWOFACTOR=false).
+            'mode_locked_by_env': dj_settings.USE_MASTER_OTP is not None or sms_off,
             # True when MASTER_OTP in env overrides the code saved here.
             'master_otp_locked_by_env': bool(dj_settings.MASTER_OTP),
             'updated_at': config.updated_at,
             'updated_by': config.updated_by.phone_number if config.updated_by else None,
-            'sms_provider': '2factor' if use_twofactor else 'twilio',
-            'sms_configured': bool(dj_settings.TWOFACTOR_API_KEY) if use_twofactor
-            else _twilio_credentials() is not None,
+            'sms_provider': 'none' if sms_off else ('2factor' if use_twofactor else 'twilio'),
+            'sms_configured': False if sms_off else (
+                bool(dj_settings.TWOFACTOR_API_KEY) if use_twofactor else _twilio_credentials() is not None
+            ),
             'sms_sender_id': dj_settings.TWOFACTOR_SENDER_ID,
             'sms_template_name': dj_settings.TWOFACTOR_TEMPLATE_NAME,
             # 2Factor only; Twilio Verify has no SMS credit balance to show.
@@ -282,6 +285,12 @@ class OTPSettingsView(APIView):
             if dj_settings.USE_MASTER_OTP is not None:
                 return Response({
                     'detail': 'OTP mode is locked by USE_MASTER_OTP in the server .env; remove it to use this switch.',
+                }, status=409)
+            from accounts.services import sms_switched_off
+            if sms_switched_off():
+                return Response({
+                    'detail': 'SMS is switched off in the server .env (USE_TWILIO=false and USE_TWOFACTOR=false), '
+                              'so master OTP is always on. Set one of them to true to use this switch.',
                 }, status=409)
             if mode not in OTPConfig.Mode.values:
                 return Response({'detail': 'mode must be "sms" or "master".'}, status=400)

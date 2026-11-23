@@ -135,14 +135,25 @@ def _twilio_credentials() -> tuple[str, str] | None:
     return None
 
 
+def sms_switched_off() -> bool:
+    """Both SMS gateways turned off in env: USE_TWILIO=false and USE_TWOFACTOR=false."""
+    return not getattr(settings, 'USE_TWILIO', True) and not settings.USE_TWOFACTOR
+
+
 def _uses_twilio() -> bool:
-    return not settings.USE_TWOFACTOR and _twilio_credentials() is not None
+    return (
+        getattr(settings, 'USE_TWILIO', True)
+        and not settings.USE_TWOFACTOR
+        and _twilio_credentials() is not None
+    )
 
 
 def _missing_sms_settings() -> list[str]:
     """Names (never values) of the settings the chosen SMS gateway still needs."""
     if settings.USE_TWOFACTOR:
         return [] if settings.TWOFACTOR_API_KEY else ['TWOFACTOR_API_KEY']
+    if not getattr(settings, 'USE_TWILIO', True):
+        return ['an SMS gateway (USE_TWILIO and USE_TWOFACTOR are both false), or a MASTER_OTP of your own']
     missing = [] if settings.TWILIO_VERIFY_SERVICE_SID else ['TWILIO_VERIFY_SERVICE_SID']
     has_api_key = settings.TWILIO_API_KEY_SID and settings.TWILIO_API_KEY_SECRET
     has_token = settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN
@@ -249,7 +260,9 @@ def master_otp_mode() -> tuple[bool, str]:
     config = OTPConfig.load()
     on = settings.USE_MASTER_OTP
     if on is None:
-        on = config.mode == OTPConfig.Mode.MASTER
+        # No SMS gateway switched on at all means master mode: there is no
+        # other way a code could reach anyone.
+        on = sms_switched_off() or config.mode == OTPConfig.Mode.MASTER
     code = settings.MASTER_OTP
     # verify-otp only accepts 6 digits, so any other env value could never
     # match — ignore it rather than lock everyone out.

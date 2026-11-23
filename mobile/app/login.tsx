@@ -421,11 +421,11 @@ export default function Login() {
             <Card>
               {step === 'phone' ? (
                 <>
-                  <Text style={type.h2}>{pinFirst ? 'Welcome back' : 'Sign in'}</Text>
+                  <Text style={type.h2}>{pinFirst ? 'Welcome back' : 'Welcome'}</Text>
                   <Text style={[type.caption, styles.stepNote]}>
                     {pinFirst
                       ? 'Enter your PIN to sign in. Forgot it? You can reset it on the next screen.'
-                      : 'Registered? You will enter your PIN next. New to CuraPath? We verify your number with a code, then you add your details and set a PIN. Doctors sign in here too, then register from More → Register as a doctor.'}
+                      : 'Enter your mobile number to continue'}
                   </Text>
                   <PhoneInput
                     ref={phoneInputRef}

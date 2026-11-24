@@ -48,10 +48,10 @@ export default function AboutUs() {
               Questions, feedback, or partnership ideas — we&apos;d love to hear from you.
             </p>
             <a
-              href="mailto:hello@curapath.in"
+              href="mailto:info@businesscradle.com"
               className="mt-4 inline-block font-semibold text-lp-brand transition hover:text-lp-brand-dark"
             >
-              hello@curapath.in
+              info@businesscradle.com
             </a>
           </div>
         </Reveal>

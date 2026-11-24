@@ -7,8 +7,9 @@ import { useAuth } from '../context/AuthContext';
 import { medicinesApi } from '../lib/api';
 import { useCachedState } from '@shared/hooks/useCachedState';
 import PageFallback from '@shared/components/PageFallback';
+import TimePicker, { to12Hour } from '../components/TimePicker';
 
-type Reminder = { id: string; time_of_day: string; days_of_week: string };
+type Reminder = { id: string; time_of_day: string; days_of_week: string; is_active: boolean };
 type HistoryEntry = {
   date: string | null;
   doctor_name: string;
@@ -102,6 +103,54 @@ function needsAttention(m: Medication) {
   return m.is_active && (m.status === 'needs_review' || m.newer_prescriptions_without > 0 || m.possible_duplicates.length > 0);
 }
 
+// Matches MAX_REMINDER_TIMES in medicines/serializers.py.
+const MAX_TIMES = 6;
+
+/** Sensible spreads for a medicine taken 1-4 times a day. */
+const SUGGESTED_TIMES: Record<number, string[]> = {
+  1: ['08:00'],
+  2: ['08:00', '20:00'],
+  3: ['08:00', '14:00', '20:00'],
+  4: ['08:00', '13:00', '17:00', '21:00'],
+};
+
+/** Times offered by "Add another time", in the order they get used. */
+const SPARE_TIMES = ['08:00', '14:00', '20:00', '12:00', '18:00', '22:00', '10:00', '16:00', '06:00'];
+
+const byTime = (a: string, b: string) => a.localeCompare(b);
+
+/**
+ * How many times a day the frequency text implies.
+ *
+ * A suggestion only — it pre-fills the slots and the person edits them. Reads
+ * the shorthands a prescription actually uses, including the Indian
+ * morning-noon-night notation ("1-0-1" is twice a day).
+ */
+function suggestedSlots(frequency: string) {
+  const text = frequency.toLowerCase();
+
+  const perDay = text.match(/\b([0-9])\s*-\s*([0-9])\s*-\s*([0-9])\b/);
+  if (perDay) {
+    const doses = perDay.slice(1).filter((d) => Number(d) > 0).length;
+    if (doses > 0) return Math.min(doses, 4);
+  }
+
+  if (/\b(four|4)\s*(times|x)\b|\bqid\b|\bqds\b/.test(text)) return 4;
+  if (/\b(thrice|three|3)\s*(times|x)?\b|\btid\b|\btds\b/.test(text)) return 3;
+  if (/\b(twice|two|2)\s*(times|x)?\b|\bbid\b|\bbd\b/.test(text)) return 2;
+  return 1;
+}
+
+/** The first spare time not already chosen, or one minute past the last. */
+function nextFreeTime(times: string[]) {
+  const spare = SPARE_TIMES.find((t) => !times.includes(t));
+  if (spare) return spare;
+  const last = times[times.length - 1] ?? '08:00';
+  const [hour, minute] = last.split(':').map(Number);
+  const next = (hour * 60 + minute + 60) % (24 * 60);
+  return `${String(Math.floor(next / 60)).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+}
+
 export default function Medicines() {
   const { activeProfile } = useAuth();
   const profileId = activeProfile?.id ?? null;
@@ -119,7 +168,13 @@ export default function Medicines() {
   const [newDosage, setNewDosage] = useState('');
   const [newInstructions, setNewInstructions] = useState('');
   const [newFrequency, setNewFrequency] = useState('daily');
-  const [newTime, setNewTime] = useState('08:00');
+  const [newTimes, setNewTimes] = useState<string[]>(['08:00']);
+  // Which chip the picker above is editing.
+  const [activeTime, setActiveTime] = useState('08:00');
+  // Once the times have been touched by hand, the frequency stops
+  // overwriting them — a suggestion must not undo a deliberate choice.
+  const [timesEdited, setTimesEdited] = useState(false);
+  const [timeHint, setTimeHint] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -165,34 +220,83 @@ export default function Medicines() {
     setTakenReminderIds((prev) => new Set(prev).add(reminderId));
   }
 
+  // "Twice a day" offers two slots. A suggestion only: it stops as soon as
+  // the times have been edited, so it can never undo a deliberate choice.
+  useEffect(() => {
+    if (timesEdited) return;
+    const suggestion = SUGGESTED_TIMES[suggestedSlots(newFrequency)] ?? SUGGESTED_TIMES[1];
+    setNewTimes(suggestion);
+    setActiveTime(suggestion[0]);
+  }, [newFrequency, timesEdited]);
+
+  function editActiveTime(next: string) {
+    setTimeHint('');
+    setTimesEdited(true);
+    if (next === activeTime) return;
+    if (newTimes.includes(next)) {
+      // Already chosen. Rather than make a second identical chip, the
+      // selection moves onto the one that is already there.
+      setActiveTime(next);
+      setTimeHint(`${to12Hour(next)} is already in the list.`);
+      return;
+    }
+    setNewTimes((times) => times.map((t) => (t === activeTime ? next : t)).sort(byTime));
+    setActiveTime(next);
+  }
+
+  function addTime() {
+    if (newTimes.length >= MAX_TIMES) return;
+    const next = nextFreeTime(newTimes);
+    setTimeHint('');
+    setTimesEdited(true);
+    setNewTimes((times) => [...times, next].sort(byTime));
+    setActiveTime(next);
+  }
+
+  function removeTime(time: string) {
+    // The first time stays: a reminder with no time is not a reminder.
+    if (newTimes.length <= 1) return;
+    const remaining = newTimes.filter((t) => t !== time);
+    setTimeHint('');
+    setTimesEdited(true);
+    setNewTimes(remaining);
+    if (time === activeTime) setActiveTime(remaining[0]);
+  }
+
   async function handleAddMedicine() {
     if (!activeProfile || !newName.trim()) return;
     setSaving(true);
     try {
       // If this medicine is already on the list from a prescription, the
-      // backend answers with that one record, so the reminder lands there.
-      const { data: medication } = await medicinesApi.create({
+      // backend answers with that one record, and puts the times on it.
+      await medicinesApi.create({
         profile: activeProfile.id,
         name: newName,
         dosage: newDosage,
         instructions: newInstructions,
         frequency: newFrequency,
         start_date: new Date().toISOString().slice(0, 10),
+        // Every chosen time goes in the same request, so a medicine and its
+        // reminders cannot end up half-saved.
+        reminder_times: newTimes,
       });
-      if (newTime) {
-        await medicinesApi.addReminder(medication.id, newTime);
-      }
       setNewName('');
       setNewDosage('');
       setNewInstructions('');
       setNewFrequency('daily');
-      setNewTime('08:00');
+      setNewTimes(['08:00']);
+      setActiveTime('08:00');
+      setTimesEdited(false);
+      setTimeHint('');
       setShowAddForm(false);
       await loadMedications();
     } finally {
       setSaving(false);
     }
   }
+
+  // Which time the picker above the chips is editing.
+  const editingTime = newTimes.includes(activeTime) ? activeTime : (newTimes[0] ?? '08:00');
 
   async function handleDelete(id: string) {
     await medicinesApi.delete(id);
@@ -275,14 +379,56 @@ export default function Medicines() {
                 placeholder="Frequency (e.g. daily, weekly)"
                 className="text-sm px-3 py-2 rounded-lg border border-border outline-none"
               />
-              <div>
+              <div className="sm:col-span-2">
                 <label className="text-xs text-ink-500 block mb-1">Reminder time</label>
-                <input
-                  type="time"
-                  value={newTime}
-                  onChange={(e) => setNewTime(e.target.value)}
-                  className="text-sm px-3 py-2 rounded-lg border border-border outline-none"
-                />
+                <div className="max-w-[11rem]">
+                  <TimePicker value={editingTime} onChange={editActiveTime} />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {newTimes.map((time) => {
+                    const editing = time === editingTime;
+                    return (
+                      <span
+                        key={time}
+                        className={`flex items-center rounded-full border text-xs font-medium transition-colors ${
+                          editing
+                            ? 'border-accent bg-accent text-white'
+                            : 'border-border bg-accent-soft/60 text-accent-ink'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => { setActiveTime(time); setTimeHint(''); }}
+                          className="pl-2.5 py-1 tabular-nums"
+                          aria-label={`Change ${to12Hour(time)}`}
+                        >
+                          {to12Hour(time)}
+                        </button>
+                        {newTimes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeTime(time)}
+                            className="px-1.5 py-1 opacity-70 hover:opacity-100"
+                            aria-label={`Remove ${to12Hour(time)}`}
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                        {newTimes.length === 1 && <span className="pr-2.5" />}
+                      </span>
+                    );
+                  })}
+                  {newTimes.length < MAX_TIMES && (
+                    <button
+                      type="button"
+                      onClick={addTime}
+                      className="flex items-center gap-1 rounded-full border border-dashed border-accent/50 px-2.5 py-1 text-xs font-medium text-accent-ink hover:bg-accent-soft/60"
+                    >
+                      <Plus size={11} /> Add another time
+                    </button>
+                  )}
+                </div>
+                {timeHint && <p className="mt-1.5 text-[11px] text-ink-500">{timeHint}</p>}
               </div>
             </div>
             <Button onClick={handleAddMedicine} disabled={!newName.trim() || saving}>
@@ -381,6 +527,12 @@ function MedicineCard({
   onOpenDocument: (id: string) => void;
 }) {
   const [showHistory, setShowHistory] = useState(false);
+  // Earliest first, and only the times still wanted — a time taken off the
+  // list is switched off rather than deleted, to keep its dose history.
+  const activeReminders = m.reminders
+    .filter((r) => r.is_active)
+    .slice()
+    .sort((a, b) => a.time_of_day.localeCompare(b.time_of_day));
   const status = STATUS[m.status] ?? STATUS.active;
   const showGeneric = m.generic_name && !m.name.toLowerCase().includes(m.generic_name.toLowerCase().split(' + ')[0]);
   const details = [m.dosage, m.instructions].filter(Boolean).join(' · ');
@@ -408,9 +560,9 @@ function MedicineCard({
           {m.start_date && <p className="text-xs text-ink-400 mt-0.5">{medicineDateLabel(m.start_date, m.end_date)}</p>}
           {m.status_reason && <p className="text-xs text-ink-700 mt-2 leading-relaxed">{m.status_reason}</p>}
         </div>
-        {m.is_active && m.reminders.length > 0 && (
+        {m.is_active && activeReminders.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {m.reminders.map((r) => {
+            {activeReminders.map((r) => {
               const taken = takenReminderIds.has(r.id);
               return (
                 <button
@@ -422,7 +574,7 @@ function MedicineCard({
                   }`}
                 >
                   {taken ? <Check size={12} /> : <Clock3 size={12} />}
-                  <span>{r.time_of_day?.slice(0, 5)}</span>
+                  <span>{to12Hour(r.time_of_day?.slice(0, 5) ?? '')}</span>
                   <span>{taken ? 'Taken today' : 'Mark taken'}</span>
                 </button>
               );

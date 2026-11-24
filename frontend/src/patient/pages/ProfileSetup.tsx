@@ -20,6 +20,7 @@ import {
 import SessionStatus from '../../auth/SessionStatus';
 import { useAuth } from '../context/AuthContext';
 import { profilesApi } from '../lib/api';
+import { BLOOD_GROUPS } from '@shared/bloodGroups';
 import { usePin } from '@shared/session/PinContext';
 import { needsOtp, pinErrorMessage } from '@shared/session/mpinApi';
 
@@ -215,14 +216,16 @@ export default function ProfileSetup() {
               <option value="other">Other</option>
               <option value="prefer_not_to_say">Prefer not to say</option>
             </SelectField>
-            <Field
+            <SelectField
               label="Blood group"
               icon={<Droplet size={15} />}
               value={bloodGroup}
               onChange={(e) => setBloodGroup(e.target.value)}
-              placeholder="e.g. O+ (optional)"
               hint="Shown on your emergency card if you add one."
-            />
+            >
+              <option value="">Select (optional)</option>
+              {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+            </SelectField>
           </div>
 
           {askPin && (

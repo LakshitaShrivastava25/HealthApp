@@ -58,7 +58,7 @@ function formatWait(seconds: number) {
  * for Forgot PIN. A browser that has signed in before pre-fills its number.
  */
 export default function Login() {
-  const { isAuthenticated, account, sendOtp, verifyOtp, adoptSession } = useSession();
+  const { isAuthenticated, account, profiles, logout, sendOtp, verifyOtp, adoptSession } = useSession();
   const pin = usePin();
   const navigate = useNavigate();
   const location = useLocation();
@@ -270,7 +270,15 @@ export default function Login() {
   // The success card holds for a beat, then hands over to the app.
   useEffect(() => {
     if (!target) return;
-    const id = setTimeout(() => navigate(target, { replace: true }), SUCCESS_HOLD_MS);
+    // Replace everywhere except the registration page. Replacing there wiped
+    // /login out of history, so Back from "Create your account" left the site
+    // entirely instead of returning to the phone-number step. Pushing keeps
+    // /login behind it; the guard below cancels the half-finished sign-in
+    // when they actually arrive back here.
+    const id = setTimeout(
+      () => navigate(target, { replace: target !== '/patient/setup' }),
+      SUCCESS_HOLD_MS,
+    );
     return () => clearTimeout(id);
   }, [target, navigate]);
 
@@ -313,6 +321,16 @@ export default function Login() {
     step !== 'staff' &&
     step !== 'set-pin'
   ) {
+    // A signed-in account with no profile is an abandoned registration —
+    // Back from "Create your account". Redirecting would send them straight
+    // back there ("/" finds no profile and returns to /patient/setup), so
+    // the half-finished sign-in is cancelled and the phone step stays
+    // usable. Catches every way back: button, keyboard and mouse gesture,
+    // since they all end up rendering this page.
+    if (profiles.length === 0) {
+      logout();
+      return null;
+    }
     return <Navigate to="/" replace />;
   }
 

@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorNote, Input, Row, Screen, Loading } from '../../../src/components/ui';
+import { UploadStatusCard, useUploadStatus } from '../../../src/components/UploadStatus';
 import { useAuth } from '../../../src/context/AuthContext';
 import { insuranceApi, unwrap, type UploadFile } from '../../../src/lib/api';
 import { pickDocument } from '../../../src/lib/pickFile';
@@ -53,6 +55,27 @@ type Estimate = {
 
 const statusTone = { validated: 'success', needs_review: 'warning', processing: 'neutral' } as const;
 
+// The server reads a policy in the background after the upload answers, so a
+// new policy shows "processing" and refreshes itself until the read is done.
+// The limit is past the server's 10-minute cut-off for an interrupted read,
+// so even that case ends on screen without a manual refresh.
+const PROCESSING_POLL_MS = 6_000;
+const PROCESSING_POLL_LIMIT_MS = 12 * 60_000;
+
+/** The server's own reason for refusing a file, when it gave one. */
+function uploadRefusal(err: unknown): string | null {
+  const response = (err as { response?: { status?: number; data?: unknown } })?.response;
+  if (!response || response.status === undefined || response.status >= 500) return null;
+  if (response.status === 429) return 'Too many uploads in a short time. Please wait a minute and try again.';
+  const data = response.data as Record<string, unknown> | undefined;
+  if (data && typeof data === 'object') {
+    if (typeof data.detail === 'string') return data.detail;
+    const first = Object.values(data)[0];
+    if (Array.isArray(first) && typeof first[0] === 'string') return first[0];
+  }
+  return 'That file could not be added. A policy must be a PDF, JPG or PNG.';
+}
+
 function money(value: string | null) {
   if (!value) return '—';
   const n = Number(value);
@@ -70,7 +93,8 @@ export default function Insurance() {
   // False until the first load finishes: a loader, not "nothing here yet".
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const uploadStatus = useUploadStatus();
+  const uploading = uploadStatus.busy;
 
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState('');
@@ -82,6 +106,7 @@ export default function Insurance() {
   const [estimating, setEstimating] = useState(false);
 
   const [confirming, setConfirming] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const active = policies.find((p) => p.id === activeId) ?? null;
 
@@ -129,26 +154,61 @@ export default function Insurance() {
     setRefreshing(false);
   }
 
+  // Keep refreshing while the selected policy is still being read.
+  const activeProcessing = active?.status === 'processing';
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeProcessing || uploading) return;
+      const started = Date.now();
+      const timer = setInterval(() => {
+        if (Date.now() - started > PROCESSING_POLL_LIMIT_MS) {
+          clearInterval(timer);
+          return;
+        }
+        void load();
+      }, PROCESSING_POLL_MS);
+      return () => clearInterval(timer);
+    }, [activeProcessing, uploading, load])
+  );
+
   async function handleUpload() {
-    if (!activeProfile) return;
+    if (!activeProfile || uploading) return;
+    setError(null);
     let file: UploadFile | null = null;
     try {
-      file = await pickDocument();
+      file = await pickDocument({ onPicked: uploadStatus.preparing });
     } catch {
+      uploadStatus.reset();
       setError("Couldn't open the file picker.");
       return;
     }
-    if (!file) return;
+    if (!file) {
+      uploadStatus.reset();
+      return;
+    }
 
-    setUploading(true);
-    setError(null);
+    uploadStatus.uploading();
     try {
-      const { data } = await insuranceApi.upload(activeProfile.id, file);
+      // The server stores the file and answers; reading it happens after,
+      // shown on the policy's own card while the list refreshes itself.
+      const { data } = await insuranceApi.upload(activeProfile.id, file, uploadStatus.onProgress);
+      uploadStatus.done();
       await load(data.id);
-    } catch {
-      setError('Upload failed. A policy must be a PDF, JPG or PNG.');
+    } catch (err) {
+      const refusal = uploadRefusal(err);
+      if (refusal) {
+        setError(refusal);
+      } else {
+        // Timed out, lost signal, or the server failed mid-read. The policy
+        // may well have been saved — say so instead of "Upload failed", which
+        // led people to upload the same policy two or three times.
+        setError(
+          "The upload didn't finish. If it arrived, it will appear here shortly — pull down to refresh before uploading it again."
+        );
+      }
+      void load();
     } finally {
-      setUploading(false);
+      uploadStatus.reset();
     }
   }
 
@@ -197,15 +257,44 @@ export default function Insurance() {
     }
   }
 
+  async function handleRetry() {
+    if (!active) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      await insuranceApi.retryProcessing(active.id);
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      // 409: a read is already running — the refresh below shows it.
+      if (status !== 409) setError("Couldn't start reading this policy again. Please try later.");
+    } finally {
+      await load(active.id);
+      setRetrying(false);
+    }
+  }
+
   const extractionFailed = !!active?.structured_data?._extraction_failed;
+  const processing = active?.status === 'processing';
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPurple} />}>
-      {!!error && <ErrorNote message={error} onRetry={load} />}
+      {!!error && <ErrorNote message={error} onRetry={() => void load()} />}
 
       <Button onPress={handleUpload} loading={uploading}>
         Add a policy
       </Button>
+
+      <UploadStatusCard
+        stage={uploadStatus.stage}
+        progress={uploadStatus.progress}
+        copy={{
+          preparing: 'Preparing your policy…',
+          uploading: 'Uploading your policy…',
+          processing: 'Upload complete — saving your policy…',
+          done: 'Uploaded — reading your policy now…',
+          note: 'Please keep the app open until the upload finishes.',
+        }}
+      />
 
       {!loaded && !error && <Loading />}
       {loaded && policies.length === 0 && !uploading && !error && (
@@ -254,6 +343,16 @@ export default function Insurance() {
               </Pressable>
             )}
 
+            {processing && (
+              <Row style={styles.readingRow}>
+                <ActivityIndicator size="small" color={colors.brandPurple} />
+                <Text style={[type.caption, { flex: 1 }]}>
+                  Reading this policy — the details below fill in when it finishes. Long policies can take
+                  a minute or two; you can leave this screen meanwhile.
+                </Text>
+              </Row>
+            )}
+
             {extractionFailed && (
               <View style={{ marginTop: spacing.md }}>
                 <ErrorNote
@@ -262,6 +361,9 @@ export default function Insurance() {
                     "The text of this policy couldn't be read, so nothing was extracted from it."
                   }
                 />
+                <Button variant="secondary" onPress={handleRetry} loading={retrying}>
+                  Read it again
+                </Button>
               </View>
             )}
 
@@ -283,7 +385,7 @@ export default function Insurance() {
               ))}
             </View>
 
-            {active.status !== 'validated' && !extractionFailed && (
+            {active.status !== 'validated' && !extractionFailed && !processing && (
               <>
                 <Text style={[type.caption, { marginTop: spacing.md }]}>
                   These details were read automatically. Check them against your policy document, then
@@ -461,6 +563,12 @@ const styles = StyleSheet.create({
   factGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.md },
   fact: { width: '50%', paddingVertical: spacing.sm, paddingRight: spacing.sm },
   bulletRow: { alignItems: 'flex-start', paddingVertical: spacing.sm },
+  readingRow: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandLavender,
+  },
   estimate: { marginTop: spacing.md, borderRadius: radius.md, padding: spacing.md },
   bubble: {
     borderRadius: radius.md,

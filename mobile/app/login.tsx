@@ -21,6 +21,7 @@ import { RecordsArt } from '../src/components/Illustrations';
 import PhoneInput, { isValidPhone, localDigits, toE164 } from '../src/components/PhoneInput';
 import { Button, Card, ErrorNote, Input } from '../src/components/ui';
 import { ChooseStep } from '../src/components/mpinSteps';
+import BackLink from '../src/components/BackLink';
 import MpinKeypad, { MpinDots } from '../src/components/MpinKeypad';
 import { usePin } from '../src/context/PinContext';
 import { getPinHint } from '../src/lib/pin';
@@ -103,7 +104,7 @@ function describeError(err: unknown, action: 'send' | 'verify') {
 }
 
 export default function Login() {
-  const { sendOtp, verifyOtp, adoptSession } = useAuth();
+  const { sendOtp, verifyOtp, adoptSession, logout } = useAuth();
   const router = useRouter();
 
   /**
@@ -130,13 +131,11 @@ export default function Login() {
    */
   const [knownPhone, setKnownPhone] = useState<string | null>(null);
 
-  // Back on the code screen returns to the phone number, like the on-screen
-  // arrow; back on the phone screen asks before closing the app.
+  // Android's Back does what the on-screen "← Back" does; only on the phone
+  // number step does it ask before closing the app.
   useConfirmExit(() => {
-    // Setting a first PIN is required, so back must not escape it.
-    if (step === 'phone' || step === 'set-pin') return false;
-    setStep('phone');
-    setError(null);
+    if (step === 'phone') return false;
+    goBackStep();
     return true;
   });
   const [phone, setPhone] = useState('');
@@ -144,6 +143,32 @@ export default function Login() {
   const [debugOtp, setDebugOtp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * One step back:
+   *   PIN                 -> phone number (number kept)
+   *   code, resetting PIN -> PIN
+   *   code                -> phone number
+   *   choosing a PIN      -> phone number, signed out — that step runs on the
+   *                          session the code just opened, and leaving it
+   *                          half-done must not leave anyone signed in.
+   */
+  function goBackStep() {
+    setError(null);
+    setMpin('');
+    setOtp('');
+    if (step === 'otp' && resetting) {
+      setResetting(false);
+      setStep('pin');
+      return;
+    }
+    if (step === 'set-pin') {
+      setResetting(false);
+      setGrant('');
+      void logout();
+    }
+    setStep('phone');
+  }
 
   // A timestamp rather than a counter: timers pause while the app is in the
   // background (the user reading the SMS), and the clock does not.
@@ -444,20 +469,11 @@ export default function Login() {
                 </>
               ) : step === 'pin' ? (
                 <>
-                  <Pressable
-                    onPress={() => { setStep('phone'); setError(null); setMpin(''); }}
-                    style={styles.backRow}
-                    hitSlop={12}
-                  >
-                    <Feather name="arrow-left" size={15} color={colors.ink500} />
-                    <Text style={type.caption}>
-                      {fullNumber.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')}
-                    </Text>
-                    <Text style={styles.changeLink}>Change</Text>
-                  </Pressable>
+                  <BackLink onPress={goBackStep} disabled={busy} />
                   <Text style={type.h2}>Enter your PIN</Text>
                   <Text style={[type.caption, styles.stepNote]}>
-                    The 4-digit PIN you set for CuraPath.
+                    The 4-digit PIN you set for CuraPath, for{' '}
+                    {fullNumber.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')}.
                   </Text>
                   <View style={{ alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }}>
                     {busy ? (
@@ -509,6 +525,7 @@ export default function Login() {
                 </>
               ) : step === 'set-pin' ? (
                 <>
+                  <BackLink onPress={goBackStep} />
                   <Text style={type.h2}>
                     {resetting ? 'Set a new PIN' : 'Create your PIN'}
                   </Text>
@@ -532,25 +549,19 @@ export default function Login() {
                 </>
               ) : (
                 <>
-                  <Pressable
+                  <BackLink
                     onPress={() => {
-                      setStep('phone');
-                      setError(null);
-                      setTimeout(() => phoneInputRef.current?.focus(), 250);
+                      const toPhone = !resetting;
+                      goBackStep();
+                      if (toPhone) setTimeout(() => phoneInputRef.current?.focus(), 250);
                     }}
-                    style={styles.backRow}
-                    hitSlop={12}
-                  >
-                    <Feather name="arrow-left" size={15} color={colors.ink500} />
-                    <Text style={type.caption}>
-                      {fullNumber.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')}
-                    </Text>
-                    <Text style={styles.changeLink}>Change</Text>
-                  </Pressable>
+                    disabled={busy}
+                  />
 
                   <Text style={type.h2}>Enter the code</Text>
                   <Text style={[type.caption, styles.stepNote]}>
-                    Enter the 6-digit code we texted you.
+                    Enter the 6-digit code we texted to{' '}
+                    {fullNumber.replace(/^\+91(\d{5})(\d{5})$/, '+91 $1 $2')}.
                   </Text>
 
                   <Pressable onPress={() => otpInputRef.current?.focus()}>
@@ -725,8 +736,6 @@ const styles = StyleSheet.create({
   },
   pinLink: { ...type.body, color: colors.brandPurple, fontWeight: '600' },
   waitNote: { ...type.caption, color: colors.danger, textAlign: 'center' },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md },
-  changeLink: { fontSize: 12, fontWeight: '600', color: colors.brandPurple, marginLeft: 2 },
   // Cells share the row's width, so six always fit — a 320dp phone included.
   otpRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.lg },
   otpCell: {

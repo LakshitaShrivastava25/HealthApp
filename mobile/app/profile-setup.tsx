@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -5,7 +6,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import DateField from '../src/components/DateField';
-import { ModeSwitchCard } from '../src/components/ModeSwitch';
+import { ModeSwitchCard, useModeSwitch } from '../src/components/ModeSwitch';
 import MpinKeypad, { MPIN_LENGTH, MpinDots } from '../src/components/MpinKeypad';
 import { OtpStep } from '../src/components/mpinSteps';
 import { usePin } from '../src/context/PinContext';
@@ -13,8 +14,9 @@ import { Button, Card, ErrorNote, Input } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { profilesApi } from '../src/lib/api';
 import { colors, radius, spacing, type } from '../src/theme';
-import { useConfirmExit } from '../src/lib/useBackHandler';
+import { useBackHandler } from '../src/lib/useBackHandler';
 import { useConfirmLogout } from '../src/hooks/useConfirmLogout';
+import { resetTo } from '../src/lib/navigation';
 
 const GENDERS = [
   { label: 'Male', value: 'male' },
@@ -48,11 +50,14 @@ function isoToday() {
  * and the profile straight after.
  */
 export default function ProfileSetup() {
-  useConfirmExit();
-  const { refreshProfiles, account } = useAuth();
+  const { refreshProfiles, account, logout } = useAuth();
   const pin = usePin();
   const confirmLogout = useConfirmLogout();
   const router = useRouter();
+  // A registered doctor lands here the first time they switch to User mode;
+  // "back" for them is Doctor mode, not signing out.
+  const { available: isDoctor, switchTo } = useModeSwitch();
+  const [leaving, setLeaving] = useState(false);
 
   const [fullName, setFullName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
@@ -89,6 +94,55 @@ export default function ProfileSetup() {
     setConfirmPin('');
     setPinField('pin');
   }
+
+
+  /**
+   * The way back to the login page. This screen is reached by router.replace
+   * straight after the code is verified, so there is nothing behind it, and
+   * the login page sends a signed-in person straight back here — Back used to
+   * offer only to close the app. Leaving signs out the half-finished
+   * registration: nothing on this screen is saved until "Create account", and
+   * signing in with the same number again brings the person back here.
+   */
+  async function goBack() {
+    if (leaving || saving) return;
+    if (reverify) {
+      setReverify(false);
+      return;
+    }
+    if (isDoctor) {
+      switchTo('doctor');
+      return;
+    }
+    setLeaving(true);
+    try {
+      await logout();
+    } finally {
+      resetTo('/login');
+    }
+  }
+
+  // Android's Back button does the same as the on-screen one.
+  useBackHandler(() => {
+    void goBack();
+    return true;
+  });
+
+  const backRow = (
+    <Pressable
+      onPress={() => void goBack()}
+      disabled={leaving}
+      hitSlop={12}
+      style={styles.backRow}
+      accessibilityRole="button"
+      accessibilityLabel={reverify ? 'Back' : isDoctor ? 'Back to doctor mode' : 'Back to login'}
+    >
+      <Feather name="arrow-left" size={16} color={colors.ink500} />
+      <Text style={styles.backText}>
+        {reverify ? 'Back' : isDoctor ? 'Back to doctor mode' : 'Back to login'}
+      </Text>
+    </Pressable>
+  );
 
   const dobValid = !dateOfBirth || (/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) && dateOfBirth <= isoToday());
 
@@ -145,6 +199,7 @@ export default function ProfileSetup() {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={[styles.scroll, { alignItems: 'center' }]}>
+          <View style={{ alignSelf: 'stretch' }}>{backRow}</View>
           <OtpStep
             phone={account.phone_number}
             onVerified={async (data) => {
@@ -166,6 +221,7 @@ export default function ProfileSetup() {
       >
         <View style={styles.inner}>
           <View>
+            {backRow}
             <Text style={type.h1}>{askPin ? 'Create your account' : 'Set up your profile'}</Text>
             <Text style={[type.caption, { marginTop: spacing.xs }]}>
               {askPin
@@ -304,6 +360,8 @@ export default function ProfileSetup() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: spacing.md },
+  backText: { ...type.caption, color: colors.ink500, fontWeight: '600' },
   scroll: { padding: spacing.lg, flexGrow: 1, justifyContent: 'center' },
   inner: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: spacing.lg },
   groupLabel: { ...type.caption, marginBottom: spacing.sm },

@@ -221,6 +221,28 @@ function fileForm(file: UploadFile, fields: Record<string, string>) {
 
 const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } };
 
+/**
+ * Byte progress for an upload, as 0–100. `null` means the platform did not
+ * report a total (Android often omits it for multipart bodies) — the caller
+ * shows an indeterminate state instead of a bar frozen at 0%.
+ */
+export type UploadProgress = (pct: number | null) => void;
+
+function progressHandler(onProgress?: UploadProgress) {
+  if (!onProgress) return undefined;
+  return (e: { loaded: number; total?: number }) => {
+    onProgress(e.total ? Math.min(100, Math.round((e.loaded / e.total) * 100)) : null);
+  };
+}
+
+/**
+ * The server now reads a policy in the background and answers the upload at
+ * once, but servers deployed before that change still answer only after the
+ * AI has read the whole policy, which alone can pass the 70s default. The
+ * longer ceiling also lets a large PDF finish on a slow connection.
+ */
+const SLOW_UPLOAD_TIMEOUT_MS = 180_000;
+
 // -- auth ----------------------------------------------------------------
 export const authApi = {
   sendOtp: (phone_number: string) => api.post('/auth/send-otp/', { phone_number }),
@@ -317,18 +339,11 @@ export const documentsApi = {
   list: (profileId: string, category?: string) =>
     api.get('/documents/', { params: { profile_id: profileId, category: category || undefined } }),
   get: (id: string) => api.get(`/documents/${id}/`),
-  upload: (profileId: string, file: UploadFile, category: string, onProgress?: (pct: number) => void) =>
+  upload: (profileId: string, file: UploadFile, category: string, onProgress?: UploadProgress) =>
     api.post(
       '/documents/',
       fileForm(file, { profile: profileId, category, title: file.name }),
-      {
-        ...MULTIPART,
-        onUploadProgress: onProgress
-          ? (e: { loaded: number; total?: number }) => {
-              if (e.total) onProgress(Math.round((e.loaded / e.total) * 100));
-            }
-          : undefined,
-      },
+      { ...MULTIPART, onUploadProgress: progressHandler(onProgress) },
     ),
   // Review-screen edits, then an explicit confirm — the only transition to
   // PROCESSED (same flow as the website's DocumentDetailModal).
@@ -361,10 +376,16 @@ export const timelineApi = {
 
 export const insuranceApi = {
   list: (profileId: string) => api.get('/insurance/', { params: { profile_id: profileId } }),
-  upload: (profileId: string, file: UploadFile) =>
-    api.post('/insurance/', fileForm(file, { profile: profileId }), MULTIPART),
+  upload: (profileId: string, file: UploadFile, onProgress?: UploadProgress) =>
+    api.post('/insurance/', fileForm(file, { profile: profileId }), {
+      ...MULTIPART,
+      timeout: SLOW_UPLOAD_TIMEOUT_MS,
+      onUploadProgress: progressHandler(onProgress),
+    }),
   update: (id: string, data: Record<string, unknown>) => api.patch(`/insurance/${id}/`, data),
   confirm: (id: string) => api.post(`/insurance/${id}/confirm/`),
+  /** Read a stored policy again after a failed or interrupted read. */
+  retryProcessing: (id: string) => api.post(`/insurance/${id}/retry-processing/`),
   delete: (id: string) => api.delete(`/insurance/${id}/`),
   chatHistory: (policyId: string) => api.get(`/insurance/${policyId}/chat/`),
   chat: (policyId: string, question: string) =>
@@ -477,8 +498,10 @@ export type RegisterPrefill = {
 
 export const doctorApi = {
   me: () => api.get('/doctors/me/'),
-  register: (form: FormData) => api.post('/doctors/', form, MULTIPART),
-  updateProfile: (form: FormData) => api.patch('/doctors/me/', form, MULTIPART),
+  register: (form: FormData, onProgress?: UploadProgress) =>
+    api.post('/doctors/', form, { ...MULTIPART, onUploadProgress: progressHandler(onProgress) }),
+  updateProfile: (form: FormData, onProgress?: UploadProgress) =>
+    api.patch('/doctors/me/', form, { ...MULTIPART, onUploadProgress: progressHandler(onProgress) }),
   /** The form's "Verify" button: what the NMC register has for this number.
    *  Informational only — an admin reviews every registration regardless. */
   verifyRegistration: (data: {

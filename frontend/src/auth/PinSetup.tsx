@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { KeyRound } from 'lucide-react';
 
-import { AuthCard, AuthShell, ChooseStep, CuraPathLogo, OtpStep } from '@shared/auth';
+import { AuthCard, AuthShell, BackButton, ChooseStep, CuraPathLogo, OtpStep } from '@shared/auth';
+import { useBackToClose } from '@shared/hooks/useBackToClose';
 import { useSession } from '@shared/session/SessionContext';
 import { usePin } from '@shared/session/PinContext';
 import { needsOtp } from '@shared/session/mpinApi';
@@ -18,7 +19,7 @@ import SessionStatus from './SessionStatus';
  * anyone at an unlocked computer could swap it quietly.
  */
 export default function PinSetup() {
-  const { isLoading, isAuthenticated, account } = useSession();
+  const { isLoading, isAuthenticated, account, logout } = useSession();
   const pin = usePin();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -27,6 +28,31 @@ export default function PinSetup() {
   const [step, setStep] = useState<'otp' | 'choose'>(changing ? 'otp' : 'choose');
   const [grant, setGrant] = useState('');
   const [pendingPin, setPendingPin] = useState('');
+  const [leaving, setLeaving] = useState(false);
+
+  /**
+   * "← Back" and the browser's Back. Changing a PIN goes back where it came
+   * from (Settings). A first PIN is required to use the app, so there the
+   * only way back is the login page — signed out, since nothing is set up.
+   * Asked for a code part-way through choosing, Back returns to choosing.
+   */
+  function goBack() {
+    if (leaving) return;
+    if (step === 'otp' && pendingPin) {
+      setPendingPin('');
+      setStep('choose');
+      return;
+    }
+    if (changing) {
+      finish();
+      return;
+    }
+    setLeaving(true);
+    logout();
+    window.location.replace('/login');
+  }
+
+  useBackToClose(!isLoading && isAuthenticated && !leaving, goBack);
 
   if (isLoading) return <SessionStatus />;
   if (!isAuthenticated || !account) return <Navigate to="/login" replace />;
@@ -43,6 +69,12 @@ export default function PinSetup() {
         <div className="mb-6">
           <CuraPathLogo portal="patient" />
         </div>
+
+        <BackButton
+          onClick={goBack}
+          disabled={leaving}
+          label={changing || (step === 'otp' && pendingPin) ? 'Back' : 'Back to login'}
+        />
 
         {step === 'otp' && (
           <OtpStep

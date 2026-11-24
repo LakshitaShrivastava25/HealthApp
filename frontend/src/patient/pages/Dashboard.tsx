@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Sparkles, FileText, Pill as PillIcon, Stethoscope, ArrowRight, Bell } from 'lucide-react';
+import { Plus, FileText, Pill as PillIcon, Stethoscope, ArrowRight, Bell } from 'lucide-react';
+import HeartPlusIcon from '@shared/components/HeartPlusIcon';
 import Topbar from '../components/Topbar';
 import { Card, CardHeader, Button, ProgressRing, Badge, EmptyState } from '../components/ui';
 import AIBotMascot from '../components/AIBotMascot';
@@ -135,7 +136,7 @@ export default function Dashboard() {
             <div className="relative flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 text-sm font-medium opacity-90">
-                  <Sparkles size={16} /> AI Health Assistant
+                  <HeartPlusIcon size={16} /> AI User Assistant
                 </div>
                 <p className="text-lg font-semibold mt-2 max-w-xs">
                   Ask anything about your health, reports, medicines or symptoms.

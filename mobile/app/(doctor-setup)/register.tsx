@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import CouncilPicker from '../../src/components/CouncilPicker';
+import ECGProgressBar from '../../src/components/ECGProgressBar';
 import RegisterCheck, { type RegisterFill } from '../../src/components/RegisterCheck';
 import { Button, Card, CardHeader, ErrorNote, Input, Row, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
@@ -53,6 +54,9 @@ export default function DoctorRegister() {
   const [consent, setConsent] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  // Byte progress of the licence file while the form is sent (0–1, or null
+  // when the phone does not report it). Only shown when a file is attached.
+  const [licenseProgress, setLicenseProgress] = useState<number | null>(0);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
@@ -103,6 +107,10 @@ export default function DoctorRegister() {
     setError(null);
     setFieldErrors({});
     setSaving(true);
+    setLicenseProgress(0);
+    const onProgress = license
+      ? (pct: number | null) => setLicenseProgress(pct === null ? null : pct / 100)
+      : undefined;
     try {
       const form = new FormData();
       form.append('full_name', stripHonorific(fullName));
@@ -123,13 +131,13 @@ export default function DoctorRegister() {
       if (license) form.append('license_document', license as unknown as Blob);
 
       if (editing) {
-        await doctorApi.updateProfile(form);
+        await doctorApi.updateProfile(form, onProgress);
         await refreshDoctor();
         router.back();
         return;
       }
 
-      await doctorApi.register(form);
+      await doctorApi.register(form, onProgress);
       await refreshDoctor();
       // Straight into Doctor mode: the index route opens the pending screen
       // until an admin verifies the registration.
@@ -333,6 +341,18 @@ export default function DoctorRegister() {
       {fieldError('verification_consent')}
 
       {!!error && <ErrorNote message={error} />}
+
+      {saving && !!license && (
+        <Card>
+          <ECGProgressBar
+            progress={licenseProgress !== null && licenseProgress >= 1 ? null : licenseProgress}
+            caption={licenseProgress !== null && licenseProgress >= 1 ? 'Saving…' : undefined}
+          />
+          <Text style={[type.caption, { textAlign: 'center' }]}>
+            Uploading your licence — please keep the app open.
+          </Text>
+        </Card>
+      )}
 
       <Button onPress={handleSubmit} disabled={!canSubmit} loading={saving}>
         {editing ? 'Save changes' : 'Submit registration'}

@@ -15,6 +15,15 @@ import type { UploadFile } from './api';
  */
 
 const ACCEPTED = ['application/pdf', 'image/jpeg', 'image/png'];
+
+export type PickOptions = {
+  /**
+   * Called once the person has chosen a file, before the phone resizes it.
+   * Resizing a full camera photo takes a moment; this lets the screen show
+   * that something is happening instead of sitting still.
+   */
+  onPicked?: () => void;
+};
 const MAX_DIMENSION = 1920;
 const JPEG_QUALITY = 0.83;
 
@@ -59,7 +68,7 @@ async function compressImage(asset: ImagePicker.ImagePickerAsset): Promise<Image
   return { ...asset, uri: result.uri, width: result.width, height: result.height };
 }
 
-export async function pickFromCamera(): Promise<UploadFile | null> {
+export async function pickFromCamera(options?: PickOptions): Promise<UploadFile | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) {
     Alert.alert(
@@ -70,6 +79,7 @@ export async function pickFromCamera(): Promise<UploadFile | null> {
   }
   const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
   if (result.canceled || !result.assets?.length) return null;
+  options?.onPicked?.();
   const asset = await compressImage(result.assets[0]);
   return {
     uri: asset.uri,
@@ -78,7 +88,7 @@ export async function pickFromCamera(): Promise<UploadFile | null> {
   };
 }
 
-export async function pickFromLibrary(): Promise<UploadFile | null> {
+export async function pickFromLibrary(options?: PickOptions): Promise<UploadFile | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     Alert.alert('Photo access needed', 'Allow photo access to choose an existing image.');
@@ -86,6 +96,7 @@ export async function pickFromLibrary(): Promise<UploadFile | null> {
   }
   const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 });
   if (result.canceled || !result.assets?.length) return null;
+  options?.onPicked?.();
   const asset = await compressImage(result.assets[0]);
   return {
     uri: asset.uri,
@@ -94,12 +105,13 @@ export async function pickFromLibrary(): Promise<UploadFile | null> {
   };
 }
 
-export async function pickDocument(): Promise<UploadFile | null> {
+export async function pickDocument(options?: PickOptions): Promise<UploadFile | null> {
   const result = await DocumentPicker.getDocumentAsync({
     type: ACCEPTED,
     copyToCacheDirectory: true,
   });
   if (result.canceled || !result.assets?.length) return null;
+  options?.onPicked?.();
   const asset = result.assets[0];
   return {
     uri: asset.uri,

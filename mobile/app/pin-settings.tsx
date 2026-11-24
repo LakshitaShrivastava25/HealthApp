@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Card, CardHeader } from '../src/components/ui';
@@ -10,11 +10,12 @@ import { usePin } from '../src/context/PinContext';
 import { colors, spacing, type } from '../src/theme';
 
 /**
- * PIN settings. One screen for every role.
+ * PIN settings. One screen for every role: Change PIN, and the fingerprint /
+ * Face ID switch where the phone has one.
  *
- * Note what "Remove this device" means here: signing out deliberately keeps
- * the phone registered, so the PIN still works next time. This is the
- * explicit way to undo that — for a shared phone, or one being sold.
+ * "Turn off App Lock" (un-registering this phone) was taken out, as on the
+ * website: the PIN now signs in by number on any device, so removing one
+ * phone no longer protects anything.
  */
 export default function PinSettingsScreen() {
   const { account } = useAuth();
@@ -35,28 +36,6 @@ export default function PinSettingsScreen() {
     }
   }
 
-  function confirmDisable() {
-    Alert.alert(
-      'Remove this device?',
-      'Your PIN stays on your account and keeps working on your other phones. On this one you will need a code to sign in again.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            try {
-              await pin.removeDevice();
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ],
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -65,7 +44,7 @@ export default function PinSettingsScreen() {
             title="Your PIN"
             subtitle={
               on
-                ? 'You sign in with your 4-digit PIN on this phone.'
+                ? 'You sign in with your number and 4-digit PIN.'
                 : 'Set a PIN to sign in without waiting for a code.'
             }
           />
@@ -95,10 +74,6 @@ export default function PinSettingsScreen() {
                   />
                 </View>
               )}
-
-              <Pressable style={styles.rowLink} onPress={confirmDisable} disabled={busy}>
-                <Text style={[styles.rowText, { color: colors.danger }]}>Turn off App Lock</Text>
-              </Pressable>
             </View>
           )}
         </Card>
@@ -106,8 +81,8 @@ export default function PinSettingsScreen() {
         <Card>
           <CardHeader title="How it works" />
           <Text style={styles.note}>
-            Your PIN signs you in. A one-time code is only used to set this phone up, or to reset a
-            PIN you have forgotten — never as a second way to sign in.
+            Your PIN signs you in with your number on any device. A one-time code is only used when
+            you register, or to reset a PIN you have forgotten — never as a second way to sign in.
           </Text>
           <Text style={styles.note}>
             After three wrong tries you will be asked to wait. If you forget it, tap Forgot PIN on

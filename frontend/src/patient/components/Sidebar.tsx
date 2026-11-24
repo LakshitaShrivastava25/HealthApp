@@ -7,7 +7,6 @@ import {
   Pill,
   Search,
   QrCode,
-  Sparkles,
   FlaskConical,
   FileBarChart,
   GitBranch,
@@ -20,6 +19,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import ModeSwitch from '@shared/session/ModeSwitch';
+import HeartPlusIcon from '@shared/components/HeartPlusIcon';
 import { useAuth } from '../context/AuthContext';
 import { useLogoutConfirm } from '@shared/hooks/useLogoutConfirm';
 
@@ -34,7 +34,7 @@ const navItems = [
   { to: '/patient/emergency', label: 'Emergency Card', icon: QrCode },
   { to: '/patient/family-tree', label: 'Family Tree', icon: GitBranch },
   { to: '/patient/doctor-access', label: 'Doctor Access', icon: UserCheck },
-  { to: '/patient/health-ai', label: 'Health AI', icon: Sparkles },
+  { to: '/patient/health-ai', label: 'Health AI', icon: HeartPlusIcon },
   { to: '/patient/reports', label: 'Reports', icon: FileBarChart },
   { to: '/patient/settings', label: 'Settings', icon: SettingsIcon },
   { to: '/patient/help', label: 'Help & Support', icon: LifeBuoy },

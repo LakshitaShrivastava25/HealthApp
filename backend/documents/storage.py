@@ -49,6 +49,14 @@ def _read_bytes(content):
 
 
 class SignedUrlMixin:
+    def generate_filename(self, filename):
+        # Django builds the name with os.path, so on Windows "insurance/%Y/%m/"
+        # comes out as "insurance\2026\11\x.pdf". Cloudinary rejects that as
+        # an invalid public_id (every upload from a Windows dev machine 500ed)
+        # and S3 would store a key nobody can find by its "/" path. Stored
+        # names are always forward-slash, whatever the OS. No-op on Linux.
+        return super().generate_filename(filename).replace('\\', '/')
+
     def url(self, name):
         token = signing.TimestampSigner(salt=FILE_URL_SALT).sign(name)
         return f"{reverse('stored-file')}?t={token}"

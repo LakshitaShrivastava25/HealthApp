@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import HeartPlusIcon from '../../../src/components/HeartPlusIcon';
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -176,14 +177,14 @@ export default function Dashboard() {
 
       {!!loadError && <ErrorNote message={loadError} onRetry={load} />}
 
-      {/* AI Health Assistant */}
+      {/* AI User Assistant */}
       <View style={styles.aiCard}>
         <View style={styles.aiGlow} />
         <Row>
           <View style={styles.aiIcon}>
-            <Feather name="zap" size={16} color={colors.brandPurple} />
+            <HeartPlusIcon size={16} color={colors.brandPurple} />
           </View>
-          <Text style={styles.aiKicker}>AI Health Assistant</Text>
+          <Text style={styles.aiKicker}>AI User Assistant</Text>
         </Row>
         <Text style={styles.aiHeadline}>Ask anything about your health, reports or medicines.</Text>
 

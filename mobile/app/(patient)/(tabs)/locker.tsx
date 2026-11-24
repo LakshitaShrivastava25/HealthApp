@@ -1,9 +1,10 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,11 +15,12 @@ import {
 } from 'react-native';
 
 import { Badge, Card, EmptyState, ErrorNote, Row, Screen, Loading } from '../../../src/components/ui';
+import { UploadStatusCard, useUploadStatus } from '../../../src/components/UploadStatus';
 import ECGProgressBar from '../../../src/components/ECGProgressBar';
 import ReviewDetailsForm, { type ReviewForm } from '../../../src/components/ReviewDetailsForm';
 import { useAuth } from '../../../src/context/AuthContext';
 import { documentsApi, unwrap, type UploadFile } from '../../../src/lib/api';
-import { pickDocument, pickFromCamera, pickFromLibrary } from '../../../src/lib/pickFile';
+import { pickDocument, pickFromCamera, pickFromLibrary, type PickOptions } from '../../../src/lib/pickFile';
 import { colors, radius, spacing, type } from '../../../src/theme';
 import { useFocusRefresh } from '../../../src/hooks/useFocusRefresh';
 
@@ -57,6 +59,18 @@ const statusTone = {
   failed: 'danger',
 } as const;
 
+// A new upload lands as "processing" while the server reads it in the
+// background; the list refreshes itself until that settles, instead of
+// showing "processing" until the person thinks to pull down.
+const PROCESSING_POLL_MS = 5_000;
+const PROCESSING_POLL_LIMIT_MS = 3 * 60_000;
+
+// iOS will not present the camera or a picker while a Modal is still
+// animating away — the tap silently does nothing. Wait out the sheet's
+// slide-down first.
+const SHEET_CLOSE_MS = Platform.OS === 'ios' ? 450 : 80;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default function Locker() {
   const { activeProfile } = useAuth();
   const profileId = activeProfile?.id ?? null;
@@ -71,9 +85,8 @@ export default function Locker() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadComplete, setUploadComplete] = useState(false);
+  const uploadStatus = useUploadStatus();
+  const uploading = uploadStatus.busy;
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   // Picked but not sent. The review form opens first, so the details the
@@ -105,18 +118,40 @@ export default function Locker() {
     setRefreshing(false);
   }
 
+  // Keep refreshing while anything is still being read by the server.
+  const hasProcessing = documents.some((d) => d.status === 'processing');
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasProcessing) return;
+      const started = Date.now();
+      const timer = setInterval(() => {
+        if (Date.now() - started > PROCESSING_POLL_LIMIT_MS) {
+          clearInterval(timer);
+          return;
+        }
+        void load();
+      }, PROCESSING_POLL_MS);
+      return () => clearInterval(timer);
+    }, [hasProcessing, load])
+  );
+
   /** Picking a file only opens the review form — nothing is sent yet. */
-  async function choose(pick: () => Promise<UploadFile | null>) {
+  async function choose(pick: (options?: PickOptions) => Promise<UploadFile | null>) {
+    if (uploading) return;
     setSheetOpen(false);
     setUploadError(null);
     setUploadNotice(null);
+    await wait(SHEET_CLOSE_MS);
     let file: UploadFile | null = null;
     try {
-      file = await pick();
+      file = await pick({ onPicked: uploadStatus.preparing });
     } catch {
+      uploadStatus.reset();
       setUploadError("Couldn't open that picker.");
       return;
     }
+    // The photo is ready (resized) — the "Preparing" card gives way to the form.
+    uploadStatus.reset();
     if (!file || !activeProfile) return;
     setForm({
       title: file.name,
@@ -135,16 +170,12 @@ export default function Locker() {
    * "needs review": they have just reviewed it.
    */
   async function upload(file: UploadFile, entered: ReviewForm) {
-    if (!activeProfile) return;
+    if (!activeProfile || uploading) return;
     setUploadError(null);
-    setUploading(true);
-    setUploadProgress(0);
-    setUploadComplete(false);
+    uploadStatus.uploading();
     try {
-      // Category follows the tab in view, matching the web app: uploading
-      // from the Prescriptions tab files it as a prescription.
-      const { data } = await documentsApi.upload(activeProfile.id, file, entered.category, (pct) => setUploadProgress(pct / 100));
-      setUploadComplete(true);
+      const { data } = await documentsApi.upload(activeProfile.id, file, entered.category, uploadStatus.onProgress);
+      uploadStatus.done();
       if (data?.id && data?.upload?.outcome !== 'exact_duplicate') {
         await documentsApi.update(data.id, {
           title: entered.title.trim(),
@@ -179,7 +210,7 @@ export default function Locker() {
       );
       void load();
     } finally {
-      setUploading(false);
+      uploadStatus.reset();
     }
   }
 
@@ -227,14 +258,17 @@ export default function Locker() {
         )}
         {!!error && <ErrorNote message={error} onRetry={load} />}
 
-        {uploading && (
-          <Card>
-            <ECGProgressBar progress={uploadProgress} isComplete={uploadComplete} />
-            <Text style={[type.caption, { textAlign: 'center' }]}>
-              {uploadComplete ? 'Upload complete — processing your document…' : 'Uploading your document…'}
-            </Text>
-          </Card>
-        )}
+        <UploadStatusCard
+          stage={uploadStatus.stage}
+          progress={uploadStatus.progress}
+          copy={{
+            preparing: 'Preparing your file…',
+            uploading: 'Uploading your document…',
+            processing: 'Upload complete — saving it to your locker…',
+            done: 'Uploaded — it will be read in a moment',
+            note: 'Please keep the app open until this finishes.',
+          }}
+        />
 
         {!loaded && !error && <Loading />}
         {loaded && !error && filtered.length === 0 && !uploading && (
@@ -287,12 +321,20 @@ export default function Locker() {
         </Row>
       </Screen>
 
+      {/* While an upload runs the button itself spins, so the upload is
+          visible even with the progress card scrolled out of view. */}
       <Pressable
-        style={[styles.fab, uploading && { opacity: 0.5 }]}
+        style={[styles.fab, uploading && { opacity: 0.75 }]}
         disabled={uploading}
         onPress={() => setSheetOpen(true)}
+        accessibilityLabel={uploading ? 'Uploading a document' : 'Add a document'}
+        accessibilityState={{ busy: uploading, disabled: uploading }}
       >
-        <Feather name="plus" size={22} color={colors.white} />
+        {uploading ? (
+          <ActivityIndicator color={colors.white} />
+        ) : (
+          <Feather name="plus" size={22} color={colors.white} />
+        )}
       </Pressable>
 
       <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
@@ -342,7 +384,17 @@ export default function Locker() {
                 >
                   {uploading && (
                     <View style={{ marginBottom: spacing.md }}>
-                      <ECGProgressBar progress={uploadProgress} isComplete={uploadComplete} />
+                      <ECGProgressBar
+                        progress={
+                          uploadStatus.stage === 'uploading'
+                            ? uploadStatus.progress
+                            : uploadStatus.stage === 'done'
+                              ? 1
+                              : null
+                        }
+                        isComplete={uploadStatus.stage === 'done'}
+                        caption={uploadStatus.stage === 'processing' ? 'Saving…' : undefined}
+                      />
                     </View>
                   )}
                 </ReviewDetailsForm>

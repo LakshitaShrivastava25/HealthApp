@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import Login from './auth/Login';
 import RootRedirect from './auth/RootRedirect';
 import RequirePin from './auth/RequirePin';
@@ -8,6 +8,7 @@ import doctorRoutes from './doctor/DoctorApp';
 import adminRoutes from './admin/AdminApp';
 import { SessionProvider } from '@shared/session/SessionContext';
 import { PinProvider } from '@shared/session/PinContext';
+import { PUBLIC_PATHS, signedInPortal } from '@shared/session/portalLock';
 import { lazyPage } from '@shared/lazyPage';
 import PageFallback from '@shared/components/PageFallback';
 
@@ -38,6 +39,12 @@ const PinSetup = lazyPage('public', () => import('./auth/PinSetup'));
  * <Routes> only accepts <Route> elements as children.
  */
 function SessionLayout() {
+  const { pathname } = useLocation();
+  // Signed in to the Admin Portal: the User Portal stays closed until that
+  // session ends (shared/session/portalLock). Legal pages stay open.
+  if (signedInPortal() === 'admin' && !PUBLIC_PATHS.includes(pathname)) {
+    return <Navigate to="/admin" replace />;
+  }
   return (
     <SessionProvider>
       {/* PIN sign-in, as in the mobile app: PinProvider holds this browser's

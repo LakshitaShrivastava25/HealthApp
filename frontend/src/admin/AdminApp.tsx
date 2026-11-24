@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AppLayout from './layouts/AppLayout';
 import AdminLogin from './pages/AdminLogin';
 import PageFallback from '@shared/components/PageFallback';
+import { signedInPortal } from '@shared/session/portalLock';
 import { lazyPage } from '@shared/lazyPage';
 
 const Overview = lazyPage('admin', () => import('./pages/Overview'));
@@ -29,6 +30,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 /** Scopes the admin AuthProvider to /admin/* only. */
 function AdminShell() {
+  // Signed in to the User Portal: the Admin Portal stays closed until that
+  // session ends, so /admin in the address bar goes back to their own home
+  // (shared/session/portalLock).
+  if (signedInPortal() === 'user') return <Navigate to="/" replace />;
   return (
     <AuthProvider>
       <Outlet />

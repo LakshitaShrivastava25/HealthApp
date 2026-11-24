@@ -166,9 +166,9 @@ Do these in order. Nothing here changes the live site until step 8.
 
 8. **Repoint services** (brief restart):
 
-   - Gunicorn unit: `WorkingDirectory=/srv/curapath/current/backend` and
-     `ExecStart=/srv/curapath/current/venv/bin/gunicorn ...` (keep the existing
-     flags); `sudo systemctl daemon-reload && sudo systemctl restart <unit>`.
+   - Gunicorn unit: [`curapath.service`](curapath.service) in this folder is
+     the reference copy (threaded workers — see its comments for why).
+     `sudo systemctl daemon-reload && sudo systemctl restart <unit>`.
    - Nginx site: `root /srv/curapath/current/frontend;` (keep everything else);
      `sudo nginx -t && sudo systemctl reload nginx`.
    - Check `https://api.curapath.in/api/health/` and `https://curapath.in/`.

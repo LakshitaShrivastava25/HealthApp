@@ -14,8 +14,20 @@
         "EXPO_PUBLIC_API_URL_PROD": "https://api.curapath.in/api"
       }
     },
+    "qa": {
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_USE_PRODUCTION_API": "true",
+        "EXPO_PUBLIC_API_URL_PROD": "https://healthapp-backend-li7g.onrender.com/api"
+      }
+    },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
       "android": {
         "buildType": "app-bundle"
       },

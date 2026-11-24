@@ -23,7 +23,6 @@ OTP_RATE_LIMIT_PER_HOUR = 5
 OTP_RESEND_COOLDOWN_SECONDS = 60  # minimum gap between two sends to one number
 OTP_MAX_ATTEMPTS = 5  # same as Twilio Verify's 5 checks per verification
 TWOFACTOR_TIMEOUT_SECONDS = 10
-TWOFACTOR_SMS_URL = 'https://2factor.in/API/R1/'
 TWILIO_TIMEOUT_SECONDS = 10
 TWILIO_VERIFY_URL = 'https://verify.twilio.com/v2'
 # Twilio error codes meaning "this number can't get an SMS": invalid To,
@@ -58,52 +57,29 @@ def _mask_phone(phone: str) -> str:
 
 def _send_via_2factor(phone_number: str, otp: str) -> tuple[bool, str]:
     """
-    Sends the OTP as a plain DLT transactional SMS through 2Factor.in
-    ("Send Single SMS" in the current 2Factor API docs):
-      POST https://2factor.in/API/R1/
-        module=TRANS_SMS, apikey, to, from=<Sender ID>,
-        templatename=<approved template>, var1=<OTP>
+    Sends the OTP through 2Factor.in's managed SMS OTP API:
+      GET https://2factor.in/API/V1/{api_key}/SMS/{phone}/{otp}
 
-    This deliberately does NOT use 2Factor's SMS OTP API (/API/V1/.../SMS/...):
-    that product can deliver the code by an automated voice call on 2Factor's
-    side, even when called with an approved SMS template. The transactional
-    SMS module only sends SMS, so there is no voice path here at all.
+    2Factor delivers using their own DLT-approved sender ID and template,
+    so no custom DLT registration is needed on our side.  We still generate
+    the OTP ourselves and verify locally (hashed OTPRequest rows).
 
-    2Factor rejects this request ("Missing templatename value") without
-    templatename, and ("Incorrect sender id and templatename provided") unless
-    the Sender ID + template are mapped under Transactional SMS in the 2Factor
-    dashboard. The OTP fills the template's first variable. Verification stays local (hashed OTPRequest
-    rows). Returns (True, details) only on a "Success" response, otherwise
-    (False, <2Factor's error text>). Never logs the API key, the request
-    body (it contains the key and the OTP) or the OTP.
+    Returns (True, session_id) on success, (False, error) otherwise.
+    Never logs the API key or the OTP.
     """
     phone = re.sub(r'\D', '', phone_number)  # "+91 98765 43210" -> "919876543210"
-    payload = {
-        'module': 'TRANS_SMS',
-        'apikey': settings.TWOFACTOR_API_KEY,
-        'to': phone,
-        'from': settings.TWOFACTOR_SENDER_ID,
-        'templatename': settings.TWOFACTOR_TEMPLATE_NAME,
-        'var1': otp,
-    }
-    if settings.TWOFACTOR_DLT_PE_ID:
-        payload['peid'] = settings.TWOFACTOR_DLT_PE_ID
-    if settings.TWOFACTOR_DLT_TEMPLATE_ID:
-        payload['ctid'] = settings.TWOFACTOR_DLT_TEMPLATE_ID
-    request = urllib.request.Request(
-        TWOFACTOR_SMS_URL,
-        data=urllib.parse.urlencode(payload).encode(),
-        method='POST',
+    url = (
+        f'https://2factor.in/API/V1/{urllib.parse.quote(settings.TWOFACTOR_API_KEY)}'
+        f'/SMS/{urllib.parse.quote(phone)}/{urllib.parse.quote(otp)}'
     )
     logger.info(
-        'Sending OTP via 2Factor SMS to %s (POST %s, module=TRANS_SMS, sender=%s, template=%s)',
-        _mask_phone(phone), TWOFACTOR_SMS_URL, settings.TWOFACTOR_SENDER_ID, settings.TWOFACTOR_TEMPLATE_NAME,
+        'Sending OTP via 2Factor managed SMS OTP to %s',
+        _mask_phone(phone),
     )
     try:
-        with urllib.request.urlopen(request, timeout=TWOFACTOR_TIMEOUT_SECONDS) as resp:
+        with urllib.request.urlopen(url, timeout=TWOFACTOR_TIMEOUT_SECONDS) as resp:
             body = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
-        # 2Factor returns 4xx with a JSON body explaining the problem.
         try:
             body = json.loads(exc.read().decode())
         except ValueError:

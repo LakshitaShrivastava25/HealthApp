@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, ShieldCheck, Sparkles, Send, Calculator, UploadCloud, XCircle, Clock, Layers, Trash2, Pencil, FileText, Check, X } from 'lucide-react';
+import { Plus, ShieldCheck, Sparkles, Send, Calculator, UploadCloud, XCircle, Clock, Layers, Trash2, Pencil, FileText, Check, X, Loader2, RotateCw } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { Card, CardHeader, Badge, Button, EmptyState } from '../components/ui';
 import AIMarkdown from '../components/AIMarkdown';
 import { useAuth } from '../context/AuthContext';
 import { insuranceApi } from '../lib/api';
+import ECGProgressBar from '../components/ECGProgressBar';
 import { describeExtraction } from '@shared/components/extractionState';
 import FileViewer from '@shared/components/FileViewer';
 import { useCachedState } from '@shared/hooks/useCachedState';
@@ -36,6 +37,12 @@ type Policy = {
 };
 
 type ChatMessage = { id: string; role: 'user' | 'ai'; content: string };
+
+// The server reads a policy in the background after the upload answers, so a
+// new policy shows "processing" and the page refreshes until the read ends.
+// The limit is past the server's 10-minute cut-off for an interrupted read.
+const PROCESSING_POLL_MS = 5_000;
+const PROCESSING_POLL_LIMIT_MS = 12 * 60_000;
 type Estimate = {
   eligible: boolean;
   estimated_insurer_share: string | null;
@@ -59,6 +66,10 @@ export default function Insurance() {
   const [estimating, setEstimating] = useState(false);
 
   const [uploading, setUploading] = useState(false);
+  // 0–100 while the file goes up; at 100 the server is still storing it.
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -105,16 +116,59 @@ export default function Insurance() {
     insuranceApi.chatHistory(activePolicy.id).then((r) => setChat(r.data));
   }, [activePolicy?.id]);
 
+  // Keep refreshing while the selected policy is still being read.
+  const activeProcessing = activePolicy?.status === 'processing';
+  useEffect(() => {
+    if (!activeProcessing) return;
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - started > PROCESSING_POLL_LIMIT_MS) {
+        clearInterval(timer);
+        return;
+      }
+      void loadPolicies();
+    }, PROCESSING_POLL_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProcessing, profileId]);
+
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !activeProfile) return;
     setUploading(true);
+    setUploadPct(0);
+    setUploadError(null);
     try {
-      const { data } = await insuranceApi.upload(activeProfile.id, file);
+      const { data } = await insuranceApi.upload(activeProfile.id, file, setUploadPct);
       await loadPolicies(data.id);
+    } catch (err) {
+      const response = (err as { response?: { status?: number; data?: Record<string, unknown> } })?.response;
+      const first = response?.data && Object.values(response.data)[0];
+      const reason = typeof response?.data?.detail === 'string'
+        ? response.data.detail
+        : Array.isArray(first) && typeof first[0] === 'string' ? first[0] : null;
+      setUploadError(
+        response && response.status !== undefined && response.status < 500
+          ? reason || 'That file could not be added. A policy must be a PDF, JPG or PNG.'
+          : "The upload didn't finish. If it arrived, it will appear here shortly — refresh before uploading it again."
+      );
+      void loadPolicies();
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleRetry() {
+    if (!activePolicy) return;
+    setRetrying(true);
+    try {
+      await insuranceApi.retryProcessing(activePolicy.id);
+    } catch {
+      // 409 means a read is already running; either way the reload shows the state.
+    } finally {
+      await loadPolicies(activePolicy.id);
+      setRetrying(false);
     }
   }
 
@@ -198,6 +252,25 @@ export default function Insurance() {
       />
 
       <main className="p-4 sm:p-6 lg:p-8 space-y-6">
+        {uploading && (
+          <Card>
+            <div role="status" aria-live="polite" className="flex flex-col items-center">
+              <ECGProgressBar progress={uploadPct / 100} />
+              <p className="mt-1 text-sm text-ink-700">
+                {uploadPct < 100
+                  ? `Uploading your policy… ${uploadPct}%`
+                  : 'Upload complete — saving your policy…'}
+              </p>
+              <p className="mt-0.5 text-xs text-ink-500">Please keep this page open until it finishes.</p>
+            </div>
+          </Card>
+        )}
+        {uploadError && (
+          <div role="alert" className="flex items-start gap-2 rounded-lg bg-danger-bg text-danger px-4 py-3 text-sm">
+            <span className="flex-1">{uploadError}</span>
+            <button onClick={() => setUploadError(null)} aria-label="Dismiss"><X size={14} /></button>
+          </div>
+        )}
         {!policiesLoaded && <PageFallback />}
         {policiesLoaded && policies.length === 0 && (
           <Card>
@@ -259,7 +332,7 @@ export default function Insurance() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {!isEditingFields && (
+                    {!isEditingFields && !activeProcessing && (
                       <button
                         onClick={startEditingFields}
                         title="Correct a field"
@@ -409,7 +482,17 @@ export default function Insurance() {
                   </div>
                 )}
 
-                {activePolicy.status !== 'validated' && (() => {
+                {activeProcessing && (
+                  <div role="status" className="mt-4 flex items-start gap-2 rounded-lg bg-accent-soft text-accent-ink px-3 py-2.5 text-xs">
+                    <Loader2 size={14} className="animate-spin shrink-0 mt-0.5" />
+                    <span>
+                      Reading this policy — the details fill in when it finishes. Long policies can take a minute or two;
+                      you can leave this page meanwhile.
+                    </span>
+                  </div>
+                )}
+
+                {activePolicy.status !== 'validated' && !activeProcessing && (() => {
                   const sd = activePolicy.structured_data as {
                     _extraction_failed?: boolean;
                     _extraction_warning?: string;
@@ -439,6 +522,15 @@ export default function Insurance() {
                         {describeExtraction(sd).kind === 'pending'
                           ? 'Automatic reading is still being set up, so nothing was filled in for this policy. Add the details yourself.'
                           : "We couldn't read this file automatically. It's saved safely — just add the details yourself."}
+                        {!sd?._mock && (
+                          <button
+                            onClick={handleRetry}
+                            disabled={retrying}
+                            className="ml-2 inline-flex items-center gap-1 font-semibold text-accent-ink hover:underline disabled:opacity-50"
+                          >
+                            <RotateCw size={12} /> {retrying ? 'Starting...' : 'Read it again'}
+                          </button>
+                        )}
                       </p>
                     );
                   }

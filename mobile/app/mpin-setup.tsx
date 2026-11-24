@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import BackLink from '../src/components/BackLink';
 import { ChooseStep, OtpStep } from '../src/components/mpinSteps';
 import { useAuth } from '../src/context/AuthContext';
 import { usePin } from '../src/context/PinContext';
-import { useConfirmExit } from '../src/lib/useBackHandler';
+import { useBackHandler } from '../src/lib/useBackHandler';
+import { resetTo } from '../src/lib/navigation';
 import { colors, spacing, type } from '../src/theme';
 
 /**
@@ -23,23 +25,57 @@ import { colors, spacing, type } from '../src/theme';
 export default function MpinSetup() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const changing = mode === 'change';
-  const { account } = useAuth();
+  const { account, logout } = useAuth();
   const pin = usePin();
   const [step, setStep] = useState<'otp' | 'choose' | 'biometrics'>(changing ? 'otp' : 'choose');
   const [grant, setGrant] = useState('');
   const [pendingPin, setPendingPin] = useState('');
-
-  // A first PIN cannot be escaped with the back gesture.
-  useConfirmExit(() => changing);
+  const [leaving, setLeaving] = useState(false);
 
   function finish() {
     if (changing) router.back();
     else router.replace('/');
   }
 
+  /**
+   * "← Back" and Android's Back. Changing a PIN goes back to where it came
+   * from. A first PIN is required to use the app, so there the way back is
+   * the login page, signed out. Asked for a code part-way through choosing,
+   * Back returns to choosing; on the fingerprint offer it just skips it.
+   */
+  async function goBack() {
+    if (leaving) return;
+    if (step === 'otp' && pendingPin) {
+      setPendingPin('');
+      setStep('choose');
+      return;
+    }
+    if (step === 'biometrics' || changing) {
+      finish();
+      return;
+    }
+    setLeaving(true);
+    try {
+      await logout();
+    } finally {
+      resetTo('/login');
+    }
+  }
+
+  useBackHandler(() => {
+    void goBack();
+    return true;
+  });
+
+  const backLabel =
+    changing || step === 'biometrics' || (step === 'otp' && pendingPin) ? 'Back' : 'Back to login';
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.backWrap}>
+          <BackLink onPress={() => void goBack()} label={backLabel} disabled={leaving} />
+        </View>
         {step === 'otp' && (
           <OtpStep
             phone={account?.phone_number ?? ''}
@@ -129,6 +165,7 @@ function needsOtp(err: unknown) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+  backWrap: { alignSelf: 'stretch', maxWidth: 360, width: '100%', marginHorizontal: 'auto' },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   intro: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg, maxWidth: 340 },
   step: { width: '100%', maxWidth: 360, alignItems: 'center', gap: spacing.md },

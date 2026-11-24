@@ -37,6 +37,10 @@ class InsurancePolicy(models.Model):
     schema_version = models.PositiveSmallIntegerField(default=1)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    # When the current background read began (upload or retry). A read still
+    # "processing" long after this was cut off by a restart and is expired —
+    # see insurance/processing.py.
+    processing_started_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.insurer or 'Policy'} — {self.profile.full_name}"

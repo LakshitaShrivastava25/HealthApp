@@ -283,7 +283,7 @@ export default function Settings() {
         <CardHeader
           title="PIN"
           subtitle={pin.isRegistered
-            ? 'You sign in with your 4-digit PIN on this phone.'
+            ? 'You sign in with your number and 4-digit PIN.'
             : 'Set a PIN to sign in without waiting for a code.'}
         />
         <Pressable onPress={() => router.push('/pin-settings')} style={styles.actionRow}>

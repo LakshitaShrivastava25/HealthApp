@@ -1,14 +1,16 @@
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ai.claude_service import ClaudeService
 from config.throttling import ActionThrottleMixin
-from ai.text_extraction import extract_text
 from family.permissions import assert_owns_profile, profile_id_param
 from .claim_estimator import estimate_claim
-from .models import ClaimEstimate, InsuranceChatMessage, InsurancePolicy, PolicyExclusion, PolicySubLimit, PolicyWaitingPeriod
+from .models import ClaimEstimate, InsuranceChatMessage, InsurancePolicy
+from .processing import STILL_READING, expire_stale_processing, start_policy_analysis
 from .serializers import (
     AskInsuranceQuestionSerializer, ClaimEstimateRequestSerializer, ClaimEstimateSerializer,
     InsuranceChatMessageSerializer, InsurancePolicySerializer,
@@ -22,7 +24,9 @@ CHAT_HISTORY_LIMIT = 20
 class InsurancePolicyViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
     serializer_class = InsurancePolicySerializer
     permission_classes = [IsAuthenticated]
-    action_throttle_scopes = {'create': 'uploads', 'chat': 'ai', 'estimate': 'ai'}
+    action_throttle_scopes = {
+        'create': 'uploads', 'chat': 'ai', 'estimate': 'ai', 'retry_processing': 'ai',
+    }
 
     def get_queryset(self):
         qs = InsurancePolicy.objects.filter(profile__account=self.request.user)
@@ -36,86 +40,63 @@ class InsurancePolicyViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
         # profile (its id is the patient reference code doctors are given).
         if 'profile' in serializer.validated_data:
             assert_owns_profile(self.request.user, serializer.validated_data['profile'])
+        # The background read overwrites these fields when it finishes, so an
+        # edit made meanwhile would be silently lost.
+        if serializer.instance.status == InsurancePolicy.Status.PROCESSING:
+            raise ValidationError({'detail': STILL_READING})
         serializer.save()
 
-    def perform_create(self, serializer):
-        assert_owns_profile(self.request.user, serializer.validated_data.get('profile'))
-        policy = serializer.save(status=InsurancePolicy.Status.PROCESSING)
+    def list(self, request, *args, **kwargs):
+        expire_stale_processing(self.get_queryset())
+        return super().list(request, *args, **kwargs)
 
-        # Real text extraction — PDFs are genuinely read (pypdf, no
-        # external service needed); images honestly report that OCR
-        # isn't configured yet rather than silently producing nothing.
-        # See ai/text_extraction.py for the full reasoning.
-        extraction = extract_text(policy.file)
-        policy.raw_text = extraction.text or ''
-        if not extraction.succeeded:
-            # Nothing to structure — skip the Claude call entirely rather
-            # than sending it an empty string and pretending that's a
-            # normal "no findings" result. The person needs to know WHY,
-            # not just see a blank policy.
-            policy.status = InsurancePolicy.Status.NEEDS_REVIEW
-            policy.structured_data = {'_extraction_failed': True, 'note': extraction.note or 'Could not extract text from this file.'}
-            policy.save()
-            return
+    def retrieve(self, request, *args, **kwargs):
+        expire_stale_processing(self.get_queryset())
+        return super().retrieve(request, *args, **kwargs)
 
-        result = ClaudeService().analyze_insurance_policy(policy)
-        policy.structured_data = result
-        if extraction.note:
-            # Extraction succeeded overall (real fields got populated
-            # below) but some pages had no readable text — likely a
-            # scanned annexure mixed into an otherwise digital PDF. This
-            # is why exclusions/waiting periods/sub-limits can stay empty
-            # even when the policy number and dates came through fine.
-            if isinstance(policy.structured_data, dict):
-                policy.structured_data['_extraction_warning'] = extraction.note
+    def create(self, request, *args, **kwargs):
+        """
+        POST /api/insurance/ — store the policy and answer at once.
 
-        # The missing step, found by checking a real upload's actual data:
-        # the Claude call was genuinely extracting everything correctly
-        # (confirmed against a real policy — insurer, dates, sum insured,
-        # all correct) and saving it into structured_data, but nothing
-        # ever copied those values into the fields the page actually
-        # displays, or created the related Exclusion/WaitingPeriod/
-        # SubLimit rows the Exclusions/Waiting Periods/Sub-Limits cards
-        # read from. So every policy showed real AI output sitting
-        # unused in structured_data while the visible page stayed blank.
-        if not isinstance(result, dict) or result.get('_mock') or result.get('_extraction_failed'):
-            # Mock mode (no ANTHROPIC_API_KEY) — nothing real to copy.
-            policy.status = InsurancePolicy.Status.NEEDS_REVIEW
-            policy.save()
-            return
+        Reading a policy (text extraction plus an AI call that can produce
+        4000 tokens for a long one) used to happen before this answered,
+        which routinely outlasted Gunicorn's worker timeout and nginx's read
+        timeout: the person saw "Upload failed" while the policy sat in
+        "processing" forever. Now it lands as PROCESSING and is read in the
+        background, exactly like a locker document; the apps refresh until
+        the status moves on.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        assert_owns_profile(request.user, serializer.validated_data.get('profile'))
+        policy = serializer.save(
+            status=InsurancePolicy.Status.PROCESSING,
+            processing_started_at=timezone.now(),
+        )
+        start_policy_analysis(policy.pk)
+        data = self.get_serializer(InsurancePolicy.objects.get(pk=policy.pk)).data
+        return Response(data, status=status.HTTP_201_CREATED, headers=self.get_success_headers(data))
 
-        policy.insurer = result.get('insurer') or ''
-        policy.policy_number = result.get('policy_number') or ''
-        policy.policy_type = result.get('policy_type') or ''
-        # The AI schema has no separate "plan name" concept — policy_type
-        # ("Family Health Optima Insurance Plan") is the closest match,
-        # so it fills both fields rather than leaving plan_name
-        # permanently blank for every real upload.
-        policy.plan_name = result.get('policy_type') or ''
-        policy.sum_insured = result.get('sum_insured')
-        policy.premium_amount = result.get('premium_amount')
-        policy.coverage_start = result.get('coverage_start') or None
-        policy.coverage_end = result.get('coverage_end') or None
-        policy.room_rent_limit = result.get('room_rent_limit') or ''
-        policy.co_payment_percent = result.get('co_payment_percent')
-        policy.status = InsurancePolicy.Status.NEEDS_REVIEW
-        policy.save()
-
-        for item in result.get('exclusions') or []:
-            if isinstance(item, str) and item.strip():
-                PolicyExclusion.objects.create(policy=policy, description=item.strip())
-
-        for item in result.get('waiting_periods') or []:
-            if isinstance(item, dict) and item.get('condition') and item.get('months') is not None:
-                PolicyWaitingPeriod.objects.create(
-                    policy=policy, condition=item['condition'], months=item['months']
-                )
-
-        for item in result.get('sub_limits') or []:
-            if isinstance(item, dict) and item.get('category') and item.get('limit'):
-                PolicySubLimit.objects.create(
-                    policy=policy, category=item['category'], limit_text=item['limit']
-                )
+    @action(detail=True, methods=['post'], url_path='retry-processing')
+    def retry_processing(self, request, pk=None):
+        """
+        POST /api/insurance/{id}/retry-processing/ — read a stored policy
+        again, after a failure or an interrupted read. The file is already
+        here, so nothing needs uploading twice.
+        """
+        policy = self.get_object()
+        expire_stale_processing(self.get_queryset().filter(pk=policy.pk))
+        policy.refresh_from_db()
+        if policy.status == InsurancePolicy.Status.PROCESSING:
+            return Response(
+                {'detail': 'This policy is already being read.'}, status=status.HTTP_409_CONFLICT
+            )
+        policy.status = InsurancePolicy.Status.PROCESSING
+        policy.processing_started_at = timezone.now()
+        policy.structured_data = {}
+        policy.save(update_fields=['status', 'processing_started_at', 'structured_data'])
+        start_policy_analysis(policy.pk)
+        return Response(self.get_serializer(InsurancePolicy.objects.get(pk=policy.pk)).data)
 
     @action(detail=True, methods=['post'], url_path='confirm')
     def confirm(self, request, pk=None):
@@ -129,6 +110,10 @@ class InsurancePolicyViewSet(ActionThrottleMixin, viewsets.ModelViewSet):
         treated as fully trusted data.
         """
         policy = self.get_object()
+        if policy.status == InsurancePolicy.Status.PROCESSING:
+            # Confirming now would mark an empty policy verified, and the
+            # background read would then knock it back to needs_review.
+            return Response({'detail': STILL_READING}, status=status.HTTP_409_CONFLICT)
         policy.status = InsurancePolicy.Status.VALIDATED
         policy.save(update_fields=['status'])
         return Response(InsurancePolicySerializer(policy).data)

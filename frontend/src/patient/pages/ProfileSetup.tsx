@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { CalendarDays, Droplet, KeyRound, User, Users } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Droplet, KeyRound, User, Users } from 'lucide-react';
 import {
   AuthCard,
   AuthShell,
@@ -21,6 +21,7 @@ import SessionStatus from '../../auth/SessionStatus';
 import { useAuth } from '../context/AuthContext';
 import { profilesApi } from '../lib/api';
 import { usePin } from '@shared/session/PinContext';
+import { useBackToClose } from '@shared/hooks/useBackToClose';
 import { needsOtp, pinErrorMessage } from '@shared/session/mpinApi';
 
 /** How long the success beat holds before the dashboard takes over. */
@@ -77,7 +78,7 @@ function describeAge(iso: string): string {
  * how they sign in from then on — and the profile straight after.
  */
 export default function ProfileSetup() {
-  const { isLoading, isAuthenticated, loadFailed, account, profiles, refreshProfiles } = useAuth();
+  const { isLoading, isAuthenticated, loadFailed, account, profiles, refreshProfiles, logout, doctor } = useAuth();
   const pin = usePin();
   const navigate = useNavigate();
 
@@ -96,6 +97,38 @@ export default function ProfileSetup() {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+
+  /**
+   * The way back to the login page. The login page sends anyone signed in
+   * straight on to "/", which brings a person without a profile back here —
+   * so the browser's Back button used to loop on this page with no way out.
+   * Leaving signs out the half-finished registration: nothing here is saved
+   * until "Create account", and signing in with the same number again
+   * returns here. A registered doctor (here the first time they open User
+   * mode) goes back to Doctor mode instead.
+   */
+  function goBack() {
+    if (leaving || saving) return;
+    if (reverify) {
+      setReverify(false);
+      return;
+    }
+    if (doctor) {
+      navigate('/doctor', { replace: true });
+      return;
+    }
+    setLeaving(true);
+    logout();
+    // A full load, as every sign-out does, so no state of this session
+    // survives; replace() so Back cannot return to it.
+    window.location.replace('/login');
+  }
+
+  // The browser's Back button does the same as the on-screen link: one
+  // history entry is held while the form is open, and popping it runs
+  // goBack. Removed again on any other way out (success, sign-out).
+  useBackToClose(!isLoading && isAuthenticated && profiles.length === 0 && !done && !leaving, goBack);
 
   useEffect(() => {
     if (!done) return;
@@ -165,6 +198,16 @@ export default function ProfileSetup() {
         <div className="mb-6">
           <CuraPathLogo portal="patient" />
         </div>
+
+        <button
+          type="button"
+          onClick={goBack}
+          disabled={leaving || saving}
+          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-brand-purple disabled:opacity-50"
+        >
+          <ArrowLeft size={15} />
+          {reverify ? 'Back' : doctor ? 'Back to doctor mode' : 'Back to login'}
+        </button>
 
         {reverify && account && (
           <Step key="reverify">

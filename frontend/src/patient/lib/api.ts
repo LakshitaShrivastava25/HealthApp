@@ -122,17 +122,26 @@ export const timelineApi = {
 
 export const insuranceApi = {
   list: (profileId: string) => api.get('/insurance/', { params: { profile_id: profileId } }),
-  upload: (profileId: string, file: File) => {
+  upload: (profileId: string, file: File, onProgress?: (pct: number) => void) => {
     const form = new FormData();
     form.append('profile', profileId);
     form.append('file', file);
-    return api.post('/insurance/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post('/insurance/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress
+        ? (e: { loaded: number; total?: number }) => {
+            if (e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+          }
+        : undefined,
+    });
   },
   chat: (policyId: string, question: string) => api.post(`/insurance/${policyId}/chat/`, { question }),
   chatHistory: (policyId: string) => api.get(`/insurance/${policyId}/chat/`),
   estimate: (policyId: string, claim_category: string, estimated_bill: string) =>
     api.post(`/insurance/${policyId}/estimate/`, { claim_category, estimated_bill }),
   confirm: (id: string) => api.post(`/insurance/${id}/confirm/`),
+  /** Read a stored policy again after a failed or interrupted read. */
+  retryProcessing: (id: string) => api.post(`/insurance/${id}/retry-processing/`),
   update: (id: string, data: Partial<{
     insurer: string; policy_number: string; plan_name: string; policy_type: string;
     sum_insured: string; coverage_start: string; coverage_end: string;

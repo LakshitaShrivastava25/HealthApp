@@ -14,6 +14,7 @@ import {
   PhoneField,
   PrimaryButton,
   SecurityBadge,
+  BackButton,
   Step,
   StepHeading,
   SuccessOverlay,
@@ -58,7 +59,7 @@ function formatWait(seconds: number) {
  * for Forgot PIN. A browser that has signed in before pre-fills its number.
  */
 export default function Login() {
-  const { isAuthenticated, account, sendOtp, verifyOtp, adoptSession } = useSession();
+  const { isAuthenticated, account, sendOtp, verifyOtp, adoptSession, logout } = useSession();
   const pin = usePin();
   const navigate = useNavigate();
   const location = useLocation();
@@ -282,15 +283,37 @@ export default function Login() {
     return () => clearTimeout(id);
   }, [step, navigate]);
 
-  // On the code and PIN steps, Back returns to the phone-number step
-  // (number kept) instead of leaving the login page.
-  useBackToClose(step === 'otp' || step === 'pin', () => {
+  /**
+   * One step back, for the on-screen "← Back" and the browser's Back alike:
+   *   PIN                 -> phone number (number kept)
+   *   code, resetting PIN -> PIN
+   *   code                -> phone number
+   *   choosing a PIN      -> phone number, signed out — that step runs on the
+   *                          session the code just opened, and leaving it
+   *                          half-done must not leave anyone signed in.
+   */
+  function goBackStep() {
     setOtp('');
     setMpin('');
     setError(null);
     pin.clearError();
+    if (step === 'otp' && resetting) {
+      setResetting(false);
+      setStep('pin');
+      return;
+    }
+    if (step === 'set-pin') {
+      logout();
+      setResetting(false);
+      setGrant('');
+    }
+    timers.reset();
     setStep('phone');
-  });
+  }
+
+  // On every step past the phone number, Back moves one step back instead of
+  // leaving the login page.
+  useBackToClose(step === 'otp' || step === 'pin' || step === 'set-pin', goBackStep);
 
   function backToPhone() {
     resetPhone();
@@ -398,6 +421,7 @@ export default function Login() {
 
           {step === 'pin' && (
             <Step key="pin">
+              <BackButton onClick={goBackStep} disabled={pinBusy} />
               <StepHeading
                 title="Enter your PIN"
                 subtitle={
@@ -470,6 +494,7 @@ export default function Login() {
 
           {step === 'otp' && (
             <Step key="otp">
+              <BackButton onClick={goBackStep} disabled={verifying} />
               <StepHeading
                 title={resetting ? 'Reset your PIN' : 'Enter the 6-digit code'}
                 subtitle={
@@ -545,6 +570,7 @@ export default function Login() {
 
           {step === 'set-pin' && (
             <Step key="set-pin">
+              <BackButton onClick={goBackStep} />
               <ChooseStep
                 title={resetting ? 'Set a new PIN' : 'Create your PIN'}
                 subtitle="You will use this to sign in from now on, instead of waiting for a code each time."

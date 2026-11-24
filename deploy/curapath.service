@@ -1,0 +1,33 @@
+# /etc/systemd/system/curapath.service — the production Gunicorn unit.
+#
+# Kept in the repo for reference; the deploy does NOT install it. The same
+# settings also live in backend/gunicorn.conf.py, which Gunicorn loads on its
+# own from WorkingDirectory; flags given here win over that file.
+#
+# Why threaded workers (2026-11-24): the server ran 2 sync workers, two
+# requests at a time in total. Any request waiting on something slow — an AI
+# answer, the NMC register, an SMS gateway, a large file from storage — held a
+# whole worker, and two of them stalled the API for every other user. The
+# instance is 2 vCPU / 1 GB, about 90 MB per worker: 2 workers x 8 threads.
+#
+# Editing this on the server: paste-safe is a one-line `sed -i`, not a
+# multi-line heredoc — a terminal that inserts blank lines between pasted
+# lines breaks the `\` continuations, and systemd then starts Gunicorn with no
+# application at all.
+
+[Unit]
+Description=CuraPath Django Gunicorn Service
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/srv/curapath/current/backend
+EnvironmentFile=/srv/curapath/shared/backend.env
+ExecStart=/srv/curapath/current/venv/bin/gunicorn --worker-class gthread --workers 2 --threads 8 --timeout 120 --graceful-timeout 30 --access-logfile - --access-logformat=%%(h)s|%%(r)s|%%(s)s|%%(b)s|%%(M)sms --bind 127.0.0.1:8000 config.wsgi:application
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -85,6 +85,18 @@ class Medication(models.Model):
     # A prescription medicine whose every source document was deleted.
     is_archived = models.BooleanField(default=False)
 
+    @property
+    def reminder_times(self):
+        """
+        The times this medicine is taken, earliest first.
+
+        A flat view of the `reminders` rows, which have always been one-to-many
+        — a medicine taken twice a day is two ReminderSchedule rows, not two
+        medicines. Reads the prefetched list in Python rather than filtering in
+        SQL, so listing a profile's medicines stays one query.
+        """
+        return sorted(r.time_of_day for r in self.reminders.all() if r.is_active)
+
     def __str__(self):
         return self.name
 

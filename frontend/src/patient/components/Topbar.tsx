@@ -7,6 +7,7 @@ import ModeSwitch from '@shared/session/ModeSwitch';
 import AmbientBackground from '@shared/components/AmbientBackground';
 import useClickOutside from '@shared/useClickOutside';
 import { todayIso } from '@shared/dates';
+import { BLOOD_GROUPS } from '@shared/bloodGroups';
 import useNotifications from '../hooks/useNotifications';
 import { useAuth } from '../context/AuthContext';
 import { allergiesApi, familyApi } from '../lib/api';
@@ -31,11 +32,6 @@ const GENDERS = [
   ['other', 'Other'],
   ['prefer_not_to_say', 'Prefer not to say'],
 ];
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-
-/** Matches the language list already offered on the Settings profile form. */
-const LANGUAGES = ['English', 'Hindi', 'Marathi', 'Tamil', 'Telugu', 'Bengali'];
 
 /** AllergyRecord.Kind. */
 const ALLERGY_KINDS = [
@@ -251,7 +247,6 @@ function AddFamilyMemberModal({
   const [heightCm, setHeightCm] = useState('');
   const [weightKg, setWeightKg] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [language, setLanguage] = useState('English');
   const [allergies, setAllergies] = useState<AllergyDraft[]>([]);
 
   const isChild = (relation === 'son' || relation === 'daughter') &&
@@ -346,7 +341,6 @@ function AddFamilyMemberModal({
         ...(phoneNumber.trim() ? { phone_number: phoneNumber.trim() } : {}),
         ...(heightCm ? { height_cm: Number(heightCm) } : {}),
         ...(weightKg ? { weight_kg: Number(weightKg) } : {}),
-        preferred_language: language,
       };
       const { data } = await familyApi.createMember(payload);
 
@@ -477,12 +471,6 @@ function AddFamilyMemberModal({
                 <div>
                   <label htmlFor="fm-weight" className="mb-1 block text-[11px] font-semibold text-ink-700">Weight (kg)</label>
                   <input id="fm-weight" type="number" min={1} max={500} value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="65" className={FIELD} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label htmlFor="fm-lang" className="mb-1 block text-[11px] font-semibold text-ink-700">Preferred language</label>
-                  <select id="fm-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={FIELD}>
-                    {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-                  </select>
                 </div>
               </div>
 

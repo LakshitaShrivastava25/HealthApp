@@ -8,10 +8,10 @@ import { HeartPulse } from 'lucide-react';
  * no auth, so the URL works for anyone who opens it.
  */
 
-export const SUPPORT_EMAIL = 'hello@curapath.in';
+export const SUPPORT_EMAIL = 'info@businesscradle.com';
 export const COMPANY = 'Business Cradle Technologies Private Limited';
 export const COMPANY_ADDRESS = 'Katangi Bypass, Padwar Road, Jabalpur City, Madhya Pradesh, India';
-export const PRIVACY_EMAIL = 'bctpvtltd2025@gmail.com';
+export const PRIVACY_EMAIL = 'info@businesscradle.com';
 export const LEGAL_UPDATED = '6 October 2026';
 
 const PAGES = [

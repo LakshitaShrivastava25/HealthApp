@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, FileText, Pencil, Check, Trash2, RefreshCw, ClipboardCheck, ArrowLeft, Eye } from 'lucide-react';
+import { X, FileText, Pencil, Check, Trash2, RefreshCw, ArrowLeft, Eye } from 'lucide-react';
 import { Badge, Button } from './ui';
 import { documentsApi } from '../lib/api';
 import {
@@ -12,6 +12,7 @@ import { todayIso } from '@shared/dates';
 import FileViewer from '@shared/components/FileViewer';
 import { useBackToClose } from '@shared/hooks/useBackToClose';
 import { refreshNotificationsSoon } from '../hooks/useNotifications';
+import ReviewDetailsForm from './ReviewDetailsForm';
 
 type DocumentDetail = {
   id: string;
@@ -49,14 +50,6 @@ function shortDate(iso: string) {
 }
 
 /** The real Document.Category values, same set the Timeline keys on. */
-const CATEGORIES = [
-  { value: 'prescription', label: 'Prescription' },
-  { value: 'report', label: 'Report' },
-  { value: 'scan', label: 'Scan' },
-  { value: 'discharge', label: 'Discharge Summary' },
-  { value: 'other', label: 'Other' },
-];
-
 const statusTone: Record<string, 'success' | 'warning' | 'neutral' | 'info' | 'danger'> = {
   processed: 'success',
   needs_review: 'warning',
@@ -381,121 +374,30 @@ export default function DocumentDetailModal({
                   extraction that plainly worked can still be subtly wrong,
                   so nothing is final until a person says so. */}
               {doc.status === 'needs_review' && (
-                <div className="mb-4 rounded-xl border border-warning/40 bg-warning-bg/40 p-4">
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
-                    <ClipboardCheck size={15} className="text-warning" />
-                    Review what we read from this document
-                  </p>
-                  <p className="mt-1 text-xs text-ink-500">
-                    These details were filled in automatically. Correct anything that looks wrong,
-                    then confirm.
-                  </p>
-
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="sm:col-span-2">
-                      <label htmlFor="rv-title" className="mb-1 block text-[11px] font-semibold text-ink-700">Title</label>
-                      <input
-                        id="rv-title"
-                        value={rTitle}
-                        onChange={(e) => setRTitle(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30"
-                      />
-                      {/* Upload stores the filename as the title, and the
-                          blank-only rule means the AI's nicer title is never
-                          written over it. Rather than lose that suggestion,
-                          offer it — the person still chooses. */}
-                      {(() => {
-                        const suggested = (doc.structured_data as Record<string, unknown>)?.title;
-                        return typeof suggested === 'string' && suggested && suggested !== rTitle ? (
-                          <button
-                            type="button"
-                            onClick={() => setRTitle(suggested)}
-                            className="mt-1 text-[11px] text-accent-ink hover:underline"
-                          >
-                            Use suggested title: “{suggested}”
-                          </button>
-                        ) : null;
-                      })()}
-                    </div>
-                    <div>
-                      <label htmlFor="rv-cat" className="mb-1 block text-[11px] font-semibold text-ink-700">Category</label>
-                      <select
-                        id="rv-cat"
-                        value={rCategory}
-                        onChange={(e) => setRCategory(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30"
-                      >
-                        {CATEGORIES.map((c) => (
-                          <option key={c.value} value={c.value}>{c.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="rv-date" className="mb-1 block text-[11px] font-semibold text-ink-700">Document date</label>
-                      {/* Native date input, matching date_of_birth and
-                          premium_due_date elsewhere in this app. Capped at
-                          today: a report cannot have been taken in the
-                          future. The same rule is enforced server-side,
-                          because the picker can be bypassed. */}
-                      <input
-                        id="rv-date"
-                        type="date"
-                        max={todayIso()}
-                        value={rDate}
-                        onChange={(e) => setRDate(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="rv-hosp" className="mb-1 block text-[11px] font-semibold text-ink-700">Hospital / source</label>
-                      <input
-                        id="rv-hosp"
-                        value={rHospital}
-                        onChange={(e) => setRHospital(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="rv-doc" className="mb-1 block text-[11px] font-semibold text-ink-700">Doctor</label>
-                      <input
-                        id="rv-doc"
-                        value={rDoctor}
-                        onChange={(e) => setRDoctor(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Readings the AI pulled out. structured_data is a JSON
-                      blob, not columns — key_values is a key inside it — so
-                      these are shown for checking and corrected through the
-                      existing "Correct a field" editor below. */}
-                  {Array.isArray((doc.structured_data as Record<string, unknown>)?.key_values) &&
-                    ((doc.structured_data as Record<string, unknown>).key_values as { label: string; value: string }[]).length > 0 && (
-                      <div className="mt-3">
-                        <p className="mb-1 text-[11px] font-semibold text-ink-700">Readings found</p>
-                        <div className="rounded-lg border border-border bg-card divide-y divide-border">
-                          {((doc.structured_data as Record<string, unknown>).key_values as { label: string; value: string }[]).map((kv, i) => (
-                            <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
-                              <span className="text-ink-500">{kv.label}</span>
-                              <span className="font-medium text-ink-900">{kv.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  {confirmError && <p className="mt-2 text-xs text-danger">{confirmError}</p>}
-
-                  <button
-                    onClick={handleConfirm}
-                    disabled={confirming}
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-dark disabled:opacity-60"
-                  >
-                    <Check size={13} />
-                    {confirming ? 'Saving...' : 'Confirm these details are correct'}
-                  </button>
-                </div>
+                <ReviewDetailsForm
+                  values={{ title: rTitle, category: rCategory, date: rDate, hospital: rHospital, doctor: rDoctor }}
+                  onChange={(patch) => {
+                    if (patch.title !== undefined) setRTitle(patch.title);
+                    if (patch.category !== undefined) setRCategory(patch.category);
+                    if (patch.date !== undefined) setRDate(patch.date);
+                    if (patch.hospital !== undefined) setRHospital(patch.hospital);
+                    if (patch.doctor !== undefined) setRDoctor(patch.doctor);
+                  }}
+                  intro="These details were filled in automatically. Correct anything that looks wrong, then confirm."
+                  suggestedTitle={
+                    typeof (doc.structured_data as Record<string, unknown>)?.title === 'string'
+                      ? ((doc.structured_data as Record<string, unknown>).title as string)
+                      : undefined
+                  }
+                  keyValues={
+                    Array.isArray((doc.structured_data as Record<string, unknown>)?.key_values)
+                      ? ((doc.structured_data as Record<string, unknown>).key_values as { label: string; value: string }[])
+                      : undefined
+                  }
+                  error={confirmError}
+                  busy={confirming}
+                  onConfirm={handleConfirm}
+                />
               )}
 
               {/* An upload whose AI reading failed keeps the file and says so

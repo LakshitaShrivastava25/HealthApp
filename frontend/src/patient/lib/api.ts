@@ -162,8 +162,13 @@ export const medicinesApi = {
   merge: (id: string, otherId: string) => api.post(`/medications/${id}/merge/`, { other: otherId }),
   keepSeparate: (id: string, otherId: string) => api.post(`/medications/${id}/keep-separate/`, { other: otherId }),
   unmerge: (id: string) => api.post(`/medications/${id}/unmerge/`),
-  create: (data: { profile: string; name: string; dosage: string; instructions: string; frequency: string; start_date?: string }) =>
-    api.post('/medications/', data),
+  // reminder_times ("HH:mm" each) creates the medicine and all of its
+  // reminder times in one request. Leaving it out leaves the times alone,
+  // and POST /reminders/ below still adds them one at a time.
+  create: (data: {
+    profile: string; name: string; dosage: string; instructions: string;
+    frequency: string; start_date?: string; reminder_times?: string[];
+  }) => api.post('/medications/', data),
   delete: (id: string) => api.delete(`/medications/${id}/`),
   addReminder: (medicationId: string, time_of_day: string) =>
     api.post('/reminders/', { medication: medicationId, time_of_day }),

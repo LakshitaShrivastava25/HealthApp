@@ -250,6 +250,13 @@ export const authApi = {
 const LOCK_TIMEOUT_MS = 30_000;
 
 export const mpinApi = {
+  /** Login's first step: 'pin' for a registered account with a PIN, else 'otp' (register). */
+  checkNumber: (phone_number: string) =>
+    axios.post<{ next: 'pin' | 'otp' }>(
+      `${getApiBaseUrl()}/auth/check-number/`,
+      { phone_number },
+      { timeout: LOCK_TIMEOUT_MS },
+    ),
   unlock: (device_token: string, mpin?: string) =>
     axios.post(
       `${getApiBaseUrl()}/auth/mpin/unlock/`,
